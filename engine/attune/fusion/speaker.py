@@ -133,8 +133,18 @@ def _mid(w) -> float:
     return (float(w[1]) + float(w[2])) / 2
 
 
-def _dur(w) -> float:
-    return max(float(w[2]) - float(w[1]), 0.05)
+def _end(w, cap: float) -> float:
+    """A word's end, counting at most `cap` seconds of it.
+
+    The streaming recogniser stretches a draft's last word to the end of its audio
+    chunk (a 0.2 s word can read 0.9 s until the next draft), so word lengths are
+    capped wherever they decide how long a piece of speech is.
+    """
+    return min(float(w[2]), float(w[1]) + cap)
+
+
+def _dur(w, cap: float = 1e9) -> float:
+    return max(_end(w, cap) - float(w[1]), 0.05)
 
 
 _RANK = {"face": 1}
@@ -500,7 +510,7 @@ class SpeakerFusion:
             self.retractions.append(CaptionRetract(gone))
         mem.sent = set(ids)
         mem.segs = [
-            _Seg(uid, g.speaker, float(g.words[0][1]), float(g.words[-1][2]))
+            _Seg(uid, g.speaker, float(g.words[0][1]), _end(g.words[-1], self.s.max_word_s))
             for uid, g in zip(ids, groups)
         ]
         mem.t = now
@@ -564,7 +574,7 @@ class SpeakerFusion:
         best_of: dict[tuple, Speaker] = {}
         for w, spk in pairs:
             key = _who(spk)
-            share[key] = share.get(key, 0.0) + _dur(w)
+            share[key] = share.get(key, 0.0) + _dur(w, self.s.max_word_s)
             best_of[key] = _better(best_of.get(key), spk)
         total = sum(share.values()) or 1.0
         mine = _who(cur)
@@ -584,11 +594,12 @@ class SpeakerFusion:
         A short "Someone" piece (under 2x `min_segment_s`) joins the known
         speaker next to it, and any other piece under `min_segment_s` joins its
         longer neighbour. Real turn changes (each side longer) stay split. A piece
-        already shown with a known speaker (locked) never takes another's speaker.
+        already shown with a known speaker (locked) and at least `min_segment_s`
+        long never takes another's speaker.
         """
 
         def span(ws: list) -> float:
-            return float(ws[-1][2]) - float(ws[0][1])
+            return _end(ws[-1], self.s.max_word_s) - float(ws[0][1])
 
         short = self.s.min_segment_s
 
@@ -609,7 +620,7 @@ class SpeakerFusion:
             """(priority, neighbour to join) for piece i; lower priority acts first."""
             g = gs[i]
             if g.locked and g.speaker.kind != "someone":
-                return 9, None
+                return 9, None  # shown with a known speaker: it keeps it
             nbrs = [k for k in (i - 1, i + 1) if 0 <= k < len(gs)]
             known = [k for k in nbrs if gs[k].speaker.kind != "someone"]
             sandwiched = len(nbrs) == 2 and _who(gs[i - 1].speaker) == _who(gs[i + 1].speaker)

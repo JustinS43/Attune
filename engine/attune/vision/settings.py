@@ -69,6 +69,9 @@ class FusionSettings:
     relabel_share: float = 0.7
     # ...or, for a segment shown as "Someone", when a known speaker covers this share.
     claim_share: float = 0.5
+    # A word counts at most this long when measuring a caption piece: the streaming
+    # recogniser stretches a draft's last word to the end of its audio chunk.
+    max_word_s: float = 0.6
     utterance_memory_s: float = 60.0  # forget an unfinished utterance's segments after this
     rate_hz: float = 15.0
     sync_min_corr: float = 0.3
