@@ -30,14 +30,10 @@ only when all of these hold:
 - its mouth is sampled steadily (>= `mouth_min_fps` samples a second): at a
   few frames a second (a starved GPU) the ratio jumps between far-apart
   moments, so the mouth counts as not measured rather than as moving;
-- both have held for `talk_cover_share` of the speech since it started doing
-  so, and hold now, for `talk_confirm_s` if it started with the speech (within
-  `talk_onset_s` of the speech starting, of the face becoming measurable, or of
-  a visible talker stopping) or for `talk_sustain_s` if it started in the
-  middle of someone else's speech: one mouth movement that happens to line up
-  with the sound fills the 1 s lip window for about 1 s, talking goes on. In
-  that second case the mouth must also open and close repeatedly
-  (`talk_min_swings`): lips parting once are two swings;
+- both have held for `talk_cover_share` of at least `talk_confirm_s` of speech.
+  A face joining in the middle of someone else's speech must also open and
+  close repeatedly (`talk_min_swings`) within `talk_sustain_s`: lips parting
+  once are only two swings;
 - it moved clearly (>= `lip_talking`, and its floor x `lip_floor_ratio`) at
   some point in that time; if not, it is only a probable speaker.
 The in-time check alone is weak evidence: on a live clip a silent listener's
@@ -46,9 +42,9 @@ seconds as against the real one, so it is one requirement among several.
 
 Voices. This utterance's `audio.voice_match` vetoes a face when it matches
 someone else: a known person, a stranger ("track-N") who was on screen at the
-same time as this face, or an off-screen voice ("offscreen-N"); or, for a face
-with its own session print, when the best score is below `voice_reject`. A
-match to the face's own print lets it speak with the probable-band mouth bar.
+same time as this face, or an off-screen voice ("offscreen-N"). No match is
+inconclusive. A match to the face's own print lets it speak with the
+probable-band mouth bar.
 Voice prints are harvested from a face that is talking on its own evidence
 with r >= `harvest_min_corr`, and as "offscreen-N" (`learn_offscreen`) from
 speech heard while every visible face's mouth is measured and still; a later
@@ -586,16 +582,19 @@ class SpeakerFusion:
             return
         # A face that started moving in time as the speech started (or as it came into view,
         # or as a visible talker, itself included, stopped) needs talk_confirm_s of it; one
-        # that started in the middle of someone else's speech needs talk_sustain_s (a
-        # listener's mouth moves now and then, and sometimes lines up with the sound).
+        # that started in the middle of someone else's speech needs repeated mouth
+        # swings. Waiting the full swing-history window after those swings are already
+        # present delays a real turn without adding evidence.
         turn = max(self._stopped.values(), default=-1e9)
         at_onset = since <= max(run_start, tr.measured_since, turn) + s.talk_onset_s
-        need_s = s.talk_confirm_s if at_onset else s.talk_sustain_s
-        steady = now - since >= need_s - 1e-6
+        steady = now - since >= s.talk_confirm_s - 1e-6
         if steady and not at_onset:
             # joining someone's speech: talking opens and closes the mouth again and again,
             # a listener's lips parting and closing once is two swings
-            steady = self._swings(tr, now, s.talk_sustain_s, s.talk_swing_amp) >= s.talk_min_swings
+            # Count swings only since this run began; a prior yawn or lip movement
+            # cannot qualify a new, otherwise brief coincidence with the sound.
+            span = min(s.talk_sustain_s, now - since)
+            steady = self._swings(tr, now, span, s.talk_swing_amp) >= s.talk_min_swings
         clear = any(x[3] for x in tr.ticks if x[0] >= since)
         tr.talking = steady and clear
         tr.probable = steady and not clear
@@ -622,7 +621,7 @@ class SpeakerFusion:
         match = next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
         if match is None:
             return None
-        _, _, pid, score = match
+        _, _, pid, _ = match
         vid = voice_id(tr.person_id, tr.track_id)
         if pid is not None:
             if pid == vid or self.claimed.get(pid) == vid:
@@ -638,10 +637,8 @@ class SpeakerFusion:
             if seen is not None and seen >= tr.first_t:
                 return "veto"
             return None
-        # Nobody matched. The audio side reports (None, 0.0) until it has 1 s of speech, so
-        # only a real score counts: below voice_reject it matches no print, this face's too.
-        if vid in self.harvested and 0.0 < score < self.s.voice_reject:
-            return "veto"
+        # Nobody matched. A low score against a session print is inconclusive in
+        # background noise, so it must not overrule positive lip and sound evidence.
         return None
 
     def _claim(self, now: float) -> None:
