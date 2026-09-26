@@ -483,7 +483,14 @@ class AudioService:
             and isinstance(self.asr, NemotronASR)
             and getattr(self.asr, "samples", 0) < cfg.get("split_context_s", 120) * 16000
         )
-        if self.segmenter.confirmed and (final or count - self.sent >= cfg["asr_chunk_ms"] * 16):
+        # Nemotron consumes each VAD frame cheaply; Whisper re-decodes the growing
+        # utterance on every call, so a frame-sized interval makes it fall behind.
+        draft_ms = (
+            self.config["whisper"].get("draft_interval_ms", cfg["asr_chunk_ms"])
+            if isinstance(self.asr, WhisperASR)
+            else cfg["asr_chunk_ms"]
+        )
+        if self.segmenter.confirmed and (final or count - self.sent >= draft_ms * 16):
             fresh = self.utterance[self.sent // 512 :]
             audio = np.concatenate(fresh) if fresh else np.empty(0, np.float32)
             result = self._recognize(audio, final and not cut)
