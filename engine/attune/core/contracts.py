@@ -31,6 +31,8 @@ AUDIO_TRANSCRIPT = "audio.transcript"
 AUDIO_VOICE_MATCH = "audio.voice_match"
 VOICE_HARVEST = "voice.harvest"
 CAPTION = "caption"
+# A caption segment id sent earlier is no longer part of its utterance: {utt_id}
+CAPTION_RETRACT = "caption.retract"
 CAPTION_TRANSLATION = "caption.translation"
 SCENE = "scene"
 NAME_PROPOSAL = "name.proposal"
@@ -69,6 +71,7 @@ TOPICS = frozenset(
         AUDIO_VOICE_MATCH,
         VOICE_HARVEST,
         CAPTION,
+        CAPTION_RETRACT,
         CAPTION_TRANSLATION,
         SCENE,
         NAME_PROPOSAL,
@@ -103,6 +106,7 @@ WS_WELCOME = "welcome"
 WS_COMMAND = "command"
 WS_SCENE = "scene"
 WS_CAPTION = "caption"
+WS_CAPTION_RETRACT = "caption_retract"
 WS_NAME_PROPOSAL = "name_proposal"
 WS_ALERT = "alert"
 WS_REPLY_SUGGESTIONS = "reply_suggestions"
@@ -122,6 +126,7 @@ _ALL = frozenset(ROLES)
 WS_AUDIENCE: dict[str, frozenset[str]] = {
     WS_SCENE: frozenset({"lens", "console"}),
     WS_CAPTION: _ALL,
+    WS_CAPTION_RETRACT: _ALL,
     WS_NAME_PROPOSAL: _ALL,
     WS_ALERT: _ALL,
     WS_REPLY_SUGGESTIONS: _ALL,
@@ -305,6 +310,13 @@ class Caption:
     final: bool
     lang: str | None
     words: list[tuple[str, float, float]]
+
+
+@dataclass
+class CaptionRetract:
+    """A caption segment id (`<utt_id>.<n>`) sent earlier is no longer part of its utterance."""
+
+    utt_id: str
 
 
 @dataclass

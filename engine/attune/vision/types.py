@@ -28,6 +28,7 @@ AUDIO_TRANSCRIPT = "audio.transcript"
 AUDIO_VOICE_MATCH = "audio.voice_match"
 VOICE_HARVEST = "voice.harvest"
 CAPTION = "caption"
+CAPTION_RETRACT = "caption.retract"
 SCENE = "scene"
 NAME_PROPOSAL = "name.proposal"
 SENSORS_LEVELS = "sensors.levels"
@@ -130,6 +131,13 @@ class Caption:
     final: bool
     lang: str | None
     words: list[tuple[str, float, float]]
+
+
+@dataclass
+class CaptionRetract:
+    """A caption segment id sent earlier is no longer part of its utterance."""
+
+    utt_id: str
 
 
 @dataclass

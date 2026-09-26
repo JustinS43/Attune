@@ -42,7 +42,8 @@ A service reports its health by publishing `status.part` about once per second. 
 | `audio.transcript` | 2 Audio & Lang | `utt_id, t_start, t_end, text, final, lang, words: [(word, t0, t1)]` | No speaker yet |
 | `audio.voice_match` | 2 Audio & Lang | `utt_id, person_id or None, score` | After ≥ 1 s of speech |
 | `voice.harvest` | 1 Vision (fusion) | `person_id, t0, t1` | Section 2 adds that audio span to the session print |
-| `caption` | 1 Vision (fusion) | `utt_id, speaker: Speaker, text, final, lang, words` | The transcript with its speaker |
+| `caption` | 1 Vision (fusion) | `utt_id, speaker: Speaker, text, final, lang, words` | The transcript with its speaker; split into `<utt_id>`, `<utt_id>.1`, ... where the speaker changes |
+| `caption.retract` | 1 Vision (fusion) | `utt_id` | A segment id sent earlier is no longer part of its utterance: drop it (see "Caption segments") |
 | `caption.translation` | 2 Audio & Lang | `utt_id, source_lang, text_en` | 0.5–1.2 s after a final |
 | `scene` | 1 Vision (fusion) | `frame_no, t, faces: [FaceState], offscreen: [Offscreen], you_speaking` | 15/s and on every change |
 | `name.proposal` | 2 Audio & Lang | `proposal_id, track_id, name, state, expires_t` | `state`: proposed, confirmed, rejected, expired |
@@ -80,6 +81,7 @@ Endpoint `ws://localhost:8000/ws`. Every message is JSON `{"type": ..., "seq": n
 | `frame` (binary) | lens | frame_no, t, jpeg |
 | `scene` | lens, console | as the bus event, boxes scaled to 1280×720 |
 | `caption` | all | utt_id, speaker, text, final, lang, translation (optional), words |
+| `caption_retract` | all | utt_id (a segment to drop, as the bus event `caption.retract`) |
 | `name_proposal` | all | proposal_id, track_id, name, state, expires_t |
 | `alert` | all | alert_id, kind, side, confidence, state |
 | `reply_suggestions` | all | options |
@@ -203,3 +205,13 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 `caption.translation` is not sent on its own: the engine re-sends that utterance's
 `caption` with its `translation` field filled in. Times (`t`, `t_start`, word times)
 are engine-clock seconds; pages only compare them with each other.
+
+**Caption segments.** Fusion splits one utterance where its speaker changes: the first
+segment keeps the utterance's own `utt_id`, later ones are `<utt_id>.1`, `<utt_id>.2`, ...
+Every draft re-sends the segments that are still part of the utterance. A segment keeps
+its speaker from draft to draft unless the evidence over most of its words changes
+(`[fusion] relabel_share`, `claim_share`), and a face leaving the frame never re-labels
+words said before. When a later draft or the final no longer has a segment id that was
+sent (for example two segments merged), the engine sends `caption.retract` /
+`caption_retract` with that id once; pages remove its text. The utterance's own
+`utt_id` is never retracted, so translations (keyed by it) always have a caption to join.
