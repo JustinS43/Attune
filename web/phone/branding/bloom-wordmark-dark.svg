@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" role="img" aria-labelledby="title desc">
+  <title id="title">Attune Bloom wordmark</title>
+  <desc id="desc">The Attune name with an opening three-leaf emblem.</desc>
+  <g transform="translate(7 -4) scale(.77)">
+    <circle cx="180" cy="77" r="18" fill="#f1b985"/>
+    <path d="M126 196C69 196 48 165 48 112c48-2 80 21 80 70v14Z" fill="#1aa6a2"/>
+    <path d="M130 196c57 0 78-31 78-84-48-2-80 21-80 70v14Z" fill="#0b7e83"/>
+    <path d="M128 188c-17-22-25-45-25-68 0-31 13-52 25-65 12 13 25 34 25 65 0 23-8 46-25 68Z" fill="#9cddcb"/>
+    <path d="M128 192v-69" stroke="#0c7278" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="205" y="137" fill="#f6fbf8" font-family="Avenir Next, Nunito Sans, -apple-system, sans-serif" font-size="128" font-weight="650" letter-spacing="-7">attune</text>
+</svg>

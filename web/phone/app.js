@@ -3,6 +3,14 @@ const app = document.querySelector('#app');
 const content = document.querySelector('#screen-content');
 const viewport = document.querySelector('.app-viewport');
 const toast = document.querySelector('#toast');
+const palette = new URLSearchParams(window.location.search).get('palette');
+if (palette === 'apricot') {
+  app.classList.add('palette-apricot');
+  document.body.classList.add('palette-apricot-preview');
+  document.title = 'Attune · Apricot Studio preview';
+  const hint = document.querySelector('.desktop-hint');
+  if (hint) hint.lastChild.textContent = ' Apricot Studio · Interactive local demo';
+}
 const state = {
   screen: 'home', theme: 'light', paused: false, powered: true,
   features: { captions: true, names: true, alerts: true },
@@ -51,7 +59,7 @@ function heading(title, subtitle, eyebrow) {
   if (subtitle) content.append(el('p', 'subtitle', subtitle));
 }
 
-function pill() { return el('div', 'demo-pill', 'INTERACTIVE PREVIEW'); }
+function pill() { return el('div', 'demo-pill', palette === 'apricot' ? 'APRICOT STUDIO PREVIEW' : 'INTERACTIVE PREVIEW'); }
 
 function button(label, className, action) {
   const node = el('button', className, label);

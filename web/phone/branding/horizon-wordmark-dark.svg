@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" role="img" aria-labelledby="title desc">
+  <title id="title">Attune Horizon wordmark</title>
+  <desc id="desc">The Attune name with a rising sun and open arcs.</desc>
+  <defs>
+    <linearGradient id="sun" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe1a5"/><stop offset="1" stop-color="#ed9d70"/></linearGradient>
+    <linearGradient id="arc" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#0c9d9b"/><stop offset=".5" stop-color="#50c7b2"/><stop offset="1" stop-color="#0c9d9b"/></linearGradient>
+  </defs>
+  <g transform="translate(9 11) scale(.72)">
+    <circle cx="128" cy="92" r="32" fill="url(#sun)"/>
+    <path d="M49 179c22-27 50-41 79-41s57 14 79 41" fill="none" stroke="url(#arc)" stroke-width="17" stroke-linecap="round"/>
+    <path d="M76 191c15-18 33-27 52-27s37 9 52 27" fill="none" stroke="#3cbeb1" stroke-width="14" stroke-linecap="round"/>
+    <path d="M109 199c6-6 12-9 19-9s13 3 19 9" fill="none" stroke="#78ddd0" stroke-width="11" stroke-linecap="round"/>
+  </g>
+  <text x="205" y="137" fill="#f6fbf8" font-family="Avenir Next, Nunito Sans, -apple-system, sans-serif" font-size="128" font-weight="650" letter-spacing="-7">attune</text>
+</svg>

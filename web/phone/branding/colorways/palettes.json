@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "name": "Familiar tide",
+    "description": "Warm, familiar, quietly confident.",
+    "colors": {
+      "ink": "#173C45",
+      "primary": "#159B9E",
+      "secondary": "#97DCD0",
+      "accent": "#F4BC88",
+      "canvas": "#F7F4ED",
+      "surface": "#FFFFFF",
+      "action": "#107F81"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 2,
+    "name": "Blue hour",
+    "description": "Calm blue with a sunny point of connection.",
+    "colors": {
+      "ink": "#182D50",
+      "primary": "#4179BC",
+      "secondary": "#A7D5E8",
+      "accent": "#F4C478",
+      "canvas": "#F3F6FA",
+      "surface": "#FFFFFF",
+      "action": "#3E74B4"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 3,
+    "name": "Lilac morning",
+    "description": "Soft lavender with a warm yellow lift.",
+    "colors": {
+      "ink": "#352C51",
+      "primary": "#8771B5",
+      "secondary": "#D2C6ED",
+      "accent": "#F2C878",
+      "canvas": "#F8F5FB",
+      "surface": "#FFFFFF",
+      "action": "#7D68A7"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 4,
+    "name": "Apricot studio",
+    "description": "Friendly coral, peach, and deep blue ink.",
+    "colors": {
+      "ink": "#233A4A",
+      "primary": "#CE725F",
+      "secondary": "#F0BEA2",
+      "accent": "#F4CF7C",
+      "canvas": "#FCF6F0",
+      "surface": "#FFFFFF",
+      "action": "#AF6151"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 5,
+    "name": "Garden light",
+    "description": "Fresh green, gentle sage, and golden light.",
+    "colors": {
+      "ink": "#193F35",
+      "primary": "#378A6C",
+      "secondary": "#AED8B7",
+      "accent": "#EEC16B",
+      "canvas": "#F4F7EF",
+      "surface": "#FFFFFF",
+      "action": "#358468"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 6,
+    "name": "Coastal clay",
+    "description": "Muted sea glass with an earthy accent.",
+    "colors": {
+      "ink": "#28484E",
+      "primary": "#538F94",
+      "secondary": "#BBD9D0",
+      "accent": "#DDA281",
+      "canvas": "#F5F3EC",
+      "surface": "#FFFFFF",
+      "action": "#4A7F83"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 7,
+    "name": "Berry & butter",
+    "description": "Expressive berry softened by rose and butter.",
+    "colors": {
+      "ink": "#422C42",
+      "primary": "#AD587E",
+      "secondary": "#E6B5CB",
+      "accent": "#F2D78C",
+      "canvas": "#FBF4F6",
+      "surface": "#FFFFFF",
+      "action": "#AD587E"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 8,
+    "name": "Electric dusk",
+    "description": "Bright, capable, and unmistakably digital.",
+    "colors": {
+      "ink": "#202C4B",
+      "primary": "#5269D6",
+      "secondary": "#AABEF1",
+      "accent": "#FFB278",
+      "canvas": "#F3F5FC",
+      "surface": "#FFFFFF",
+      "action": "#5269D6"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 9,
+    "name": "Olive & oat",
+    "description": "Grounded neutrals with an inviting peach glow.",
+    "colors": {
+      "ink": "#363D2B",
+      "primary": "#7B8950",
+      "secondary": "#CBD3A6",
+      "accent": "#EDB592",
+      "canvas": "#F7F5EA",
+      "surface": "#FFFFFF",
+      "action": "#6C7A47"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 10,
+    "name": "Periwinkle & rose",
+    "description": "Playful violet balanced by a soft coral accent.",
+    "colors": {
+      "ink": "#343550",
+      "primary": "#737DC3",
+      "secondary": "#BDC8EF",
+      "accent": "#EDAAAC",
+      "canvas": "#F7F6FC",
+      "surface": "#FFFFFF",
+      "action": "#666EAD"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 11,
+    "name": "Terracotta & sky",
+    "description": "A warm earth-and-sky pairing with clear contrast.",
+    "colors": {
+      "ink": "#47372F",
+      "primary": "#BA7054",
+      "secondary": "#A8CBD6",
+      "accent": "#E9BD70",
+      "canvas": "#FBF5ED",
+      "surface": "#FFFFFF",
+      "action": "#A5644B"
+    },
+    "on_action": "#FFFFFF"
+  },
+  {
+    "id": 12,
+    "name": "Midnight citrus",
+    "description": "High-energy lime and mint against midnight ink.",
+    "colors": {
+      "ink": "#233632",
+      "primary": "#A1BC4F",
+      "secondary": "#9FD7C2",
+      "accent": "#F0AA82",
+      "canvas": "#F6F8EF",
+      "surface": "#FFFFFF",
+      "action": "#6C7D35"
+    },
+    "on_action": "#FFFFFF"
+  }
+]
