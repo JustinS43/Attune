@@ -1,12 +1,9 @@
-"""Speak-for-me package
+"""Speak-for-me package (Section 3 - Hardware & Services, TODO H-07..H-09).
 
-Section 3 - Hardware & Services
-TODO: H-09
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Speak for me
-
-What to build:
-- Package marker.
-
-Placeholder only - no code yet (MLH: project code is written during the event).
+ElevenLabs streaming first; Kokoro (sherpa-onnx, offline) if no audio within
+``speech_out.fallback_after_s``. Only the typed text ever leaves the laptop.
 """
+
+from .service import SpeechOutService
+
+__all__ = ["SpeechOutService"]

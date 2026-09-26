@@ -55,20 +55,20 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 3 – Hardware & Services
 
-- [ ] H-01 Firmware: READY with the I²C driver probe, LV every 50 ms, HB · M0
-- [ ] H-02 Firmware: touch gestures (tap, hold, double) · M0
-- [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2
-- [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2
-- [ ] H-05 Serial link: find by USB ID, no DTR reset, READY wait, HB, auto-reconnect; publishes `sensors.*` and `hw.link` · M0
-- [ ] H-06 Touch router (alert > name > nothing; double tap = pause); publishes `touch.action` · M2
-- [ ] H-07 ElevenLabs streaming voice (key from .env) · M2
-- [ ] H-08 Kokoro offline voice, used if no audio within 1.5 s · M2
-- [ ] H-09 SpeechOutService + player; publishes `speech_out.playing` and `reply.spoken` · M2
-- [ ] H-10 SQLite schema (data/history.db): tables, full-text search (FTS5), talk-time query, auto-delete after 24 h · M1
-- [ ] H-11 History writer on its own thread (captions keep running if it fails), and forget session · M1
-- [ ] H-12 History queries and API router (`/api/history/...`) · M2
-- [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2
-- [ ] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2
+- [ ] H-01 Firmware: READY with the I²C driver probe, LV every 50 ms, HB · M0 — written in #19; compile + bench check on the rig left
+- [ ] H-02 Firmware: touch gestures (tap, hold, double) · M0 — written in #19; compile + bench check on the rig left
+- [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2 — written in #19; compile + bench check on the rig left
+- [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2 — written in #19; compile + bench check on the rig left
+- [x] H-05 Serial link: find by USB ID, no DTR reset, READY wait, HB, auto-reconnect; publishes `sensors.*` and `hw.link` · M0 (#19)
+- [x] H-06 Touch router (alert > name > nothing; double tap = pause); publishes `touch.action` · M2 (#19)
+- [x] H-07 ElevenLabs streaming voice (key from .env) · M2 (#19)
+- [x] H-08 Kokoro offline voice, used if no audio within 1.5 s · M2 (#19)
+- [x] H-09 SpeechOutService + player; publishes `speech_out.playing` and `reply.spoken` · M2 (#19)
+- [x] H-10 SQLite schema (data/history.db): tables, full-text search (FTS5), talk-time query, auto-delete after 24 h · M1 (#19)
+- [x] H-11 History writer on its own thread (captions keep running if it fails), and forget session · M1 (#19)
+- [x] H-12 History queries and API router (`/api/history/...`) · M2 (#19)
+- [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — wiring + T-H1–T-H8 checklist ready in #19; assembly and bench tests left
+- [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
 
 ## Section 4 – Pages, Engine & Demo
 
