@@ -172,15 +172,22 @@ enroll_s = 5.0
 enroll_timeout_s = 45.0          # voice enrollment gives up ("not enough speech") after this
 match_s = 1.0
 # A-21 cross-mic: a print made on the laptop mic (enrollment station) is heard on the glasses
-# mic. Its own threshold; its scores are shifted onto the [fusion] voice_match scale.
+# mic. Its own threshold; its scores are shifted onto the [fusion] voice_match scale. Simulated
+# laptop->glasses study (scripts/eval_crossmic.py, 29 TTS voices, CAM++ with the 2 s length
+# fix): EER 1.7%; at 0.5 1.0% false accepts, 3.7% misses on 2-3 s utterances (23% at 1.5 s).
+# No separate value was needed.
 station_match = 0.5
 # Bounded refinement: glasses-mic speech of a saved person (confident face, lip-synced talker,
-# one talker, >= harvest_after_s) this close to their print joins a small bank of glasses
-# prints; their score is the better of the base print and the bank's mean. The base print is
-# never replaced.
-adapt_min = 0.4
+# one talker, >= harvest_after_s) that scores >= adapt_min against their base print joins a
+# small bank of glasses prints; their score is the better of the base print and the bank's
+# mean, the bank's measured against bank_match. The base print is never replaced.
+# Study: 8 bank prints cut misses at 0.1% false accepts from 22% to 2%; 0.53 keeps the bank's
+# false accepts at 1% (0.5 would let in 1.6%). Gate 0.45 passes 88% of the person's 1.5 s
+# utterances and 0.85% of someone else's.
+bank_match = 0.53
+adapt_min = 0.45
 adapt_max_prints = 8
-adapt_min_s = 1.0                # voiced seconds in the harvested span
+adapt_min_s = 1.5                # voiced seconds in the harvested span
 adapt_gap_s = 5.0                # at most one adaptation per person this often
 adapt_persist = true             # keep the bank in voice.json (deleted with the person)
 harvest_lag_s = 0.4              # harvests wait this long so their audio has arrived

@@ -7,6 +7,7 @@ below is set by the test.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -129,6 +130,15 @@ def test_refinement_adds_a_capped_bank_and_never_replaces_the_base_print(tmp_pat
     assert "sam" not in again.adapted and "sam" not in again.enrolled
 
 
+def test_the_bank_has_its_own_line_and_never_vouches_for_itself(tmp_path):
+    write_print(tmp_path, "sam", vec(0), 1.0, STATION, [vec(2)])
+    v = prints(tmp_path, {**OPTIONS, "bank_match": 0.6})
+    assert v.scores(vec(2))["sam"] == pytest.approx(1.0 - 0.1)  # bank, shifted by 0.5 - 0.6
+    # voice 3 is close to the bank (0.97) but not to the base print (0.17 + 0.1): not learned
+    assert v.harvest("sam", clip(3)) == "not like their print"
+    assert len(v.adapted["sam"]) == 1
+
+
 def test_refinement_can_stay_in_memory(tmp_path):
     write_print(tmp_path, "sam", vec(0), 1.0, STATION)
     v = prints(tmp_path, {**OPTIONS, "adapt_persist": False})
@@ -168,3 +178,33 @@ def test_audio_service_loads_a_station_print_and_passes_talkers(config, bus, tmp
     service._handle("voice.harvest", {"person_id": "sam", "t0": 0, "t1": 3}, 0)
     assert seen == [("sam", 2), ("sam", 1)]
     assert len(v.adapted["sam"]) == 1
+
+
+CAM = Path(__file__).resolve().parents[2] / "models" / "cam++.onnx"
+
+
+def synthetic_voice(f0, seed, seconds=5.0):
+    """A buzzy vowel-like sound at pitch f0 with a syllable rhythm (not a real voice)."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * 16000)
+    t = np.arange(n) / 16000
+    phase = 2 * np.pi * np.cumsum(f0 * (1 + 0.05 * np.sin(2 * np.pi * 0.7 * t))) / 16000
+    x = sum(np.sin(k * phase) / k for k in range(1, 25))
+    env = np.sin(2 * np.pi * 3.5 * t) > -0.3
+    return (0.1 * x * env + 0.003 * rng.standard_normal(n)).astype(np.float32)
+
+
+@pytest.mark.skipif(not CAM.is_file(), reason="CAM++ model not downloaded")
+def test_cam_prints_do_not_depend_on_the_clip_length():
+    """Without the fix two different voices cut to 2.06-2.5 s scored ~0.96 (see CAMExtractor)."""
+    from attune.audio.voiceprint import CAMExtractor
+
+    extract = CAMExtractor(str(CAM), "cpu")
+    a, b = synthetic_voice(110, 1), synthetic_voice(210, 2)
+    base = extract(a[:32000])
+    base = base / np.linalg.norm(base)
+    for n in (24000, 33000, 36000, 40000, 48000):
+        va, vb = extract(a[:n]), extract(b[:n])
+        va, vb = va / np.linalg.norm(va), vb / np.linalg.norm(vb)
+        assert float(va @ vb) < 0.6, n  # two voices stay apart at every length
+        assert float(va @ base) > 0.9, n  # one voice stays itself

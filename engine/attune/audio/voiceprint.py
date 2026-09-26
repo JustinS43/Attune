@@ -5,18 +5,21 @@ A saved person's `data/people/<id>/voice.json` holds their consent, one base pri
 station, V-23 / A-21; "glasses" = the glasses mic, the original P-29 flow; files without
 it are glasses prints). Only prints are stored, never audio.
 
-Cross-mic (A-21). A station print is made on the laptop mic but heard on the glasses mic, so
-its scores run lower for the same person; `station_match` is its own threshold, and its
-scores are shifted by `threshold - station_match` so everything downstream compares every
-score with the one `threshold` ([fusion] voice_match).
+Cross-mic (A-21). A station print is made on the laptop mic but heard on the glasses mic.
+`station_match` is its own threshold: its scores are shifted by `threshold - station_match`,
+so everything downstream compares every score with the one `threshold` ([fusion]
+voice_match). The simulated laptop-to-glasses study (scripts/eval_crossmic.py) found no
+separate value needed (0.5, as voice_match: 1.0% false accepts, 3.7% misses on 2-3 s).
 
 Bounded refinement (A-21). Speech that fusion harvests from a saved person (a confident face
 match, the lip-synced talker, >= harvest_after_s) adapts their print to the glasses mic when:
 only one face was talking (`talkers == 1`), at least `adapt_min_s` of it is voiced, it scores
-at least `adapt_min` against that person (and no other saved person scores higher), and no
-adaptation for them happened in the last `adapt_gap_s`. Its embedding joins a bank of at most
-`adapt_max_prints` glasses prints (the oldest leaves first). A person's score is the better
-of their base print and the mean of their bank. The base print is never replaced; the bank
+at least `adapt_min` against that person's base print (the bank never vouches for itself, so
+it can't drift) and no other saved person scores higher, and no adaptation for them happened
+in the last `adapt_gap_s`. Its embedding joins a bank of at most `adapt_max_prints` glasses
+prints (the oldest leaves first). A person's score is the better of their base print and the
+mean of their bank, the bank's compared with `bank_match` (a max of two scores lets in a few
+more impostors, so its line is a little higher). The base print is never replaced; the bank
 is saved with it (`adapt_persist`) and deleted with the person.
 """
 
@@ -54,7 +57,17 @@ class CAMExtractor:
             raise ValueError("invalid CAM++ configuration")
         self.extractor = sherpa_onnx.SpeakerEmbeddingExtractor(cfg)
 
+    BLOCK = 32000  # 2 s at 16 kHz
+
     def __call__(self, samples: np.ndarray) -> np.ndarray:
+        # A-21: with this CAM++ export (sherpa-onnx 1.13), audio just past a whole number of
+        # 2 s blocks gets a large extra component that every talker shares: two different
+        # voices cut to 2.25 s scored 0.90, the same clips at 2.0 s 0.30. Repeating the audio
+        # up to a whole number of blocks removes it (0.31 at every length); the same speaker
+        # keeps ~0.99 against itself at any length.
+        samples = np.asarray(samples, dtype=np.float32)
+        if len(samples):
+            samples = np.resize(samples, -(-len(samples) // self.BLOCK) * self.BLOCK)
         stream = self.extractor.create_stream()
         stream.accept_waveform(sample_rate=16000, waveform=samples)
         stream.input_finished()
@@ -126,6 +139,7 @@ class VoicePrints:
         self.enroll_s, self.match_s = enroll_s, match_s
         opts = dict(options or {})
         self.station_threshold = float(opts.get("station_match", threshold))
+        self.bank_threshold = float(opts.get("bank_match", threshold))
         self.adapt_min = float(opts.get("adapt_min", threshold))
         self.adapt_max = int(opts.get("adapt_max_prints", 8))
         self.adapt_min_s = float(opts.get("adapt_min_s", 1.0))
@@ -201,18 +215,21 @@ class VoicePrints:
             self.adapted[person_id] = []
 
     # ------------------------------------------------------------------ scoring
+    def _base_scores(self, vector: np.ndarray) -> dict[str, float]:
+        """Every saved person's base-print score on the common scale."""
+        shift = self.threshold - self.station_threshold
+        return {
+            key: float(np.dot(vector, base)) + (shift if self.sources.get(key) == STATION else 0.0)
+            for key, base in self.enrolled.items()
+        }
+
     def _person_scores(self, vector: np.ndarray) -> dict[str, float]:
         """Every saved person's score on the common scale (see the module docstring)."""
-        shift = self.threshold - self.station_threshold
-        out = {}
-        for key, base in self.enrolled.items():
-            score = float(np.dot(vector, base))
-            if self.sources.get(key) == STATION:
-                score += shift
-            bank = self.adapted.get(key)
-            if bank:
-                score = max(score, float(np.dot(vector, unit(np.mean(bank, axis=0)))))
-            out[key] = score
+        out = self._base_scores(vector)
+        shift = self.threshold - self.bank_threshold
+        for key, bank in self.adapted.items():
+            if bank and key in out:
+                out[key] = max(out[key], float(np.dot(vector, unit(np.mean(bank, axis=0)))) + shift)
         return out
 
     def scores(self, vector: np.ndarray) -> dict[str, float]:
@@ -255,11 +272,11 @@ class VoicePrints:
         if now - self._last_adapt.get(person_id, -math.inf) < self.adapt_gap_s:
             return "too soon"
         vector = unit(self.extract(samples))
-        scores = self._person_scores(vector)
-        mine = scores.get(person_id, -1.0)
+        mine = self._base_scores(vector).get(person_id, -1.0)
         if mine < self.adapt_min:
             return "not like their print"
-        if any(s > mine for k, s in scores.items() if k != person_id):
+        scores = self._person_scores(vector)
+        if any(s > max(mine, scores[person_id]) for k, s in scores.items() if k != person_id):
             return "closer to someone else"
         bank = (self.adapted.get(person_id) or []) + [vector]
         self.adapted[person_id] = bank[-self.adapt_max :]
