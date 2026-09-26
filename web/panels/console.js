@@ -140,7 +140,7 @@ export function createConsole(ctx) {
     const name = nameInput.value.trim();
     if (st.selected === null || !name || !consentBox.checked) return;
     st.enroll = { track_id: st.selected, name, person_id: null, face: 'wait', voice: 'idle', reason: '' };
-    send('enroll.start', { track_id: st.selected, name, consent: true, consent_t: new Date().toISOString() });
+    send('enroll.start', { track_id: st.selected, name, consent: true, consent_t: Date.now() / 1000 });
     renderProgress();
     renderEnrollForm();
   }

@@ -480,3 +480,151 @@ export function pill(ctx, blur, x, y, h, parts, o = {}) {
   ctx.restore();
   return { x: x0, y, w, h, xs };
 }
+
+// ---------------------------------------------------------------- calm motion
+/** True when the viewer asked the OS for reduced motion: glides become cuts, words don't rise. */
+export const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * One step of a critically damped spring (exact solution, so any dt is stable and it never
+ * overshoots or bounces). w is the stiffness in rad/s: it settles in about 4 / w seconds.
+ * Returns [x, v].
+ */
+export function springStep(x, v, target, dt, w) {
+  if (!(dt > 0)) return [x, v];
+  const d = x - target;
+  const e = Math.exp(-w * dt);
+  const c = v + w * d;
+  return [target + (d + c * dt) * e, (v - w * c * dt) * e];
+}
+
+/**
+ * Prefix-stable line wrapping for live captions. Lines that are already laid out never reflow
+ * when words are added: update() finds the first token that changed and re-wraps only from the
+ * start of the line that holds it, so appending words touches just the last line, and a draft
+ * revision touches only its own line onward. Tokens: { text, final, br } (br starts a new line).
+ * Each token also gets animation times: born (appeared or changed) and firm (turned final).
+ */
+export function createLineWrap() {
+  let toks = [];
+  let meta = [];
+  let lines = []; // [{ start, end }] token ranges
+  let maxW = 0;
+  let fontStr = '';
+  let spaceW = 0;
+  const st = {
+    get lines() {
+      return lines;
+    },
+    get tokens() {
+      return toks;
+    },
+    get meta() {
+      return meta;
+    },
+    /** Lay out `tokens` at width `w`; returns the number of lines. */
+    update(ctx, tokens, w, f, anim) {
+      let d = 0;
+      if (w !== maxW || f !== fontStr) {
+        lines = [];
+        maxW = w;
+        fontStr = f;
+      } else {
+        const n = Math.min(toks.length, tokens.length);
+        while (d < n && toks[d].text === tokens[d].text && !!toks[d].br === !!tokens[d].br) d++;
+        if (d === toks.length && d === tokens.length) {
+          for (let i = 0; i < tokens.length; i++) firmUp(i, tokens[i], anim);
+          toks = tokens;
+          return lines.length;
+        }
+      }
+      // keep every line that ends before the first change
+      let L = lines.findIndex((ln) => d < ln.end);
+      if (L < 0) L = Math.max(0, lines.length - 1);
+      if (d === 0) L = 0;
+      const from = lines[L]?.start ?? 0;
+      lines = lines.slice(0, L);
+      const next = [];
+      for (let i = 0; i < tokens.length; i++) {
+        const old = toks[i];
+        const m = meta[i];
+        if (i < d && m) next.push(m);
+        else if (old && m && old.text === tokens[i].text) next.push(m);
+        else next.push({ born: old ? anim - 0.1 : anim, firm: tokens[i].final ? anim : null, w: 0 });
+      }
+      meta = next;
+      toks = tokens;
+      const space = (spaceW = textW(ctx, ' ', f));
+      let cur = null;
+      for (let i = from; i < tokens.length; i++) {
+        const tw = textW(ctx, tokens[i].text, f);
+        meta[i].w = tw;
+        if (!cur) cur = { start: i, end: i + 1, w: tw };
+        else if (tokens[i].br || cur.w + space + tw > w) {
+          lines.push(cur);
+          cur = { start: i, end: i + 1, w: tw };
+        } else {
+          cur.end = i + 1;
+          cur.w += space + tw;
+        }
+      }
+      if (cur) lines.push(cur);
+      for (let i = 0; i < from; i++) meta[i].w ||= textW(ctx, tokens[i].text, f);
+      for (let i = 0; i < tokens.length; i++) firmUp(i, tokens[i], anim);
+      return lines.length;
+    },
+    /** Forget the first k lines (they scrolled away); token indices shift down with them. */
+    dropLines(k) {
+      if (k <= 0 || !lines.length) return 0;
+      k = Math.min(k, lines.length);
+      const cut = lines[k - 1].end;
+      toks = toks.slice(cut);
+      meta = meta.slice(cut);
+      lines = lines.slice(k).map((ln) => ({ ...ln, start: ln.start - cut, end: ln.end - cut }));
+      return cut;
+    },
+    reset() {
+      toks = [];
+      meta = [];
+      lines = [];
+    },
+    /** Calls fn(token, meta, x) for the words of line i, x measured from the line's left edge. */
+    eachWord(i, fn) {
+      const ln = lines[i];
+      if (!ln) return;
+      let x = 0;
+      for (let k = ln.start; k < ln.end; k++) {
+        fn(toks[k], meta[k], x, k);
+        x += meta[k].w + spaceW;
+      }
+    },
+  };
+  function firmUp(i, t, anim) {
+    const m = meta[i];
+    if (!m) return;
+    if (t.final && m.firm == null) m.firm = anim;
+    else if (!t.final) m.firm = null;
+  }
+  return st;
+}
+
+/**
+ * Scroll position for a wrapped caption window: the window shows `rows` lines ending at the
+ * newest one; when a new line is added the text rolls up one line with a short ease.
+ * Returns the fractional index of the top visible line.
+ */
+export function scrollTo(state, lineCount, rows, dt, rollUp = false) {
+  // top-fill: the first line sits on the first row; roll-up: the newest line sits on the last row
+  const top = rollUp ? lineCount - rows : Math.max(0, lineCount - rows);
+  if (state.top == null || REDUCED_MOTION || top < state.top - 0.5) {
+    state.top = top;
+    state.v = 0;
+  } else {
+    [state.top, state.v] = springStep(state.top, state.v ?? 0, top, dt, 22);
+    if (Math.abs(state.top - top) < 0.002) {
+      state.top = top;
+      state.v = 0;
+    }
+  }
+  return state.top;
+}

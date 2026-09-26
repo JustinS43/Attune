@@ -1,0 +1,37 @@
+.tab-bar { grid-template-columns: repeat(5, 1fr); padding-inline: 7px; }
+.tab { min-width: 0; }
+.tab.active::after { bottom: 22px; }
+
+.enroll-steps { display: flex; gap: 5px; margin: -3px 0 17px; }
+.enroll-step { flex: 1; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.enroll-step b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface-soft); font-size: 11px; }
+.enroll-step.current { color: var(--teal-strong); }
+.enroll-step.current b { background: var(--teal-wash); }
+
+.enroll-photo { position: relative; height: 208px; display: grid; place-items: center; overflow: hidden; margin-bottom: 12px; background: var(--surface-soft); }
+.enroll-preview { display: none; width: 100%; height: 100%; object-fit: contain; background: var(--surface-soft); }
+.enroll-photo.has-image .enroll-preview { display: block; }
+.enroll-photo-placeholder { display: grid; justify-items: center; gap: 10px; max-width: 210px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.35; }
+.enroll-photo-placeholder .icon { width: 38px; height: 38px; color: var(--teal-strong); }
+.enroll-photo.has-image .enroll-photo-placeholder { display: none; }
+.enroll-camera-label { position: absolute; left: 12px; bottom: 12px; padding: 5px 8px; border-radius: 7px; background: var(--surface); color: var(--teal-strong); font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+.enroll-faces { display: flex; gap: 8px; margin: -4px 0 14px; }
+.enroll-face { width: 54px; height: 54px; padding: 2px; border: 2px solid var(--line); border-radius: 13px; background: var(--surface); overflow: hidden; }
+.enroll-face.selected { border-color: var(--teal); }
+.enroll-face img { width: 100%; height: 100%; object-fit: cover; border-radius: 9px; }
+.enroll-form { display: grid; gap: 14px; padding: 17px; margin-top: 17px; }
+.enroll-label { display: grid; gap: 8px; font-size: 14px; font-weight: 730; }
+.enroll-name { width: 100%; min-height: 47px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface-soft); }
+.enroll-consent { display: flex; align-items: flex-start; gap: 10px; color: var(--muted); font-size: 12px; line-height: 1.45; cursor: pointer; }
+.enroll-consent input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--teal); }
+.enroll-progress { display: grid; gap: 13px; padding: 17px; }
+.enroll-progress-row { display: flex; align-items: center; gap: 11px; color: var(--muted); font-size: 14px; line-height: 1.35; }
+.enroll-progress-row b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-soft); color: var(--teal-strong); }
+.enroll-progress-row.ok { color: var(--teal-strong); font-weight: 700; }
+.enroll-progress-row.ok b { background: var(--teal-wash); }
+.enroll-progress-row.fail { color: #a62635; }
+.enroll-prompt-label { margin: 21px 0 8px; }
+.enroll-prompt { padding: 18px; font-size: 19px; font-weight: 680; line-height: 1.38; }
+.enroll-again { margin-top: 9px; }
+.enroll-privacy { font-weight: 560; line-height: 1.4; }
+.enroll-form button:disabled, .enroll-photo + button:disabled { opacity: .52; cursor: not-allowed; }

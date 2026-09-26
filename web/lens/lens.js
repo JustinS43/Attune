@@ -179,6 +179,7 @@ async function setSource(kind) {
   store.state.paused = false;
   store.state.connected = false;
   if (kind === 'live') {
+    loadPanels();
     live ??= createLiveSource({ canvas: liveCanvas, emit, setConnected });
     source = live;
     live.start();
@@ -543,9 +544,32 @@ window.addEventListener('pageshow', (e) => {
   if (m) setMode(m);
 });
 
+// The panels open their own engine link (role console). Mount them when the Live source is
+// used; in Film they load on first use (C, S or Y), so film playback from a plain static server
+// makes no WebSocket requests at all.
+let panels = null;
+let panelsLoading = null;
+const lazyPanelKeys = [];
+function loadPanels() {
+  panelsLoading ??= import('../panels/panels.js')
+    .then((m) => {
+      panels = m.mountPanels?.({ link: panelLink }) ?? null;
+      for (const off of lazyPanelKeys.splice(0)) off();
+      return panels;
+    })
+    .catch(() => null);
+  return panelsLoading;
+}
+for (const [key, view, label] of [['C', 'console', 'Console panel'], ['S', 'speak', 'Speak panel'], ['Y', 'history', 'History panel']]) {
+  lazyPanelKeys.push(onKey(key, () => {
+    if (panels || panelsLoading) return false;
+    loadPanels().then((p) => p?.toggle?.(view));
+    return true;
+  }, label));
+}
+
 syncChrome();
 setSource(sourceKind);
 requestAnimationFrame(frame);
 
-import('../panels/panels.js').then((m) => m.mountPanels?.({ link: panelLink })).catch(() => {});
 

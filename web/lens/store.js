@@ -53,6 +53,8 @@ export function createStore() {
     toasts: [],
     lastStatus: new Map(), // track_id -> status (for "learned" toasts)
     replySeq: 0,
+    sceneSeq: 0, // bumps on every scene message (the face filter steps once per message)
+    epoch: 0, // bumps on reset(): the view builder drops its caption threads and face memory
   };
 
   const wall = nowS; // appear animations run on wall time, even with the film paused
@@ -98,6 +100,7 @@ export function createStore() {
           }
           s.lastStatus.set(f.track_id, f.status);
         }
+        s.sceneSeq++;
         s.scene = {
           faces,
           offscreen: Array.isArray(msg.offscreen) ? msg.offscreen : [],
@@ -119,6 +122,7 @@ export function createStore() {
           words: msg.words,
           tFirst: prev?.tFirst ?? s.clock,
           tUpdate: changed ? s.clock : prev.tUpdate,
+          tSeen: s.clock, // last time the engine sent it, changed or not (stale-segment check)
           tFinal: msg.final ? prev?.tFinal ?? s.clock : null,
         });
         break;
@@ -127,7 +131,7 @@ export function createStore() {
         const id = `reply-${++s.replySeq}`;
         s.captions.set(id, {
           utt_id: id, speaker: { kind: 'you_typed', label: 'You' }, text: String(msg.text ?? ''), final: true,
-          lang: 'en', translation: null, tFirst: s.clock, tUpdate: s.clock, tFinal: s.clock,
+          lang: 'en', translation: null, tFirst: s.clock, tUpdate: s.clock, tSeen: s.clock, tFinal: s.clock,
         });
         break;
       }
@@ -192,6 +196,7 @@ export function createStore() {
 
   /** Clear everything session-bound (scene cut in the film, "forget session", source switch). */
   function reset({ keepPeople = true } = {}) {
+    s.epoch++;
     s.scene = { faces: [], offscreen: [], you_speaking: false };
     s.captions.clear();
     s.proposals.clear();
@@ -215,53 +220,172 @@ const ALERT_META = {
 };
 export const SIDE_TEXT = { left: 'On your left', right: 'On your right', behind: 'Behind you', none: 'Nearby' };
 
+// ---------------------------------------------------------------- caption timing and stability
+// Caption guidance (DCMP Captioning Key, BBC subtitle guidelines): keep a caption up long enough
+// to read at about 160-180 words a minute, and never move text the viewer is reading.
+const READ_WPM = 170;
+const READ_BASE_S = 0.8;
+/** Seconds needed to read `words` words (only what fits on screen counts). */
+export const readTime = (words) => READ_BASE_S + Math.min(words, 18) / (READ_WPM / 60);
+const FLIP_HOLD_S = 0.6; // a new speaker for an utterance must persist this long before its text moves
+const TRACK_HOLD_S = 1.5; // a face the tracker lost keeps its place (and its bubble) this long
+const MAX_BUBBLES = 3; // more than this and the oldest fade once they have been read
+const SEG_RE = /^(.*)\.(\d+)$/; // "<utt_id>.<n>": the n-th speaker segment of one utterance
+
+// One Euro filter (Casiez, Roussel & Vogel, CHI 2012): heavy smoothing while a face is still,
+// little lag while it moves. Values in design px, time in seconds.
+function euro(minCutoff, beta) {
+  return { x: null, dx: 0, minCutoff, beta };
+}
+const euroAlpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+function euroStep(f, x, dt) {
+  if (f.x == null || !(dt > 0)) {
+    f.x = x;
+    f.dx = 0;
+    return x;
+  }
+  f.dx += euroAlpha(1, dt) * ((x - f.x) / dt - f.dx);
+  f.x += euroAlpha(f.minCutoff + f.beta * Math.abs(f.dx), dt) * (x - f.x);
+  return f.x;
+}
+const FACE_KEYS = ['cx', 'cy', 'w', 'h', 'mx', 'my'];
+const faceFilters = () => ({
+  cx: euro(0.9, 0.012), cy: euro(0.9, 0.012), w: euro(0.4, 0.004), h: euro(0.4, 0.004), mx: euro(1.5, 0.02), my: euro(1.5, 0.02),
+});
+
+/** Left / ahead / right with hysteresis, so an arrow never flickers at a boundary. */
+function stickySide(prev, dx) {
+  if (dx < -0.38) return 'left';
+  if (dx > 0.38) return 'right';
+  if (Math.abs(dx) < 0.28) return 'ahead';
+  return prev ?? (dx < -0.33 ? 'left' : dx > 0.33 ? 'right' : 'ahead');
+}
+function stickyUp(prev, dy) {
+  if (dy < -0.36) return true;
+  if (dy > -0.24) return false;
+  return prev ?? dy < -0.3;
+}
+
 /**
- * Builds the per-frame view model. Holds the face smoothing state, so keep one per page.
+ * Builds the per-frame view model. Holds the face filters, caption threads and direction state,
+ * so keep one per page (lens.js makes a fresh one for offline rendering).
  * view = { clock, faces[], bubbles[], offscreen[], lower, you, alerts[], proposals[], status, feed[] ... }
+ *
+ * Captions become one thread per speaker: an utterance's ".n" segments and the speaker's next
+ * utterances join that speaker's running text, so a bubble or a line fills in instead of being
+ * replaced. A speaker attribution that flips for less than FLIP_HOLD_S does not move the text.
  */
 export function createViewBuilder(store) {
-  const smooth = new Map(); // track_id -> { cx, cy, w, h, mx, my, seen }
+  const faceMem = new Map(); // face key -> { filt, flt, sm, face, born, seen, trackId, personId }
+  const alias = new Map(); // track_id -> face key (a re-found person keeps their key)
+  const owners = new Map(); // utt_id -> { key, cand, since }
+  const threads = new Map(); // speaker key -> thread
+  const uttThread = new Map(); // utt_id -> speaker key of the thread holding it
+  const dirs = new Map(); // key -> { side, up }
+  const famMem = new Map(); // utterance id -> its segments, for view.utterances
+  const retired = new Set(); // utterances that have faded from view.utterances
+  let threadSeq = 0;
+  let lastSeq = -1;
+  let lastSceneClock = null;
+  let epoch = store.state.epoch;
+
+  const keyOfTrack = (tid) => alias.get(tid) ?? `t${tid}`;
+  function speakerKey(sp) {
+    const kind = sp.kind || 'someone';
+    if ((kind === 'face' || kind === 'probable_face') && sp.track_id != null) return keyOfTrack(sp.track_id);
+    if (kind === 'offscreen') return `o${sp.person_id ?? sp.label ?? normSide(sp.side)}`;
+    if (kind === 'you' || kind === 'you_typed') return 'you';
+    return 'someone';
+  }
+  function dropUtt(id) {
+    const k = uttThread.get(id);
+    const th = k != null ? threads.get(k) : null;
+    if (th) {
+      th.utts.delete(id);
+      if (!th.utts.size) threads.delete(k);
+    }
+    uttThread.delete(id);
+  }
 
   return function build(dt, anim, sourceKind) {
     const s = store.state;
     const clock = s.clock;
     const cfg = s.config;
     const fade = cfg.bubble_fade_s;
+    if (s.epoch !== epoch) {
+      // scene cut, source switch or "forget session": nothing carries over
+      epoch = s.epoch;
+      faceMem.clear();
+      alias.clear();
+      owners.clear();
+      threads.clear();
+      uttThread.clear();
+      dirs.clear();
+      famMem.clear();
+      retired.clear();
+    }
 
-    // ---- faces (1920x1080 design space, smoothed)
+    // ---- faces (1920x1080 design space): One Euro filtered per scene message, eased per frame
     const faces = [];
-    const byTrack = new Map();
-    const k = follow(dt, sourceKind === 'film' ? 22 : 12);
-    const seenNow = new Set();
-    for (const f of s.paused ? [] : s.scene.faces) {
-      if (!Array.isArray(f.box) || f.box.length < 4) continue;
+    const byKey = new Map();
+    const newScene = s.sceneSeq !== lastSeq;
+    const sdt = newScene && lastSceneClock != null ? clamp(clock - lastSceneClock, 1 / 120, 0.3) : 0;
+    if (newScene) {
+      lastSeq = s.sceneSeq;
+      lastSceneClock = clock;
+    }
+    const kDisp = follow(dt, sourceKind === 'film' ? 30 : 18);
+    const rawFaces = s.paused ? [] : s.scene.faces.filter((f) => Array.isArray(f.box) && f.box.length >= 4);
+    const presentTracks = new Set(rawFaces.map((f) => f.track_id));
+    const usedKeys = new Set();
+    for (const f of rawFaces) {
       const [bx, by, bw, bh] = f.box;
-      const tgt = {
+      let key = alias.get(f.track_id);
+      if (!key || usedKeys.has(key)) {
+        key = `t${f.track_id}`;
+        // the tracker lost someone and found them again under a new id: keep their card
+        if (f.person_id != null) {
+          for (const [k, m] of faceMem) {
+            if (m.personId === f.person_id && !presentTracks.has(m.trackId) && !usedKeys.has(k) && anim - m.seen < TRACK_HOLD_S) {
+              key = k;
+              break;
+            }
+          }
+        }
+        alias.set(f.track_id, key);
+      }
+      usedKeys.add(key);
+      const raw = {
         cx: (bx + bw / 2) * K, cy: (by + bh / 2) * K, w: bw * K, h: bh * K,
         mx: Array.isArray(f.mouth) ? f.mouth[0] * K : (bx + bw / 2) * K,
         my: Array.isArray(f.mouth) ? f.mouth[1] * K : (by + bh * 0.78) * K,
       };
-      let sm = smooth.get(f.track_id);
-      if (!sm || anim - sm.seen > 1.5) {
-        sm = { ...tgt, born: anim, seen: anim };
-        smooth.set(f.track_id, sm);
-      } else {
-        for (const key of ['cx', 'cy', 'w', 'h', 'mx', 'my']) sm[key] += (tgt[key] - sm[key]) * k;
-        sm.seen = anim;
+      let m = faceMem.get(key);
+      if (!m || anim - m.seen > TRACK_HOLD_S) {
+        m = { filt: faceFilters(), flt: { ...raw }, sm: { ...raw }, born: anim, seen: anim };
+        for (const k of FACE_KEYS) euroStep(m.filt[k], raw[k], 0);
+        faceMem.set(key, m);
+      } else if (newScene) {
+        for (const k of FACE_KEYS) m.flt[k] = euroStep(m.filt[k], raw[k], sdt);
       }
-      seenNow.add(f.track_id);
+      for (const k of FACE_KEYS) m.sm[k] += (m.flt[k] - m.sm[k]) * kDisp;
+      m.seen = anim;
+      m.trackId = f.track_id;
+      if (f.person_id != null) m.personId = f.person_id;
+      const sm = m.sm;
       const person = f.person_id != null ? s.people.get(String(f.person_id)) : null;
       let proposal = null;
       for (const p of s.proposals.values()) if (p.track_id === f.track_id) proposal = { ...p, age: clock - p.tState };
       const status = f.status || 'unknown';
       const face = {
-        key: `t${f.track_id}`,
+        key,
         track_id: f.track_id,
         person_id: f.person_id ?? null,
         cx: sm.cx, cy: sm.cy, w: sm.w, h: sm.h, mx: sm.mx, my: sm.my,
         top: sm.cy - sm.h * 0.72, // top of the head, a little above the face box
-        born: sm.born,
+        born: m.born,
         tiny: f.box[2] < 40,
+        ghost: false,
         label: f.label || (NAMED.has(status) ? 'Someone you know' : 'Someone new'),
         status,
         known: NAMED.has(status),
@@ -272,24 +396,84 @@ export function createViewBuilder(store) {
         lip: clamp(Number(f.lip_score) || 0),
         proposal,
       };
+      m.face = face;
       faces.push(face);
-      byTrack.set(f.track_id, face);
+      byKey.set(key, face);
     }
-    for (const [id, sm] of smooth) if (!seenNow.has(id) && anim - sm.seen > 2) smooth.delete(id);
+    // faces the tracker lost a moment ago hold their last place (no brackets, no voice)
+    for (const [key, m] of faceMem) {
+      if (usedKeys.has(key)) continue;
+      if (!s.paused && m.face && anim - m.seen <= TRACK_HOLD_S) {
+        const g = { ...m.face, ghost: true, isSpeaker: false, lip: 0, proposal: null };
+        faces.push(g);
+        byKey.set(key, g);
+      } else if (anim - m.seen > 4 || anim < m.seen - 1) {
+        faceMem.delete(key);
+      }
+    }
+    for (const [tid, key] of alias) if (!faceMem.has(key)) alias.delete(tid);
 
-    // ---- captions grouped by speaker: each speaker shows its latest utterance
-    const groups = new Map();
-    const caps = [...s.captions.values()].sort((a, b) => a.tUpdate - b.tUpdate);
+    // ---- captions -> one thread per speaker
+    const caps = [...s.captions.values()];
+    const famSeen = new Map();
+    const famFirst = new Map();
+    const baseOf = (id) => SEG_RE.exec(String(id))?.[1] ?? String(id);
+    const segOf = (id) => Number(SEG_RE.exec(String(id))?.[2] ?? 0);
     for (const c of caps) {
-      const sp = c.speaker || {};
-      const kind = sp.kind || 'someone';
-      let key;
-      if ((kind === 'face' || kind === 'probable_face') && sp.track_id != null) key = `t${sp.track_id}`;
-      else if (kind === 'offscreen') key = `o${sp.person_id ?? sp.label ?? normSide(sp.side)}`;
-      else if (kind === 'you' || kind === 'you_typed') key = 'you';
-      else key = 'someone';
-      groups.set(key, c);
+      const b = baseOf(c.utt_id);
+      famSeen.set(b, Math.max(famSeen.get(b) ?? -1e9, c.tSeen ?? c.tUpdate));
+      famFirst.set(b, Math.min(famFirst.get(b) ?? 1e9, c.tFirst));
     }
+    const staleNow = [];
+    for (const c of caps) {
+      // a draft segment the engine has since folded back into its utterance is stale: drop it
+      const stale = !c.final && SEG_RE.test(String(c.utt_id)) && famSeen.get(baseOf(c.utt_id)) - (c.tSeen ?? c.tUpdate) > 0.3;
+      if (stale) {
+        dropUtt(c.utt_id);
+        staleNow.push(c.utt_id);
+        continue;
+      }
+      const rk = speakerKey(c.speaker || {});
+      let o = owners.get(c.utt_id);
+      if (!o) {
+        // a new ".n" segment starts with its utterance's speaker: the engine splits a sentence
+        // when the attribution wavers, and a brief waver must not move words to another bubble
+        const fam = SEG_RE.test(String(c.utt_id)) ? owners.get(baseOf(c.utt_id)) : null;
+        o = fam && fam.key !== rk && fam.key !== 'someone' ? { key: fam.key, cand: rk, since: clock } : { key: rk, cand: null, since: 0 };
+        owners.set(c.utt_id, o);
+      } else if (rk === o.key || rk === 'someone') o.cand = null; // losing the speaker moves nothing
+      else if (o.key === 'someone') {
+        o.key = rk; // an unplaced voice found its face: take it at once
+        o.cand = null;
+      } else if (o.cand !== rk) {
+        o.cand = rk;
+        o.since = clock;
+      } else if (clock - o.since >= FLIP_HOLD_S) {
+        o.key = rk;
+        o.cand = null;
+      }
+      const prevKey = uttThread.get(c.utt_id);
+      if (prevKey != null && prevKey !== o.key) dropUtt(c.utt_id);
+      let th = threads.get(o.key);
+      if (!th) {
+        th = { id: ++threadSeq, key: o.key, utts: new Map(), tFirst: c.tFirst, tLast: c.tUpdate, speaker: c.speaker || {}, face: null };
+        threads.set(o.key, th);
+      }
+      const order = [famFirst.get(baseOf(c.utt_id)), segOf(c.utt_id)];
+      const snap = th.utts.get(c.utt_id);
+      if (!snap || snap.src !== c) {
+        th.utts.set(c.utt_id, {
+          src: c, id: c.utt_id, text: c.text, translation: c.translation, lang: c.lang, final: c.final,
+          tFirst: c.tFirst, tUpdate: c.tUpdate, order,
+        });
+      } else snap.order = order;
+      uttThread.set(c.utt_id, o.key);
+      th.tFirst = Math.min(th.tFirst, c.tFirst);
+      if (c.tUpdate >= th.tLast) th.speaker = c.speaker || {};
+      th.tLast = Math.max(th.tLast, c.tUpdate);
+    }
+    for (const [id] of owners) if (!s.captions.has(id) && !uttThread.has(id)) owners.delete(id);
+    if (retired.size > 500) for (const id of retired) if (!s.captions.has(id) && ![...uttThread.keys()].some((u) => baseOf(u) === id)) retired.delete(id);
 
     const offMap = new Map();
     for (const o of s.paused ? [] : s.scene.offscreen) {
@@ -300,31 +484,65 @@ export function createViewBuilder(store) {
       });
     }
 
+    // ---- threads -> bubbles, docked speakers, the lower caption and the You bar
     const bubbles = [];
     let lower = null;
     let you = null;
     const feed = [];
-    for (const [key, c] of groups) {
-      const tRef = c.final ? c.tFinal : c.tUpdate;
-      const age = clock - tRef;
-      const alpha = age < fade ? 1 : clamp(1 - (age - fade) / 0.5);
-      if (alpha <= 0 || !c.text) continue;
-      const sp = c.speaker || {};
-      const translated = !!c.translation && c.lang !== 'en';
-      const primary = translated ? c.translation : c.text;
-      let all = wrapChars(primary, cfg.bubble_chars);
-      const cut = all.length > cfg.bubble_lines;
-      if (cut) all = all.slice(-cfg.bubble_lines);
+    const alive = [];
+    for (const [key, th] of threads) {
+      if (clock < th.tFirst - 1) {
+        for (const id of th.utts.keys()) uttThread.delete(id);
+        threads.delete(key); // the film jumped back before it began
+        continue;
+      }
+      const utts = [...th.utts.values()].sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
+      const latest = utts.reduce((a, u) => (u.tFirst >= a.tFirst ? u : a), utts[0]);
+      const tokens = [];
+      for (const u of utts) {
+        const tr = !!u.translation && u.lang !== 'en';
+        u.tokens = String(tr ? u.translation : u.text).split(/\s+/).filter(Boolean).map((w) => ({ text: w, final: u.final }));
+        tokens.push(...u.tokens);
+      }
+      if (!tokens.length) continue;
+      const age = clock - th.tLast;
+      const read = readTime(tokens.length);
+      const hold = Math.max(fade, read);
+      alive.push({ key, th, utts, latest, tokens, age, read, alpha: age < hold ? 1 : clamp(1 - (age - hold) / 0.5) });
+    }
+    // no more than MAX_BUBBLES at once: the oldest ones leave early, once they have been read
+    const ranked = alive.filter((x) => x.key !== 'you').sort((a, b) => b.th.tLast - a.th.tLast);
+    ranked.forEach((x, i) => {
+      if (i >= MAX_BUBBLES) x.alpha = Math.min(x.alpha, clamp(1 - (x.age - x.read) / 0.5));
+    });
+    const current = ranked.find((x) => x.alpha > 0)?.th.id ?? null;
+    for (const x of alive) {
+      const { key, th, latest, tokens, age, alpha } = x;
+      x.b = null;
+      if (alpha <= 0) {
+        for (const id of th.utts.keys()) uttThread.delete(id);
+        threads.delete(key);
+        continue;
+      }
+      const sp = th.speaker || {};
+      const translated = !!latest.translation && latest.lang !== 'en';
+      const text = tokens.map((t) => t.text).join(' ');
+      let lines = wrapChars(text, cfg.bubble_chars);
+      const cut = lines.length > cfg.bubble_lines;
+      if (cut) lines = lines.slice(-cfg.bubble_lines);
       const b = {
-        key, utt_id: c.utt_id, kind: sp.kind || 'someone', text: primary, lines: all, cut, tFirst: c.tFirst,
-        orig: translated ? c.text : null, lang: c.lang, translated, pending: c.lang !== 'en' && !c.translation,
-        final: c.final, alpha, tUpdate: c.tUpdate, age,
-        speaking: !c.final && clock - c.tUpdate < 1.2,
+        key, id: th.id, utt_id: latest.id, kind: sp.kind || 'someone', text, tokens, lines, cut, tFirst: th.tFirst,
+        orig: translated ? latest.text : null, lang: latest.lang, translated, pending: latest.lang !== 'en' && !latest.translation,
+        final: latest.final, alpha, tUpdate: th.tLast, age, current: th.id === current,
+        speaking: !latest.final && clock - th.tLast < 1.2,
         dashed: sp.kind === 'probable_face',
         name: sp.label || 'Someone', color: NEUTRAL, face: null, side: normSide(sp.side), relation: null,
       };
+      x.b = b;
       if (key.startsWith('t')) {
-        const face = byTrack.get(sp.track_id);
+        let face = byKey.get(key);
+        if (face && !face.ghost) th.face = face;
+        else if (!face && th.face) face = { ...th.face, ghost: true, isSpeaker: false, lip: 0, proposal: null }; // hold its place
         if (face) {
           b.face = face;
           b.name = face.proposal?.state === 'proposed' ? `${face.proposal.name}?` : face.label;
@@ -346,7 +564,7 @@ export function createViewBuilder(store) {
         }
         b.color = o.color;
         b.side = o.side;
-        b.speaking = b.speaking || !c.final;
+        b.speaking = b.speaking || !latest.final;
         o.bubble = b;
       } else if (key === 'you') {
         b.name = 'You';
@@ -359,14 +577,60 @@ export function createViewBuilder(store) {
       }
       feed.push(b);
     }
+    // an off-screen voice with no known side has no edge to dock to: it is the lower caption
+    for (const o of offMap.values()) {
+      if (!o.bubble || o.side === 'left' || o.side === 'right' || o.side === 'behind') continue;
+      if (!lower || o.bubble.tUpdate > lower.tUpdate) lower = o.bubble;
+      o.bubble = null;
+    }
     feed.sort((a, b) => b.tUpdate - a.tUpdate || a.final - b.final || b.tFirst - a.tFirst);
 
-    // direction of every caption relative to the wearer (for the mono and corner displays)
+    // utterances in the order they were spoken, each with all of its ".n" segments in order: the
+    // unit for head-locked displays, where words must stay put even if their speaker changes.
+    // Each utterance has its own reading time and, once it has faded, never comes back.
+    for (const x of alive) {
+      if (!x.b) continue;
+      for (const u of x.utts) {
+        const id = baseOf(u.id);
+        if (retired.has(id)) continue;
+        let f = famMem.get(id);
+        if (!f) famMem.set(id, (f = { id, segs: new Map(), tFirst: u.tFirst, tUpdate: u.tUpdate }));
+        f.segs.set(segOf(u.id), { tokens: u.tokens, final: u.final, b: x.b, own: u.id === id });
+        f.tFirst = Math.min(f.tFirst, u.tFirst);
+        f.tUpdate = Math.max(f.tUpdate, u.tUpdate);
+      }
+    }
+    for (const id of staleNow) famMem.get(baseOf(id))?.segs.delete(segOf(id));
+    const utterances = [];
+    for (const [id, f] of famMem) {
+      const segs = [...f.segs.entries()].sort((p, q) => p[0] - q[0]).map((e) => e[1]);
+      const tokens = segs.flatMap((g) => g.tokens);
+      const age = clock - f.tUpdate;
+      const hold = Math.max(fade, readTime(tokens.length));
+      const alpha = age < hold ? 1 : clamp(1 - (age - hold) / 0.5);
+      if (!tokens.length || alpha <= 0 || clock < f.tFirst - 1) {
+        famMem.delete(id);
+        retired.add(id);
+        continue;
+      }
+      // its speaker: whoever holds most of its words (ties go to the utterance's own segment)
+      const words = new Map();
+      for (const g of segs) words.set(g.b.key, (words.get(g.b.key) ?? 0) + g.tokens.length + (g.own ? 0.5 : 0));
+      const key = [...words.entries()].sort((p, q) => q[1] - p[1])[0][0];
+      const b = segs.filter((g) => g.b.key === key).pop().b;
+      utterances.push({ id, b, key, tokens, tFirst: f.tFirst, tUpdate: f.tUpdate, alpha, final: segs.every((g) => g.final) });
+    }
+    utterances.sort((a, b) => a.tFirst - b.tFirst);
+
+    // direction of every caption relative to the wearer (mono and corner), with hysteresis
     for (const b of feed) {
       if (b.face) {
         const dx = (b.face.cx - W / 2) / (W / 2);
         const dy = (b.face.cy - H / 2) / (H / 2);
-        b.dir = { dx, dy, side: dx < -0.33 ? 'left' : dx > 0.33 ? 'right' : 'ahead' };
+        const prev = dirs.get(b.key);
+        const d = { side: stickySide(prev?.side, dx), up: stickyUp(prev?.up, dy) };
+        dirs.set(b.key, d);
+        b.dir = { dx, dy, side: d.side, up: d.up };
       } else if (b.side === 'left' || b.side === 'right' || b.side === 'behind') {
         b.dir = { dx: b.side === 'left' ? -1.2 : b.side === 'right' ? 1.2 : 0, dy: b.side === 'behind' ? 1.2 : 0, side: b.side, off: true };
       } else b.dir = null;
@@ -401,7 +665,7 @@ export function createViewBuilder(store) {
         id: p.proposal_id, name: p.name, state: p.state, track_id: p.track_id, age: clock - p.tState,
         alpha: p.state === 'proposed' ? clamp((anim - p.wStart) / 0.3) : clamp(1 - (clock - p.tState - 1.0) / 0.4),
       };
-      if (!byTrack.has(p.track_id)) proposals.push(item);
+      if (!faces.some((f) => !f.ghost && f.track_id === p.track_id)) proposals.push(item);
     }
     const pendingProposal = [...s.proposals.values()].filter((p) => p.state === 'proposed').sort((a, b) => b.tStart - a.tStart)[0] ?? null;
 
@@ -414,7 +678,7 @@ export function createViewBuilder(store) {
     return {
       clock, anim, dt, sourceKind, config: cfg, paused: s.paused, pausedAge: anim - s.tPaused,
       connected: s.connected, status, speaking,
-      faces, bubbles, offscreen: [...offMap.values()], lower, you, feed,
+      faces, bubbles, offscreen: [...offMap.values()], lower, you, feed, utterances,
       alerts, activeAlert, proposals, pendingProposal,
       toasts: s.toasts.map((t) => ({ ...t, age: anim - t.t })),
     };

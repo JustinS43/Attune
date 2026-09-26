@@ -50,7 +50,8 @@ export function clockText(t) {
 /** Wall-clock time or date text for ISO strings / epoch seconds. */
 export function dateText(value, withTime = false) {
   if (value === null || value === undefined || value === '') return '';
-  const date = typeof value === 'number' ? new Date(value > 1e11 ? value : value * 1000) : new Date(value);
+  const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value));
+  const date = numeric ? new Date(Number(value) > 1e11 ? Number(value) : Number(value) * 1000) : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   const opts = withTime ? { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric', year: 'numeric' };
   return new Intl.DateTimeFormat(undefined, opts).format(date);

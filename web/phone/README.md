@@ -1,6 +1,6 @@
 # Attune phone app
 
-The wearer's phone view of Attune: live captions, people, name proposals, sound alerts, "speak for me" and conversation history. Plain HTML, CSS and JavaScript (ES modules), no install or build step.
+The wearer's phone view of Attune: live captions, consented face and voice enrollment, people, name proposals, sound alerts, "speak for me" and conversation history. Plain HTML, CSS and JavaScript (ES modules), no install or build step.
 
 ## Open it
 
@@ -29,6 +29,7 @@ The page connects to the engine's WebSocket through `web/shared/ws.js` with role
 |---|---|
 | Home, Live view | `caption` messages (speaker, text, the English translation with the original shown small and an ES tag) |
 | People | `people`, `person_changed`; Rename sends `person.rename`, Remove sends `person.delete` after a confirm |
+| Enroll | A temporary console WebSocket provides face thumbnails from the Attune camera. The person takes a preview photo, enters their name, ticks their own consent box, then the page sends `enroll.start` with the selected live track. After the face result, they speak their name and a sentence into the engine microphone for at least five seconds. `enroll_result` confirms each saved print. |
 | Name proposal ("Sam?") | `name_proposal`; Confirm / Not Sam send `name.answer` |
 | Alert banner | `alert`; Got it sends `alert.ack` |
 | Speak | typed text, presets (from `welcome.config.presets`) and suggested replies (`reply_suggestions`) send `speak` with source `typed`, `preset` or `suggestion`; `reply_spoken` confirms it |
@@ -39,6 +40,6 @@ The page connects to the engine's WebSocket through `web/shared/ws.js` with role
 
 ## Privacy
 
-Captions, names and settings live in the page's memory and disappear when the tab closes; nothing is written to the phone. The page talks only to the Attune engine (WebSocket and `/api/history`), asks for no camera or microphone, and inserts all engine text as text, never as HTML. Its Content Security Policy allows scripts and styles from its own origin only, and network connections to its own origin, WebSockets, and `localhost` (for `?engine=` during development). Only text the wearer sends to speak leaves the laptop (to ElevenLabs), and history is deleted after 24 hours, as the engine contract says.
+Captions, names, the preview photo and settings live in the page's memory and disappear when the tab closes; nothing is written to the phone. The preview photo comes from the engine camera. The voice step uses the engine microphone. The page does not request the phone's camera or microphone. It talks only to the Attune engine (WebSocket and `/api/history`) and inserts all engine text as text, never as HTML. Its Content Security Policy allows scripts and styles from its own origin only, and network connections to its own origin, WebSockets, and `localhost` (for `?engine=` during development). Only text the wearer sends to speak leaves the laptop (to ElevenLabs), and history is deleted after 24 hours, as the engine contract says.
 
 The engine listens on `127.0.0.1` only, so just the laptop itself can open this page. The link has no pairing or authentication, which is fine while the phone is simulated on the laptop.
