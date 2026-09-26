@@ -19,7 +19,7 @@ vision = [
     "opencv-python",
     "onnxruntime-gpu[cuda,cudnn]; sys_platform != 'darwin'",  # brings CUDA 12 + cuDNN 9 runtime wheels
     "onnxruntime; sys_platform == 'darwin'",                  # CPU build for Mac development
-    "mediapipe",
+    "mediapipe==0.10.32",
     "cv2-enumerate-cameras",                                  # open the webcam by name, not index
 ]
 # Section 2 - Audio & Language
