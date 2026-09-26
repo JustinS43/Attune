@@ -40,10 +40,16 @@ class UtteranceLevel:
     """
 
     def __init__(
-        self, target: float, window_s: float = 1.0, rise_db_s: float = 0.0, max_db: float = 40.0
+        self,
+        target: float,
+        window_s: float = 1.0,
+        rise_db_s: float = 0.0,
+        max_db: float = 40.0,
+        percentile: float = 90.0,
     ) -> None:
         self.target = target
         self.rise_db_s = rise_db_s
+        self.percentile = percentile
         self.max_gain = 10 ** (max_db / 20)
         self.levels: deque[float] = deque(maxlen=max(1, round(window_s / 0.032)))
         self.reset()
@@ -62,7 +68,7 @@ class UtteranceLevel:
             for i in range(0, len(samples), 512):
                 block = samples[i : i + 512]
                 self.levels.append(float(np.sqrt(np.mean(block * block))))
-            loud = float(np.percentile(self.levels, 90))
+            loud = float(np.percentile(self.levels, self.percentile))
             want = self.target / loud if loud > np.finfo(np.float32).eps else 1.0
             want = min(want, self.max_gain)
             if self.gain is None or want < self.gain:

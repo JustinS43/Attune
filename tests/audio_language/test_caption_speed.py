@@ -362,3 +362,29 @@ def test_the_vad_hears_the_gained_frame_when_it_is_on(config, bus):
     assert heard[-1] > -40  # raised ~20 dB
     s2 = service(config, bus, GrowingASR())
     assert s2.vad_gain is None  # off unless configured
+
+
+class QuietTalkerASR(GrowingASR):
+    """Words for the first 1 s of audio, then nothing new: the talker stopped, but
+    background talk keeps the VAD on."""
+
+    def feed(self, samples, final=False):
+        if len(samples) and sum(n for n, _ in self.fed) >= 16000:
+            self.fed.append((len(samples), final))
+            text = " ".join(f"w{i}" for i in range(self.words))
+            return Recognition(text, "en", [])
+        return super().feed(samples, final)
+
+
+def test_background_talk_that_keeps_the_vad_on_still_lets_a_final_come(config, bus):
+    s = service(
+        config, bus, QuietTalkerASR(), soft_split_s=2.0, soft_split_word_gap_s=0.8
+    )
+    audio(s, 10.0, 4.0, SPEECH)  # never a VAD pause
+    finals = transcripts(bus, final=True)
+    assert len(finals) == 1
+    # ~2 s in, and 0.8 s after the last new word (at ~1 s of audio with the pre-roll)
+    assert 12.0 <= finals[0]["t_end"] <= 12.5
+    s2 = service(config, bus := type(bus)(), QuietTalkerASR(), soft_split_s=2.0)
+    audio(s2, 10.0, 4.0, SPEECH)
+    assert transcripts(bus, final=True) == []  # off: only a VAD pause splits
