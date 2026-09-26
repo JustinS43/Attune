@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import queue
 import sys
 import threading
@@ -19,19 +20,47 @@ class AudioRing:
     """Keep a bounded mono stream; reject spans crossing capture gaps."""
 
     def __init__(self, seconds: float = 30, rate: int = 16000) -> None:
+        if not math.isfinite(seconds) or seconds <= 0 or rate <= 0:
+            raise ValueError("audio ring duration and rate must be positive")
         self.seconds, self.rate = seconds, rate
+        self.capacity = int(seconds * rate)
+        if self.capacity < 1:
+            raise ValueError("audio ring must hold at least one sample")
         self.blocks: deque = deque()
         self.lock = threading.RLock()
 
     def append(self, t: float, samples: np.ndarray) -> None:
+        """Retain only the configured duration, dropping ambiguous old timelines."""
+        samples = np.asarray(samples, dtype=np.float32)
+        if not math.isfinite(t) or samples.ndim != 1:
+            raise ValueError("audio blocks require a finite timestamp and mono samples")
+        if not len(samples):
+            return
         with self.lock:
-            self.blocks.append((t, np.asarray(samples, dtype=np.float32).copy()))
-            cutoff = t + len(samples) / self.rate - self.seconds
+            if self.blocks:
+                last_t, last_samples = self.blocks[-1]
+                if t < last_t + len(last_samples) / self.rate - 0.5 / self.rate:
+                    self.blocks.clear()
+            end = t + len(samples) / self.rate
+            if len(samples) > self.capacity:
+                t += (len(samples) - self.capacity) / self.rate
+                samples = samples[-self.capacity :]
+            self.blocks.append((t, samples.copy()))
+            cutoff = end - self.capacity / self.rate
             while self.blocks and self.blocks[0][0] + len(self.blocks[0][1]) / self.rate <= cutoff:
                 self.blocks.popleft()
+            if self.blocks and self.blocks[0][0] < cutoff:
+                first_t, first_samples = self.blocks.popleft()
+                trim = math.ceil((cutoff - first_t) * self.rate - 1e-6)
+                if trim < len(first_samples):
+                    self.blocks.appendleft(
+                        (first_t + trim / self.rate, first_samples[trim:].copy())
+                    )
 
     def span(self, start: float, end: float) -> np.ndarray:
         """Read an exact contiguous span, or raise if unavailable."""
+        if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+            raise ValueError("audio span requires finite increasing timestamps")
         with self.lock:
             parts, cursor = [], start
             for t, samples in self.blocks:
