@@ -39,6 +39,7 @@ class ModelFile:
     sha256: str
     license: str
     note: str = ""
+    optional: bool = False
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,10 @@ _WHISPER_COMMIT = "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf"
 _WHISPER_BASE = (
     "https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/resolve/"
     f"{_WHISPER_COMMIT}/"
+)
+_WHISPER_CPU_BASE = (
+    "https://huggingface.co/Systran/faster-whisper-base/resolve/"
+    "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/"
 )
 
 MODELS: dict[str, ModelFile] = {
@@ -141,6 +146,40 @@ MODELS: dict[str, ModelFile] = {
                     "vocabulary.json",
                     1_068_114,
                     "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1",
+                ),
+            )
+        ),
+        *(
+            ModelFile(
+                name=f"whisper_cpu_{filename}",
+                url=_WHISPER_CPU_BASE + filename,
+                dest=f"models/faster-whisper-base/{filename}",
+                size=size,
+                sha256=sha256,
+                license="MIT (Systran/faster-whisper-base)",
+                note="Optional faster CPU model for diagnostic demos",
+                optional=True,
+            )
+            for filename, size, sha256 in (
+                (
+                    "config.json",
+                    2_309,
+                    "56a6d8110d311f19c8f0471e562832c7527f146b567275bfca59fcf7c184da9a",
+                ),
+                (
+                    "model.bin",
+                    145_217_532,
+                    "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9",
+                ),
+                (
+                    "tokenizer.json",
+                    2_203_239,
+                    "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
+                ),
+                (
+                    "vocabulary.txt",
+                    459_861,
+                    "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
                 ),
             )
         ),
@@ -295,7 +334,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{'':12} {m.note}")
         return 0
     if a.check:
-        bad = [m.name for m in models.values() if not ok(m)]
+        unknown = [n for n in a.names if n not in models]
+        if unknown:
+            print(
+                f"unknown model(s): {', '.join(unknown)}; see --list", file=sys.stderr
+            )
+            return 2
+        selected = (
+            [models[n] for n in a.names]
+            if a.names
+            else [m for m in models.values() if not getattr(m, "optional", False)]
+        )
+        bad = [m.name for m in selected if not ok(m)]
         print("all present" if not bad else f"missing or wrong: {', '.join(bad)}")
         return 1 if bad else 0
 

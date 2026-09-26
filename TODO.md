@@ -137,7 +137,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
 
-- [ ] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3
+- [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
 
 
 ## Gates and end-to-end checks (whole team)
