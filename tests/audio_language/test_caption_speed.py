@@ -192,15 +192,20 @@ def test_voice_match_runs_about_once_a_second_on_recent_speech(config, bus):
 def test_long_talk_is_finalised_at_its_first_pause_after_soft_split(config, bus):
     s = service(config, bus, GrowingASR(), soft_split_s=2.0)
     audio(s, 10.0, 2.5, SPEECH)
+    audio(s, 12.5, 0.064, QUIET)  # the VAD dips inside a word: not a pause
+    audio(s, 12.564, 0.5, SPEECH)
+    assert transcripts(bus, final=True) == []
     audio(
-        s, 12.5, 0.1, QUIET
+        s, 13.064, 0.15, QUIET
     )  # a short breath between sentences, far below end_silence
-    audio(s, 12.6, 1.0, SPEECH)
+    audio(s, 13.214, 1.0, SPEECH)
     finals = transcripts(bus, final=True)
     assert len(finals) == 1
-    audio(s, 13.6, 0.6, QUIET)
+    audio(s, 14.214, 0.6, QUIET)
     finals = transcripts(bus, final=True)
     assert len(finals) == 2 and finals[0]["utt_id"] != finals[1]["utt_id"]
+    # the breath became the second utterance's pre-roll: it starts before the speech
+    assert finals[1]["t_start"] < 13.214
 
 
 def test_speech_right_after_a_final_keeps_its_first_word(config, bus):

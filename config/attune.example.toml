@@ -85,6 +85,7 @@ languages = ["en", "es"]        # empty = auto-detect
 mute_after_reply_s = 0.5
 soft_split_s = 5                # a longer utterance ends at its next pause, so finals (history,
                                 # translation) keep coming during a monologue (10 s: ~12 s late)
+soft_split_gap_s = 0.1           # ...a pause is this much silence (the VAD dips inside words too)
 max_utterance_s = 30
 target_rms = 0.1
 rescue_max_s = 2.5              # a short utterance heard as nothing is decoded again on the side

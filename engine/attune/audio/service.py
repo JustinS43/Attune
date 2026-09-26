@@ -150,11 +150,12 @@ class AudioService:
         if self.vad and hasattr(self.vad, "reset"):
             self.vad.reset()
 
-    def _end_utterance(self, keep_tail: bool = False) -> None:
-        """Forget the current utterance. `keep_tail`: its last frames (the silence that
-        ended it) become the pre-roll of the next one, so speech that starts again right
-        away still has audio before its first word."""
-        tail = self.utterance[-self.pre_roll.maxlen :] if keep_tail and self.pre_roll.maxlen else []
+    def _end_utterance(self, keep_tail: int = 0) -> None:
+        """Forget the current utterance. `keep_tail`: this many of its last frames (the
+        silence that ended it) become the pre-roll of the next one, so speech that starts
+        again right away still has audio before its first word."""
+        keep = min(keep_tail, self.pre_roll.maxlen or 0)
+        tail = self.utterance[-keep:] if keep else []
         self.utterance.clear()
         self.speech_audio.clear()
         self.sent = 0
@@ -408,9 +409,17 @@ class AudioService:
         count = len(self.utterance) * 512
         # A long utterance ends at its first pause after soft_split_s (a sentence gap),
         # and at max_utterance_s whatever happens, so finals, translations and history
-        # never wait for a whole monologue.
+        # never wait for a whole monologue. A pause is soft_split_gap_s of no speech: the
+        # VAD also dips for a frame or two inside words ("trees"), and a split there cuts
+        # the word.
         soft = cfg.get("soft_split_s")
-        split = bool(soft) and not active and count >= soft * 16000
+        quiet = self.segmenter.silence_s
+        split = (
+            bool(soft)
+            and not active
+            and quiet >= cfg.get("soft_split_gap_s", 0.1) - 1e-6
+            and count >= soft * 16000
+        )
         final = ended or split or count >= cfg["max_utterance_s"] * 16000
         if self.segmenter.confirmed and (final or count - self.sent >= cfg["asr_chunk_ms"] * 16):
             fresh = self.utterance[self.sent // 512 :]
@@ -421,9 +430,10 @@ class AudioService:
                 return
             self._publish(result, final, t + 0.032, generation)
         if final:
-            # after a pause the frames that ended the utterance are silence: keep them as
-            # the next one's pre-roll; after a split they are speech already captioned
-            self._end_utterance(keep_tail=ended)
+            # the silent frames that ended it become the next utterance's pre-roll (none
+            # after a split at max_utterance_s: those frames are speech already captioned)
+            silent = self.pre_roll.maxlen if ended else round(quiet / 0.032) if split else 0
+            self._end_utterance(keep_tail=silent)
 
     def _finish(self, generation: int) -> None:
         """Caption the utterance in progress now (a pause, a reply starting, a capture gap)."""
