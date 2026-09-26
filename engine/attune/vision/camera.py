@@ -110,19 +110,7 @@ def pick_camera(
         external = [cam for cam in cams if _is_external(cam)]
         if external:
             return external[0]
-    if name:
-        for cam in cams:
-            if _matches(name, cam.name):
-                return cam
-        if not fallback_any:
-            return None
-    if fallback_any:
-        if _is_macos():
-            external = [cam for cam in cams if _is_external(cam)]
-            if external:
-                return external[0]
-        return cams[0] if cams else None
-    return None
+    return cams[0] if cams else None
 
 
 def _matches(name: str, cam_name: str) -> bool:
