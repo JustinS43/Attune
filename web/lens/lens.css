@@ -47,6 +47,7 @@ body {
   transition: filter var(--attune-slow) var(--attune-ease);
 }
 
+/* the film's <video> elements only decode; film/player.js paints the picture into .film-frame */
 .film-video {
   object-fit: cover;
   opacity: 0;
@@ -57,8 +58,12 @@ body {
   display: block;
 }
 
-.media.film-on .film-video.active {
-  opacity: 1;
+.film-frame {
+  display: none;
+}
+
+.media.film-on .film-frame {
+  display: block;
 }
 
 #live-frame {
@@ -199,8 +204,18 @@ body {
 
 /* ------------------------------------------------------------ demo chrome */
 .chrome {
+  /* the mode label (left) and the dock (right) share the bottom edge; on a narrow window the dock
+     wraps onto its own row under the label instead of overlapping it */
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
+  padding: calc(20px * var(--u));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  align-content: flex-end;
+  justify-content: space-between;
+  gap: calc(10px * var(--u)) calc(16px * var(--u));
   pointer-events: none;
   transition: opacity 300ms var(--attune-ease);
 }
@@ -218,9 +233,9 @@ body.chrome-hidden {
 }
 
 .mode-label {
-  position: absolute;
-  left: calc(20px * var(--u));
-  bottom: calc(20px * var(--u));
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: calc(12px * var(--u));
@@ -263,9 +278,8 @@ body.chrome-hidden {
 }
 
 .dock {
-  position: absolute;
-  right: calc(20px * var(--u));
-  bottom: calc(20px * var(--u));
+  margin-left: auto;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -274,6 +288,8 @@ body.chrome-hidden {
 
 .switches,
 .transport {
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -413,6 +429,42 @@ body.chrome-hidden {
   font-variant-numeric: tabular-nums;
   min-width: 34px;
   text-align: right;
+}
+
+/* small windows: the dock takes the full width, the transport stretches, the switches wrap */
+@media (max-width: 720px) {
+  .chrome {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .mode-label {
+    padding: 8px 12px 8px 10px;
+  }
+
+  .dock {
+    width: 100%;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .scene {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .switches {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 420px) {
+  .mode-device {
+    display: none;
+  }
 }
 
 /* ------------------------------------------------------------ help overlay */
