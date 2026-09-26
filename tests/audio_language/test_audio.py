@@ -25,6 +25,39 @@ def test_ring_exact_span_expiry_and_gaps():
         ring.span(2.1, 2.4)
 
 
+def test_ring_trims_partial_blocks_and_oversized_input():
+    ring = AudioRing(seconds=1, rate=10)
+    ring.append(0, np.arange(7))
+    ring.append(0.7, np.arange(7, 14))
+    assert sum(len(samples) for _, samples in ring.blocks) == 10
+    np.testing.assert_equal(ring.span(0.4, 1.4), np.arange(4, 14))
+    with pytest.raises(ValueError):
+        ring.span(0, 0.5)
+    ring.append(1.4, np.arange(30))
+    assert sum(len(samples) for _, samples in ring.blocks) == 10
+    np.testing.assert_equal(ring.span(3.4, 4.4), np.arange(20, 30))
+
+
+@pytest.mark.parametrize("restart", [0.0, 0.5])
+def test_ring_restart_discards_overlapping_old_audio(restart):
+    ring = AudioRing(seconds=30, rate=10)
+    ring.append(0, np.ones(10))
+    ring.append(restart, np.full(10, 2))
+    np.testing.assert_equal(ring.span(restart, restart + 1), np.full(10, 2))
+    assert len(ring.blocks) == 1
+
+
+def test_ring_empty_blocks_do_not_evict_audio_and_invalid_times_are_rejected():
+    ring = AudioRing(seconds=1, rate=10)
+    ring.append(0, np.arange(10))
+    ring.append(100, np.empty(0))
+    np.testing.assert_equal(ring.span(0, 1), np.arange(10))
+    with pytest.raises(ValueError):
+        ring.append(float("nan"), np.ones(10))
+    with pytest.raises(ValueError):
+        ring.span(0, float("inf"))
+
+
 def test_vad_hysteresis_short_blip_and_silence(config):
     s = Segmenter(config["audio"])
     for i in range(5):

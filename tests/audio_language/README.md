@@ -13,7 +13,7 @@ devices, play sounds or contact Ollama. They inject model responses and generate
 PCM. `conftest.py` contains independently chosen test configuration; production
 settings belong to the separate shared configuration change.
 
-The suite contains 50 tests. Coverage includes audio spans and gaps, WASAPI
+The suite contains 54 tests. Coverage includes audio spans, gaps, bounded retention and timestamp restarts, WASAPI
 fallback selection, reconnect/shutdown, resampling, callback jitter, capture
 health, VAD hysteresis, draft/final timing, stable utterance gain and runtime
 Nemotron-to-Whisper recovery,
