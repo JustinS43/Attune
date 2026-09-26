@@ -106,7 +106,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-27 Phone enrollment tab: consented face photo preview and guided voice enrollment · M3 (#33)
 - [x] P-28 Calm Colour look: no flashing or pulsing, simple directional arrows (#39)
 - [x] P-29 Save a person with a double tap: consent on the phone, face/voice capture animations in every glasses mode, Quick Start in Film · M3 (#41)
-- [x] P-30 Lens review fixes: docks avoid faces, clear Mono speakers, names during save, no mixed-language lines (#46)
+- [x] P-31 Lens review fixes: docks avoid faces, clear Mono speakers, names during save, no mixed-language lines (#46)
 
 ## Gates and end-to-end checks (whole team)
 
