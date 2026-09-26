@@ -16,8 +16,8 @@
  */
 
 import {
-  W, H, FD, FT, MINT, ACCENT, font, clamp, lerp, easeOut, easeBack, follow, hexA, rrect, textW, glass, icon,
-  eqBars, dot, keycap, chevrons, faceBrackets, edgeGlow,
+  FD, FT, MINT, ACCENT, font, clamp, lerp, easeOut, easeBack, follow, hexA, rrect, textW, glass, icon,
+  eqBars, dot, keycap, chevrons, faceBrackets, edgeGlow, REGION, tailFill,
 } from './hud.js';
 
 const F = {
@@ -37,10 +37,13 @@ const PADB = 18;
 const HEADH = 30;
 const RAD = 22;
 const TAG_H = 50;
+// Layout bounds follow the mode's display region (hud.js REGION): nothing is drawn outside it.
 const MARGIN = 28;
-const MIN_Y = 30;
-const BOTTOM = H - 150; // keep clear of the You bar
-const GLASS_TAIL = 'rgba(30,33,41,0.80)';
+const TOP_GAP = 30;
+const R = () => REGION;
+const minY = () => R().y + TOP_GAP;
+const bottomY = () => R().y + R().h - 150; // keep clear of the You bar
+const midX = () => R().x + R().w / 2;
 
 export function createBubbleLayer() {
   const cards = new Map(); // key -> render state
@@ -138,10 +141,10 @@ export function createBubbleLayer() {
     let x = f.cx - m.w / 2;
     let y = f.top - gap - m.h;
     let place = 'above';
-    if (y < MIN_Y) y = MIN_Y;
+    if (y < minY()) y = minY();
     // beside the face only when a bubble squeezed against the top would cover the eyes
     if (item.type === 'bubble' && y + m.h > f.top + f.h * 0.22) {
-      place = f.cx > W / 2 ? 'left' : 'right';
+      place = f.cx > midX() ? 'left' : 'right';
       y = f.cy - f.h * 0.25 - m.h / 2;
       x = place === 'left' ? f.cx - f.w * 0.7 - 34 - m.w : f.cx + f.w * 0.7 + 34;
     }
@@ -179,8 +182,9 @@ export function createBubbleLayer() {
     }
   }
   function clampRect(r) {
-    r.x = clamp(r.x, MARGIN, W - MARGIN - r.w);
-    r.y = clamp(r.y, MIN_Y, Math.max(MIN_Y, BOTTOM - r.h));
+    const g = R();
+    r.x = clamp(r.x, g.x + MARGIN, g.x + g.w - MARGIN - r.w);
+    r.y = clamp(r.y, minY(), Math.max(minY(), bottomY() - r.h));
   }
 
   // ------------------------------------------------------------ drawing helpers
@@ -240,7 +244,7 @@ export function createBubbleLayer() {
       ctx.quadraticCurveTo(cx - nx * hw * 0.35, cy - ny * hw * 0.35, tip[0], tip[1]);
       ctx.quadraticCurveTo(cx + nx * hw * 0.35, cy + ny * hw * 0.35, base[0] + nx * hw, base[1] + ny * hw);
       ctx.closePath();
-      ctx.fillStyle = GLASS_TAIL;
+      ctx.fillStyle = tailFill();
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.16)';
       ctx.lineWidth = 1.2;
@@ -421,7 +425,7 @@ export function createBubbleLayer() {
     const bySide = { left: [], right: [], behind: [] };
     for (const o of list) (bySide[o.side === 'right' ? 'right' : o.side === 'left' ? 'left' : 'behind']).push(o);
     for (const side of ['left', 'right']) {
-      let y = 300;
+      let y = R().y + 240;
       for (const o of bySide[side]) {
         const b = o.bubble;
         const a = (b ? b.alpha : 1) * dim;
@@ -453,16 +457,16 @@ export function createBubbleLayer() {
         cs.h += (h - cs.h) * follow(view.dt, 14);
         const ea = easeOut(cs.a);
         const slide = (1 - ea) * 60;
-        const x = side === 'left' ? 76 - slide : W - 76 - w + slide;
+        const x = side === 'left' ? R().x + 60 - slide : R().x + R().w - 60 - w + slide;
         const pulse = 0.75 + 0.25 * Math.sin(anim * 5);
         // edge light in the speaker's colour
         ctx.save();
-        const ex = side === 'left' ? 0 : W;
+        const ex = side === 'left' ? R().x : R().x + R().w;
         const g = ctx.createRadialGradient(ex, cs.y + cs.h / 2, 0, ex, cs.y + cs.h / 2, 420);
         g.addColorStop(0, hexA(o.color, (b ? 0.42 : 0.22) * a * ea * pulse));
         g.addColorStop(1, hexA(o.color, 0));
         ctx.fillStyle = g;
-        ctx.fillRect(side === 'left' ? 0 : W - 420, cs.y + cs.h / 2 - 420, 420, 840);
+        ctx.fillRect(side === 'left' ? ex : ex - 420, cs.y + cs.h / 2 - 420, 420, 840);
         ctx.restore();
         glass(ctx, blur, x, cs.y, w, cs.h, Math.min(RAD, cs.h / 2), { alpha: a * ea, glow: o.color });
         ctx.save();
@@ -494,7 +498,7 @@ export function createBubbleLayer() {
       }
     }
     // someone behind you: glow along the bottom edge, docked above the You bar
-    let by = BOTTOM + 10;
+    let by = bottomY() + 10;
     for (const o of bySide.behind) {
       const b = o.bubble;
       const a = (b ? b.alpha : 1) * dim;
@@ -502,14 +506,14 @@ export function createBubbleLayer() {
       const text = b ? b.lines.join(' ') : '';
       const parts = `${o.name}  ·  behind you${text ? '  —  ' + text : ''}`;
       const w = textW(ctx, parts, F.sub) + 90;
-      glass(ctx, blur, W / 2 - w / 2, by - 50, w, 44, 22, { alpha: a, glow: o.color });
+      glass(ctx, blur, midX() - w / 2, by - 50, w, 44, 22, { alpha: a, glow: o.color });
       ctx.save();
       ctx.globalAlpha *= a;
-      dot(ctx, W / 2 - w / 2 + 26, by - 28, 6, o.color);
+      dot(ctx, midX() - w / 2 + 26, by - 28, 6, o.color);
       ctx.font = F.sub;
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(parts, W / 2 - w / 2 + 44, by - 27);
+      ctx.fillText(parts, midX() - w / 2 + 44, by - 27);
       ctx.restore();
       by -= 54;
     }
@@ -523,8 +527,8 @@ export function createBubbleLayer() {
     const bodyW = Math.max(...lines.map((l) => textW(ctx, l, F.body)));
     const w = Math.max(bodyW, nameW + 80) + PADX * 2;
     const h = PADT + HEADH + 8 + lines.length * LH + PADB - 4;
-    const x = W / 2 - w / 2;
-    const y = BOTTOM - h - 6;
+    const x = midX() - w / 2;
+    const y = bottomY() - h - 6;
     const a = b.alpha * dim;
     glass(ctx, blur, x, y, w, h, RAD, { alpha: a, glow: b.color });
     ctx.save();
@@ -559,11 +563,11 @@ export function createBubbleLayer() {
     const text = bb.lines.map((l, i) => (i === 0 && bb.cut ? `… ${l}` : l)).join(' ');
     const lw = textW(ctx, label, F.youLabel);
     const tw = textW(ctx, text, F.you);
-    const w = Math.min(W - 200, tw + lw + 22 * 2 + 40 + (view.speaking && !bb.final ? 40 : 0));
+    const w = Math.min(R().w - 120, tw + lw + 22 * 2 + 40 + (view.speaking && !bb.final ? 40 : 0));
     cs.w += (w - cs.w) * follow(view.dt, 14);
     const h = 60;
-    const x = W / 2 - cs.w / 2;
-    const y = H - 118 + (1 - easeOut(cs.a)) * 16;
+    const x = midX() - cs.w / 2;
+    const y = R().y + R().h - 118 + (1 - easeOut(cs.a)) * 16;
     const a = cs.a * (present ? b.alpha : 1) * dim;
     glass(ctx, blur, x, y, cs.w, h, h / 2, { alpha: a, tint: 'rgba(14,16,22,0.46)' });
     ctx.save();
@@ -623,7 +627,7 @@ export function createBubbleLayer() {
       rects.push(t);
     }
     // keep clear of the status pill, the alerts, and everyone else's face (eyes to chin)
-    const obstacles = [{ x: 30, y: 26, w: 470, h: 78 }, ...(env.obstacles || [])];
+    const obstacles = [{ x: R().x + 14, y: R().y + 12, w: 440, h: 78 }, ...(env.obstacles || [])];
     for (const f of view.faces) {
       if (f.tiny) continue;
       obstacles.push({ x: f.cx - f.w * 0.3, y: f.cy - f.h * 0.28, w: f.w * 0.6, h: f.h * 0.62, owner: f.key });

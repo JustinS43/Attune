@@ -12,9 +12,9 @@
 
 import { onKey, listKeys } from '../shared/keys.js';
 import { createStore, createViewBuilder } from './store.js';
-import { W, setPixelScale, nowS, addSkew } from './hud.js';
+import { W, setPixelScale, nowS, addSkew, setManualClock } from './hud.js';
 import { createColorMode } from './modes/color.js';
-import { createMonoMode } from './modes/mono.js';
+import { createMonoMode, MONO_LEVELS, MONO_DEFAULT_LEVEL } from './modes/mono.js';
 import { createCornerMode } from './modes/corner.js';
 import { createLiveSource } from './live.js';
 import { createFilmSource } from './film/film.js';
@@ -31,7 +31,7 @@ const ASSETS = params.get('assets') || '/data/reels/film/';
 
 // ---------------------------------------------------------------- model
 const store = createStore();
-const build = createViewBuilder(store);
+let build = createViewBuilder(store);
 const listeners = new Set();
 const srCaptions = document.getElementById('captions-live');
 let lastSr = '';
@@ -84,6 +84,10 @@ let filmError = '';
 let live = null;
 let source = null;
 let startT = Number.parseFloat(params.get('t'));
+// G1 display height level (0-8, keys [ and ]) and the monocular placement (G: Ray-Ban Display / Glass)
+const heightParam = Number.parseInt(params.get('height'), 10);
+let monoLevel = Number.isFinite(heightParam) ? Math.max(0, Math.min(MONO_LEVELS - 1, heightParam)) : MONO_DEFAULT_LEVEL;
+modes.corner.variant = params.get('variant') === 'glass' ? 'glass' : 'rayban';
 
 // ---------------------------------------------------------------- stage sizing (16:9 letterbox, DPR aware)
 let scale = 1;
@@ -93,7 +97,10 @@ function layout() {
   const sw = Math.min(vw, (vh * 16) / 9);
   const sh = (sw * 9) / 16;
   Object.assign(stage.style, { left: `${(vw - sw) / 2}px`, top: `${(vh - sh) / 2}px`, width: `${sw}px`, height: `${sh}px` });
-  $('app').style.setProperty('--u', String(Math.min(1.3, Math.max(0.85, vw / 1440))));
+  // the demo chrome scales with the window (1.3 at 1920x1080, down to 0.55 in a small window or
+  // the side-by-side demo's iframe); lens.css applies it with zoom, so fixed px scale too
+  const ui = Math.min(1.3, Math.max(0.55, 1.3 * Math.min(vw / 1920, vh / 1080)));
+  $('app').style.setProperty('--ui', ui.toFixed(3));
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const cw = Math.round(sw * dpr);
   const ch = Math.round(sh * dpr);
@@ -200,6 +207,10 @@ function syncUrl() {
   const p = new URLSearchParams(location.search);
   p.set('source', sourceKind);
   p.set('mode', MODE_URL[modeId]);
+  if (monoLevel !== MONO_DEFAULT_LEVEL) p.set('height', String(monoLevel));
+  else p.delete('height');
+  if (modes.corner.variant === 'glass') p.set('variant', 'glass');
+  else p.delete('variant');
   p.delete('t');
   history.replaceState(null, '', `${location.pathname}?${p.toString()}`);
 }
@@ -207,7 +218,7 @@ function syncUrl() {
 function syncChrome() {
   const m = modes[modeId];
   chrome.name.textContent = m.name;
-  chrome.device.textContent = m.device;
+  chrome.device.textContent = modeId === 'mono' ? `${m.device} · height ${monoLevel}/${MONO_LEVELS - 1}` : m.device;
   chrome.swatch.dataset.mode = modeId;
   for (const l of layers) l.canvas.classList.toggle('on', l.id === modeId);
   for (const b of document.querySelectorAll('[data-source]')) b.setAttribute('aria-pressed', String(b.dataset.source === sourceKind));
@@ -262,22 +273,24 @@ function syncTransport(now) {
 // ---------------------------------------------------------------- frame loop
 let last = nowS() * 1000;
 let renderError = null;
+let offlineMode = false; // attuneLens.renderAt() drives every frame; the live loop stands aside
 function frame() {
-  step(nowS() * 1000);
+  if (!offlineMode) step(nowS() * 1000);
   requestAnimationFrame(frame);
 }
-function step(now) {
+/** One frame. `at` (offline rendering) is the exact film time; `dtOverride` the step in seconds. */
+function step(now, at, dtOverride) {
   const anim = now / 1000;
-  const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+  const dt = dtOverride ?? Math.min(0.1, Math.max(0, (now - last) / 1000));
   last = now;
   try {
-    if (source?.kind === 'film') source.tick();
+    if (source?.kind === 'film') source.tick(at);
     else store.state.clock = anim;
     store.prune();
     const view = build(dt, anim, sourceKind);
     const rendering = layers.filter((l) => l.id === modeId || now < l.until);
     if (rendering.some((l) => modes[l.id].blur)) updateBlur(source?.blurSource ?? null);
-    const env = { anim, dt, blur: blurReady ? blurCanvas : null, chrome: !chromeHidden, px: scale };
+    const env = { anim, dt, blur: blurReady ? blurCanvas : null, chrome: !chromeHidden, px: scale, monoLevel };
     for (const l of layers) {
       const on = rendering.includes(l);
       if (!on && !l.dirty) continue;
@@ -344,6 +357,15 @@ function toggleHelp(force) {
   help.hidden = !open;
 }
 
+function setMonoLevel(level) {
+  const next = Math.max(0, Math.min(MONO_LEVELS - 1, level));
+  if (modeId !== 'mono') setMode('mono');
+  if (next === monoLevel) return;
+  monoLevel = next;
+  syncUrl();
+  syncChrome();
+}
+
 // ---------------------------------------------------------------- keys (web/shared/keys.js)
 onKey('M', () => setMode(MODE_ORDER[(MODE_ORDER.indexOf(modeId) + 1) % MODE_ORDER.length]), 'Next glasses mode');
 onKey('V', () => setSource(sourceKind === 'live' ? 'film' : 'live'), 'Switch source: Live / Film');
@@ -358,11 +380,23 @@ onKey('P', () => send('pause.toggle'), 'Pause or resume recognition');
 onKey('F', forget, 'Forget this session');
 onKey('Space', () => {
   if (sourceKind !== 'film' || !film) return false;
+  if (offlineMode) {
+    exitOffline();
+    return true;
+  }
   film.togglePlay();
   return true;
 }, 'Play or pause the film');
 onKey('ArrowLeft', () => sourceKind === 'film' && film?.prev(), 'Previous film scene');
 onKey('ArrowRight', () => sourceKind === 'film' && film?.next(), 'Next film scene');
+onKey(']', () => setMonoLevel(monoLevel + 1), 'Mono display higher (G1 height level)');
+onKey('[', () => setMonoLevel(monoLevel - 1), 'Mono display lower');
+onKey('G', () => {
+  modes.corner.variant = modes.corner.variant === 'glass' ? 'rayban' : 'glass';
+  if (modeId !== 'corner') setMode('corner');
+  syncUrl();
+  syncChrome();
+}, 'Monocular: Ray-Ban Display / Google Glass placement');
 onKey('?', () => toggleHelp(), 'Show these shortcuts');
 onKey('Escape', () => toggleHelp(false));
 
@@ -396,26 +430,97 @@ const panelLink = {
   },
 };
 
+// ---------------------------------------------------------------- deterministic offline rendering
+// attuneLens.renderAt(t, mode) shows film time t exactly: the video frame for t, and a HUD whose
+// state and animations are derived from film time alone (the animation clock is pinned to it),
+// so the same t always renders the same picture. Consecutive calls (t rising by up to 0.5 s in
+// one scene) continue the simulation like playback; any other call re-runs it from a few seconds
+// before t, so a single frame is also exact. See docs/glasses-realism.md for driving it.
+const ANIM0 = 10000; // animation clock = ANIM0 + film time while rendering offline
+const OFFLINE_FPS = 60;
+const WARMUP_S = 7; // longer than any caption fade (4 s + 3 s grace), toast (3.4 s) or alert tail
+let offlineAt = null;
+
+function enterOffline() {
+  if (offlineMode) return;
+  offlineMode = true;
+  offlineAt = null;
+  document.body.classList.add('offline');
+}
+
+function exitOffline() {
+  if (!offlineMode) return;
+  offlineMode = false;
+  offlineAt = null;
+  setManualClock(null);
+  last = nowS() * 1000;
+  document.body.classList.remove('offline');
+  if (film && !film.playing) film.togglePlay();
+}
+
+function offlineStep(t, dt) {
+  setManualClock(ANIM0 + t);
+  step(nowS() * 1000, t, dt);
+}
+
+async function renderAt(t, mode) {
+  for (let i = 0; i < 100 && !film; i++) await new Promise((r) => setTimeout(r, 100));
+  if (!film) throw new Error('film not loaded');
+  if (sourceKind !== 'film') await setSource('film');
+  enterOffline();
+  if (mode) {
+    const id = MODE_ALIASES[mode] ?? mode;
+    if (id !== modeId) setMode(id);
+  }
+  for (const l of layers) l.until = 0; // no crossfade offline
+  const k = film.segmentAt(t);
+  const continuing = offlineAt != null && t >= offlineAt && t - offlineAt <= 0.5 && k === film.segment && film.segmentAt(offlineAt) === k;
+  let tt;
+  if (continuing) tt = offlineAt;
+  else {
+    // restart the script a few seconds before t (or at the scene start) with fresh HUD state
+    const from = Math.min(t, Math.max(film.segmentRange(k).t0, t - WARMUP_S));
+    film.offlineStart(from);
+    tt = from;
+    build = createViewBuilder(store);
+    const variant = modes.corner.variant;
+    modes.color = createColorMode();
+    modes.mono = createMonoMode();
+    modes.corner = createCornerMode();
+    modes.corner.variant = variant;
+    offlineStep(tt, 0);
+  }
+  const dt = 1 / OFFLINE_FPS;
+  while (tt < t - 1e-6) {
+    const next = Math.min(t, tt + dt);
+    offlineStep(next, next - tt);
+    tt = next;
+  }
+  const painted = await film.frameAt(t);
+  offlineStep(t, 0); // the final picture with its exact frame (dt 0: nothing moves twice)
+  offlineAt = t;
+  if (!painted) console.warn(`[lens] renderAt(${t}): the video frame did not arrive in time`);
+  return { t: lastView?.clock, painted, mode: modeId };
+}
+
 // debugging and scripted demos: attuneLens.seek(33), attuneLens.setMode('mono')
 window.attuneLens = {
-  store, setMode, setSource,
+  store, setMode, setSource, setMonoLevel, modes,
   seek: (t) => film?.seek(t),
   get film() {
     return film;
   },
-  /** Pause the film on film-time t (optionally in a mode), wait for the frame, then settle. */
+  /**
+   * Show film time t exactly (optionally in a mode): the video frame for t and the HUD as it is at
+   * t, with animations derived from film time. Call it frame by frame for offline rendering;
+   * attuneLens.release() (or Space) returns to normal playback.
+   */
+  renderAt,
   async hold(t, mode) {
-    for (let i = 0; i < 60 && !film; i++) await new Promise((r) => setTimeout(r, 100));
-    if (mode) setMode(MODE_ALIASES[mode] ?? mode);
-    if (film.playing) film.togglePlay();
-    film.seek(t);
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 80));
-      const v = media.querySelector('video.active');
-      if (v && !v.seeking && v.readyState >= 2 && Math.abs((v.presented ?? v.currentTime) - v.want) < 0.08) break;
-    }
-    return this.settle(90);
+    const r = await renderAt(t, mode);
+    return r.t;
   },
+  release: exitOffline,
   /** Step the renderer n frames at 60 fps right now (for screenshots of a hidden tab). */
   settle(n = 60) {
     for (let i = 0; i < n; i++) {

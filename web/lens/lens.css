@@ -20,9 +20,17 @@ body {
   position: fixed;
   inset: 0;
   background: #030405;
-  /* the demo chrome scales with the window (lens.js sets --u: 1 at 1440 px wide, 0.85-1.3) */
+  /* the demo chrome scales with the window: lens.js sets --ui (1.3 at 1920x1080, down to 0.55),
+     applied below with zoom so every size, fixed px included, scales together */
   --u: 1;
+  --ui: 1.3;
   font-size: calc(13px * var(--u));
+}
+
+.chrome,
+.help,
+.notice {
+  zoom: var(--ui);
 }
 
 /* ------------------------------------------------------------ stage */
@@ -75,9 +83,14 @@ body {
   opacity: 1;
 }
 
-/* paused: the world dims and loses colour, the HUD explains why */
-.stage.paused .media {
-  filter: saturate(0.3) brightness(0.5);
+/* paused: glasses cannot dim the world, so only the HUD says so (see docs/glasses-realism.md) */
+
+/* offline rendering (attuneLens.renderAt): nothing may move on the wall clock */
+body.offline *,
+body.offline *::before,
+body.offline *::after {
+  transition: none !important;
+  animation: none !important;
 }
 
 .shade {
@@ -98,6 +111,8 @@ body {
     opacity 380ms var(--attune-ease),
     transform 380ms var(--attune-ease);
   pointer-events: none;
+  /* the virtual image focuses 2-4 m away: the video stays sharp, the HUD a touch soft */
+  filter: blur(0.4px);
 }
 
 .hud.on {
@@ -458,6 +473,37 @@ body.chrome-hidden {
     flex-wrap: wrap;
     justify-content: space-between;
     gap: 6px;
+  }
+}
+
+/* very short windows (a small iframe): keep one compact row of controls so the video stays visible;
+   the mode is still shown by the pressed Colour / Mono / Corner button */
+@media (max-height: 420px) {
+  .mode-label,
+  .scene,
+  .scene-count {
+    display: none;
+  }
+
+  .chrome {
+    padding: 8px;
+  }
+
+  .dock {
+    width: auto;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .transport {
+    padding: 4px;
+  }
+
+  .switches {
+    flex-wrap: nowrap;
+    padding: 4px;
+    gap: 4px;
   }
 }
 

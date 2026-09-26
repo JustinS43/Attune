@@ -28,6 +28,39 @@ export const easeOut = (t) => 1 - Math.pow(1 - clamp(t), 3);
 export const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 export const easeBack = (t, s = 1.4) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
 export const font = (w, px, fam = FT) => `${w} ${px}px ${fam}`;
+// ---------------------------------------------------------------- display region and glass style
+// Real glasses only draw inside their display: each mode sets the region (design px) it may use,
+// and edge glows, docking and clamps follow it. See docs/glasses-realism.md for the numbers.
+/** 1251 px focal length: a 1920x1080 frame spans about 75 degrees horizontally. */
+export const FOCAL = 1251;
+export const degToPx = (deg) => FOCAL * Math.tan((deg * Math.PI) / 180);
+export let REGION = { x: 0, y: 0, w: W, h: H };
+export function setRegion(r) {
+  REGION = r;
+}
+/** Faint outline of the display area (only drawn while the demo chrome is visible). */
+export function regionOutline(ctx, r, radius, color = 'rgba(255,255,255,0.10)') {
+  ctx.save();
+  rrect(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, radius);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([2, 6]);
+  ctx.stroke();
+  ctx.restore();
+}
+/**
+ * Waveguides add light and cannot darken the world, so an 'additive' look keeps panels bright
+ * and translucent: less dark backing (about 70% of the world's brightness shows through), a
+ * light frost, and no dark drop shadow.
+ */
+let GLASS = { tintScale: 1, frost: 0, shadow: true };
+export function setGlassStyle(look) {
+  GLASS = look === 'additive' ? { tintScale: 0.56, frost: 0.07, shadow: false } : { tintScale: 1, frost: 0, shadow: true };
+}
+
+/** Fill for a solid bubble tail, matching the current glass look. */
+export const tailFill = () => (GLASS.frost ? 'rgba(205,215,230,0.34)' : 'rgba(30,33,41,0.80)');
+
 /** Canvas pixels per design unit; shadow blur is in canvas pixels, so it is scaled by this. */
 export let PX = 1;
 export function setPixelScale(k) {
@@ -36,7 +69,12 @@ export function setPixelScale(k) {
 
 /** The page's animation clock in seconds (performance.now plus any time settle() stepped ahead). */
 let skewMs = 0;
-export const nowS = () => (performance.now() + skewMs) / 1000;
+let manualS = null;
+export const nowS = () => manualS ?? (performance.now() + skewMs) / 1000;
+/** Offline rendering: pin the animation clock to a value derived from film time (null = real time). */
+export function setManualClock(s) {
+  manualS = s;
+}
 export function addSkew(ms) {
   skewMs += ms;
 }
@@ -121,7 +159,7 @@ export function glass(ctx, blur, x, y, w, h, r, o = {}) {
   if (a <= 0.002 || w <= 0 || h <= 0) return;
   ctx.save();
   ctx.globalAlpha *= a;
-  if (o.shadow !== 0) {
+  if (o.shadow !== 0 && GLASS.shadow) {
     ctx.save();
     ctx.shadowColor = `rgba(0,0,0,${o.shadow ?? 0.3})`;
     ctx.shadowBlur = 26 * PX;
@@ -135,8 +173,15 @@ export function glass(ctx, blur, x, y, w, h, r, o = {}) {
   rrect(ctx, x, y, w, h, r);
   ctx.clip();
   if (blur) ctx.drawImage(blur, 0, 0, blur.width, blur.height, 0, 0, W, H);
+  ctx.save();
+  ctx.globalAlpha *= GLASS.tintScale;
   ctx.fillStyle = o.tint ?? 'rgba(14,16,22,0.52)';
   ctx.fillRect(x, y, w, h);
+  ctx.restore();
+  if (GLASS.frost) {
+    ctx.fillStyle = `rgba(235,245,255,${GLASS.frost})`;
+    ctx.fillRect(x, y, w, h);
+  }
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   g.addColorStop(0, 'rgba(255,255,255,0.13)');
   g.addColorStop(0.45, 'rgba(255,255,255,0.03)');
@@ -326,7 +371,8 @@ export function edgeGlow(ctx, side, color, a, spread = 540) {
   if (a <= 0.002) return;
   let x;
   let y;
-  if (side === 'left') { x = 0; y = H / 2; } else if (side === 'right') { x = W; y = H / 2; } else { x = W / 2; y = H; }
+  const R = REGION;
+  if (side === 'left') { x = R.x; y = R.y + R.h / 2; } else if (side === 'right') { x = R.x + R.w; y = R.y + R.h / 2; } else { x = R.x + R.w / 2; y = R.y + R.h; }
   ctx.save();
   const g = ctx.createRadialGradient(x, y, 0, x, y, spread);
   g.addColorStop(0, hexA(color, 0.42 * a));
@@ -335,7 +381,7 @@ export function edgeGlow(ctx, side, color, a, spread = 540) {
   ctx.fillStyle = g;
   ctx.fillRect(x - spread, y - spread, spread * 2, spread * 2);
   ctx.translate(x, y);
-  if (x === 0 || x === W) ctx.scale(0.2, 1.05);
+  if (side === 'left' || side === 'right') ctx.scale(0.2, 1.05);
   else ctx.scale(1.4, 0.2);
   const r = spread * 0.95;
   const gb = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
