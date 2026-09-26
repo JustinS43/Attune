@@ -125,6 +125,13 @@ class CaptureResampler:
         return blocks
 
 
+def _com_init() -> bool:
+    """Initialize COM (multithreaded) for this thread; True if it must be released."""
+    import ctypes
+
+    return ctypes.windll.ole32.CoInitializeEx(None, 0) in (0, 1)  # S_OK, S_FALSE
+
+
 class MicReader:
     """Read mono PCM; recover on the host's default input after device loss."""
 
@@ -216,6 +223,18 @@ class MicReader:
                 return
 
     def _run(self) -> None:
+        # PortAudio's WASAPI host needs COM on the thread that opens the stream;
+        # without it Pa_StartStream fails with an "unanticipated host error".
+        com = sys.platform == "win32" and _com_init()
+        try:
+            self._capture()
+        finally:
+            if com:
+                import ctypes
+
+                ctypes.windll.ole32.CoUninitialize()
+
+    def _capture(self) -> None:
         fallback = False
         while not self.stop_event.is_set():
             try:
