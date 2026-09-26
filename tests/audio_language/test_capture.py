@@ -207,6 +207,9 @@ class FakeStream:
 def hotplug(config, monkeypatch):
     pytest.importorskip("soxr")
     monkeypatch.setattr("attune.audio.mic.sys.platform", "win32")
+    # Simulate the Windows COM entry points when this test runs on macOS or Linux.
+    ole32 = SimpleNamespace(CoInitializeEx=lambda *_: 0, CoUninitialize=lambda: None)
+    monkeypatch.setattr("ctypes.windll", SimpleNamespace(ole32=ole32), raising=False)
     monkeypatch.setattr(MicReader, "RECHECK_S", 0.05)
     pa = FakePortAudio()
     state = {"busy": False}

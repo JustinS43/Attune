@@ -34,18 +34,37 @@ asd_min_fps = 12                # vision slower than this: no score, the lip sco
 asd_av_offset_s = 0.0           # audio lags video by this much
 
 [fusion]
-lip_talking = 0.03
-lip_uncertain = 0.015
+# Lip score = band-passed mouth movement (V-19; the old plain std was about 2.5x larger).
+lip_talking = 0.012             # moving like a talker
+lip_uncertain = 0.008           # probable band: lip_uncertain .. lip_talking
+lip_floor_s = 15                # per-face noise floor: this face's own recent lip score...
+lip_floor_min_s = 3
+lip_floor_pct = 10              # ...its 10th percentile...
+lip_floor_ratio = 1.5           # ...and a face must also reach 1.5x it
+talk_cover_share = 0.7          # moving in time for 70% of the speech since it started, for
+talk_confirm_s = 0.25           #   0.25 s if it started with the speech (or a turn),
+talk_onset_s = 0.4              #   i.e. within 0.4 s of it,
+talk_sustain_s = 1.5            #   1.5 s if it started in the middle of someone's speech
+lip_open_max = 0.6              # wider open than this = yawn or laugh, not speech
+head_motion_max = 0.8           # face widths/s; faster = blurred lips, not measured
+talk_min_swings = 4             # joining mid-speech: open/close swings needed over talk_sustain_s
+talk_swing_amp = 0.03           # open ratio change that counts as a swing
+mouth_min_fps = 6.0             # fewer mouth samples a second: mouth not judged (starved GPU)
+sync_min_corr = 0.3             # lips in time with the sound: required when there is sound
+av_window_s = 1.5
+require_sync = true             # false only for film reels over unrelated audio
+voice_reject = 0.25             # best voice score below this vetoes a face with a session print
+harvest_min_corr = 0.4          # learn a face's voice only when this far in time
+learn_offscreen = true          # learn voices heard while every visible face is still as offscreen-N
+offscreen_claim_s = 3.0         # a face talking this long with an offscreen-N voice claims it
 hold_s = 0.5
 switch_ratio = 1.5
 voice_match = 0.5
 offscreen_exit_memory_s = 30
 side_db = 3.0
-asd_use = true                  # a face with a Light-ASD score speaks only when it says so
+asd_use = true                  # a face with a fresh Light-ASD score talks only when it says so
 asd_on = 0.5                    # score (logit) that starts a face talking...
 asd_off = -0.5                  # ...and that stops it again
-asd_switch_margin = 1.0
-asd_harvest = 1.5
 harvest_after_s = 1.5
 first_words_wait_ms = 300
 rate_hz = 15

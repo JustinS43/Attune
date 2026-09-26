@@ -861,6 +861,32 @@ def metrics(run: dict, truth: Truth, label: str) -> dict:
     if vis:
         out["asd_ms"] = round(statistics.mean(m["asd_ms"] for m in vis), 1)
         out["asd_gpu_mb"] = max(m.get("asd_gpu_mb") or 0 for m in vis)
+    # per clip second: frames processed, the scores, and whether a face was lit as speaker
+    secs: dict[int, dict] = defaultdict(
+        lambda: {"t": set(), "asd": [], "lip": [], "lit": []}
+    )
+    for t, _tid, _box, asd, lip in run.get("tracks") or []:
+        sec = secs[int(t - t0)]
+        sec["t"].add(t)
+        if asd is not None:
+            sec["asd"].append(float(asd))
+        if lip is not None:
+            sec["lip"].append(float(lip))
+    for t, sc in scenes:
+        secs[int(t - t0)]["lit"].append(
+            any(f.get("is_speaker") for f in sc.get("faces") or [])
+        )
+    out["per_second"] = {
+        k: {
+            "fps": len(v["t"]),
+            "asd_n": len(v["asd"]),
+            "asd": round(statistics.mean(v["asd"]), 2) if v["asd"] else None,
+            "lip": round(statistics.mean(v["lip"]), 3) if v["lip"] else None,
+            "lit": round(statistics.mean(v["lit"]), 2) if v["lit"] else None,
+        }
+        for k, v in sorted(secs.items())
+        if 0 <= k <= run.get("duration_s", 1e9) + 1
+    }
     out["rows"] = rows
     return out
 
@@ -936,6 +962,7 @@ def main(argv: list[str] | None = None) -> int:
         "--out", help="write the metrics (and every word) to this JSON file"
     )
     ap.add_argument("--words", action="store_true", help="print every scored word")
+    ap.add_argument("--seconds", action="store_true", help="print a per-second table")
     g = ap.add_argument_group("offline")
     g.add_argument("--model", default="models/light_asd/finetuning_TalkSet.model")
     g.add_argument("--device", default="cuda", help="Light-ASD device (cuda or cpu)")
@@ -996,6 +1023,17 @@ def main(argv: list[str] | None = None) -> int:
         "engine without Light-ASD" if args.no_asd else "engine with Light-ASD",
     )
     report(m)
+    if args.seconds:
+        print(" sec  truth        frames  ASD-n  ASD-mean  lip-mean  face-lit")
+        for sec, v in m["per_second"].items():
+            _, who = truth.who(int(sec) + 0.5)
+            asd = "-" if v["asd"] is None else f"{v['asd']:.2f}"
+            lip = "-" if v["lip"] is None else f"{v['lip']:.3f}"
+            lit = "-" if v["lit"] is None else f"{100 * v['lit']:.0f}%"
+            print(
+                f"{int(sec):4d}  {who!s:11s} {v['fps']:6d} {v['asd_n']:6d} {asd:>9s} "
+                f"{lip:>9s} {lit:>9s}"
+            )
     if args.words:
         for ct, text, who, credited in sorted(m["rows"]):
             print(f"  {ct:6.2f}s {text:14s} said by {who!s:10s} -> {credited}")

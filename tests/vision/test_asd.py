@@ -274,9 +274,10 @@ def syllables(t, rate=4.0):
 class Sim:
     """Drives SpeakerFusion at 30 fps with faces that may carry an asd_score."""
 
-    def __init__(self, **settings):
+    def __init__(self, people=None, **settings):
         self.f = SpeakerFusion(FusionSettings(**settings))
         self.t, self.frame = 0.0, 0
+        self.people = people or {}  # track_id -> (person_id, name)
 
     def step(self, faces, speech=True, voice=None):
         """faces: {track_id: (x, lip_score, mouth_moving, asd_score or None)}"""
@@ -285,20 +286,10 @@ class Sim:
         tracks = []
         for tid, (x, lip, moving, asd) in faces.items():
             mouth = 0.2 + 0.15 * syllables(self.t) if moving else 0.1
-            tracks.append(
-                Track(
-                    tid,
-                    [x, 400, 120, 120],
-                    120,
-                    lip,
-                    None,
-                    None,
-                    0.0,
-                    "unknown",
-                    mouth,
-                    asd,
-                )
-            )
+            pid, name = self.people.get(tid, (None, None))
+            status = "named" if pid else "unknown"
+            box = [x, 400, 120, 120]
+            tracks.append(Track(tid, box, 120, lip, pid, name, 0.9, status, mouth, asd))
         self.f.on_tracks(Tracks(self.frame, self.t, tracks))
         self.f.on_vad({"t": self.t, "is_speech": speech, "prob": 0.9})
         self.f.on_audio_level({"t": self.t, "db": -30 + 20 * syllables(self.t)})
@@ -342,14 +333,27 @@ def test_asd_hysteresis_on_at_asd_on_off_below_asd_off():
     )  # needs asd_on again
 
 
-def test_asd_holds_the_current_speaker_until_another_clearly_beats_it():
-    sim = Sim(asd_switch_margin=1.0, hold_s=0.5)
-    faces = {1: (300, 0.0, False, 2.0), 2: (900, 0.0, False, -3.0)}
-    assert sim.run(1.0, faces).track_id == 1
-    faces = {1: (300, 0.0, False, 2.0), 2: (900, 0.0, False, 2.5)}
-    assert sim.run(1.0, faces).track_id == 1  # only 0.5 better
-    faces = {1: (300, 0.0, False, 2.0), 2: (900, 0.0, False, 3.5)}
-    assert sim.run(1.0, faces).track_id == 2
+def test_asd_moves_the_speech_to_the_face_it_says_is_talking():
+    sim = Sim(hold_s=0.5)
+    faces = {1: (300, 0.02, True, 2.0), 2: (900, 0.02, True, -3.0)}
+    assert sim.run(1.0, faces).track_id == 1  # both mouths move in time; 1 talks
+    faces = {1: (300, 0.02, True, -3.0), 2: (900, 0.02, True, 2.0)}
+    assert sim.run(1.0, faces).track_id == 2  # a turn
+    faces = {1: (300, 0.02, True, 2.0), 2: (900, 0.02, True, 2.0)}
+    assert sim.run(1.0, faces).track_id == 2  # both talking: the current one keeps it
+
+
+def test_the_voice_veto_still_applies_to_an_asd_talking_face():
+    sim = Sim()
+    sim.f.voice_labels["p-ana"] = "Ana"
+    spk = sim.run(2.0, {1: (500, 0.02, True, 2.5)}, voice="p-ana")  # Ana's voice
+    assert spk.kind == "offscreen" and spk.label == "Ana"
+
+
+def test_film_reels_without_sync_ignore_the_scores():
+    # require_sync off (a reel over unrelated audio): Light-ASD, a sync check, can't say
+    sim = Sim(require_sync=False)
+    assert sim.run(2.0, {1: (500, 0.05, True, -3.0)}).kind == "face"
 
 
 def test_stale_or_missing_scores_fall_back_to_the_lip_score():
@@ -509,35 +513,22 @@ def test_eval_script_scores_words_against_the_truth(tmp_path):
     assert m["first_caption_latency_s"] == 0.5
 
 
-def test_a_confident_asd_face_can_harvest_a_voice_print():
-    sim = Sim(asd_harvest=1.5, harvest_after_s=0.5)
-    harvests = []
-    for _ in range(60):
-        sim.t += 1 / FPS_F
-        sim.frame += 1
-        sim.f.on_tracks(
-            Tracks(
-                sim.frame,
-                sim.t,
-                [
-                    Track(
-                        1,
-                        [500, 400, 120, 120],
-                        120,
-                        0.0,
-                        "p-1",
-                        "Bo",
-                        0.9,
-                        "named",
-                        0.1,
-                        3.0,
-                    )
-                ],
-            )
-        )
-        sim.f.on_vad({"t": sim.t, "is_speech": True, "prob": 0.9})
-        _, _, h = sim.f.tick(sim.t)
-        if h is not None:
-            harvests.append(h)
-    assert harvests and harvests[0].person_id == "p-1"
-    assert sim.f.current == Speaker("face", 1, "p-1", "Bo")
+def test_voice_prints_need_asd_and_lips_in_time():
+    def run(lip, moving, asd):
+        sim = Sim(people={1: ("p-1", "Bo")}, harvest_after_s=0.5)
+        harvests = []
+        for _ in range(60):
+            _, _, h = sim.step({1: (500, lip, moving, asd)})
+            if h is not None:
+                harvests.append(h)
+        return sim.f.current, harvests
+
+    # Light-ASD says talking, lips still (backlit): the face speaks, no print is learnt
+    spk, harvests = run(0.0, False, 3.0)
+    assert spk == Speaker("face", 1, "p-1", "Bo") and not harvests
+    # Light-ASD says talking and the lips are in time with the sound: learnt
+    spk, harvests = run(0.05, True, 3.0)
+    assert spk.kind == "face" and harvests and harvests[0].person_id == "p-1"
+    # lips in time but Light-ASD says silent: neither the words nor a print
+    spk, harvests = run(0.05, True, -3.0)
+    assert spk.kind != "face" and not harvests

@@ -34,6 +34,9 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-16 Keep a sentence in one caption when the speaker decision flickers (short and "Someone" pieces join their neighbour) (#22, #23)
 - [x] V-17 Camera on/off from a page: `camera.set` stops or restarts the webcam (#30)
 - [x] V-18 Stable caption attribution: one speaker per segment across drafts, retract dropped segments, no re-labelling when a face leaves (#40)
+- [x] V-19 Recover when a camera opens without frames: report usable video and retry a smaller capture mode — C922 hardware check pending (#56)
+- [x] V-20 Prefer any connected USB webcam on macOS instead of matching a camera model name (#56)
+- [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
 - [x] V-22 Light-ASD active speaker model decides who is talking (#PR)
 
 ## Section 2 – Audio & Language
@@ -57,6 +60,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-17 Test tone generator (T3, T4) · M2 — generator implemented and both frequency bands tested; PR number pending GitHub access
 - [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
 - [x] A-19 Hot-plug recovery: re-initialise PortAudio after a mic loss, fall back, return to `[audio] device_name` between utterances; camera returns to `[vision] camera_name` after replug (Vision file) · M2 — unit-tested with fake devices; a real unplug/replug is still to check on the rig (#52)
+- [x] A-20 Make Windows capture simulation tests portable across macOS and Linux (#55)
 
 ## Section 3 – Hardware & Services
 
@@ -111,6 +115,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-30 Remember Me full-face photo and local contact list with photo uploads · M3 (#42)
 - [x] P-31 Lens review fixes: docks avoid faces, clear Mono speakers, names during save, no mixed-language lines (#46)
 - [x] P-32 System debug: phone enrollment and console fixes, full-suite findings handed to owners (#51)
+- [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
+- [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 
 ## Gates and end-to-end checks (whole team)
 

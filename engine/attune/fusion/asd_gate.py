@@ -1,31 +1,37 @@
-"""Light-ASD in who's talking: when a face has a fresh `asd_score`, it decides for that face.
+"""Light-ASD in who's talking: for a face with a fresh `asd_score`, its verdict decides.
 
 Section 1 - Vision (fusion). TODO: V-22. Contracts: `Track.asd_score`.
 
-A visible face with a fresh Light-ASD score is "covered": it can be the speaker only
-while Light-ASD says it is talking, with hysteresis (on at `asd_on`, off again below
-`asd_off`). Faces without a score (model off or missing, face too small, too little
-history, score stale) keep the lip-score rules of `SpeakerFusion.decide`, unchanged.
+`SpeakerFusion._assess` (V-21) judges each face's mouth every tick: moving, in time
+with the sound, for long enough. Light-ASD (vision/asd.py) answers the same question
+directly, from the mouth and the sound together, and far better when the room is full
+of speech from people off camera. So each tick `decide` runs `SpeakerFusion.decide`
+with every "covered" face (one with a fresh Light-ASD score) carrying Light-ASD's
+verdict instead of `_assess`'s (only for that call; `_assess` keeps its own state):
 
-Each tick:
-1. `decide` runs with the covered faces hidden, so it answers exactly as if they
-   weren't there: "You", a lip-score face among the uncovered ones, or the off-screen
-   / "Someone" answer (voice match, exit side, sensor side).
-2. "You" stands. Otherwise a covered face that Light-ASD says is talking is the
-   speaker: the highest score, but the current speaker is kept for `hold_s` and
-   until another face beats it by `asd_switch_margin`.
-3. With no covered face talking, step 1's answer stands. So when Light-ASD says
-   none of the visible faces is talking, the words go to off-screen or "Someone",
-   however much a still mouth twitches.
-With no covered faces at all this is exactly `decide`.
+- talking while the score is at least `asd_on`, until it drops below `asd_off`
+  (hysteresis), never "probable";
+- everything else in `decide` still applies to it: the voice veto (this utterance's
+  voice matched someone else), the hold and switch rules, "You" first, and its own
+  voice print letting a moving mouth speak;
+- a face whose score is stale or missing (model off, face too small, too little
+  history, vision too slow) keeps the lip-score checks, unchanged.
 
-The in-time value reported for a Light-ASD face (it gates voice-print harvesting) is
-1.0 at `asd_harvest` or more, otherwise 0.0.
+When Light-ASD says none of the visible faces is talking, `decide` finds no face and
+the words go to off-screen or "Someone", however much a still mouth twitches. A covered
+face that Light-ASD stops counts as a visible talker stopping (a turn), as in `_assess`.
+
+Voice prints are still harvested only from a face that `decide` picks as talking and
+whose lips are in time with the sound (`harvest_min_corr`): Light-ASD's verdict makes a
+face talk, but a voice print needs both.
+
+With `require_sync = false` (a film reel over unrelated audio) no face can be in time
+with the sound, so Light-ASD, a sync check, is not used either.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from ..vision.settings import FusionSettings
 from ..vision.types import Speaker, get
@@ -34,15 +40,15 @@ from ..vision.types import Speaker, get
 @dataclass
 class _Face:
     score: float
-    t: float
+    t: float  # frame time of the score
     talking: bool = False
-    on_t: float = -1e9  # last time it was talking
 
 
 class AsdGate:
     def __init__(self, settings: FusionSettings):
         self.s = settings
         self.faces: dict[int, _Face] = {}
+        self._given: dict[int, bool] = {}  # the verdict each covered face got last tick
 
     def on_tracks(self, ev) -> None:
         """Keep each face's latest score and its talking state (hysteresis)."""
@@ -59,14 +65,12 @@ class AsdGate:
                 f = self.faces[tid] = _Face(float(score), t)
             f.score, f.t = float(score), t
             f.talking = f.score >= (self.s.asd_off if f.talking else self.s.asd_on)
-            if f.talking:
-                f.on_t = t
         for tid in [k for k in self.faces if k not in seen]:
             del self.faces[tid]
 
     def covered(self, fusion, now: float) -> dict[int, _Face]:
         """Visible faces whose Light-ASD score is fresh."""
-        if not self.s.asd_use:
+        if not (self.s.asd_use and self.s.require_sync):
             return {}
         return {
             tid: f
@@ -77,41 +81,22 @@ class AsdGate:
         }
 
     def decide(self, fusion, now: float) -> tuple[Speaker | None, float | None]:
-        """`fusion.decide(now)`, with Light-ASD deciding for the faces it covers."""
-        cov = self.covered(fusion, now)
-        if not cov:
-            return fusion.decide(now)
-        hidden = {tid: fusion.tracks.pop(tid) for tid in cov}
+        """`fusion.decide(now)`, with Light-ASD's verdict for the faces it covers."""
+        covered = self.covered(fusion, now)
+        speaking = fusion._speaking(now)
+        saved = []
+        for tid, f in covered.items():
+            tr = fusion.tracks[tid]
+            saved.append((tr, tr.talking, tr.probable))
+            talking = f.talking and speaking
+            if self._given.get(tid) and not talking:
+                fusion._stopped[tid] = now  # a visible talker stopped: a turn
+            self._given[tid] = talking
+            tr.talking, tr.probable = talking, False
+        for tid in [k for k in self._given if k not in covered]:
+            del self._given[tid]
         try:
-            base, r = fusion.decide(now)
+            return fusion.decide(now)
         finally:
-            fusion.tracks.update(hidden)
-        if base is None or base.kind == "you":
-            return base, r
-        labels = fusion._labels()
-        if base.kind in ("face", "probable_face") and base.track_id in labels:
-            base = replace(base, label=labels[base.track_id])  # numbered among all faces
-
-        cur = fusion.current
-        talking = {tid: f for tid, f in cov.items() if f.talking}
-        if (
-            cur is not None
-            and cur.kind == "face"
-            and cur.track_id in cov
-            and cur.track_id not in talking
-            and now - cov[cur.track_id].on_t <= self.s.hold_s
-        ):
-            talking[cur.track_id] = cov[cur.track_id]  # a pause between words
-        if not talking:
-            return base, r
-        tid = max(talking, key=lambda k: talking[k].score)
-        if cur is not None and cur.kind == "face" and cur.track_id in talking:
-            held = talking[cur.track_id].score
-            if (
-                now - fusion._current_since < self.s.hold_s
-                or talking[tid].score < held + self.s.asd_switch_margin
-            ):
-                tid = cur.track_id
-        info = fusion.tracks[tid]
-        in_time = 1.0 if talking[tid].score >= self.s.asd_harvest else 0.0
-        return Speaker("face", tid, info.person_id, labels[tid]), in_time
+            for tr, talking, probable in saved:
+                tr.talking, tr.probable = talking, probable
