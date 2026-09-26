@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from collections import deque
 from pathlib import Path
 from uuid import uuid4
 
@@ -29,6 +31,7 @@ class AudioService:
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(config["audio"])
         self.ring = AudioRing()
+        self.speech_intervals: deque[tuple[float, float]] = deque()
         self.paused = False
         self.muted_until = float("-inf")
         self.enrollment = None
@@ -36,10 +39,12 @@ class AudioService:
         self.pending = np.empty(0, np.float32)
         self.pending_t = None
         self.utterance: list = []
+        self.speech_audio: list[np.ndarray] = []
         self.sent = 0
         self.level = UtteranceLevel(config["audio"]["target_rms"])
         self.normalized: list[np.ndarray] = []
         self.utt_id = ""
+        self.languages = list(config["audio"]["languages"])
 
     def start(self) -> None:
         """Load local models before enabling capture; start no downloads."""
@@ -48,14 +53,7 @@ class AudioService:
         self.vad = self.vad or SileroVAD()
         self.language = self.language or LanguageID(cfg["languages"])
         if self.asr is None:
-            # The released Nemotron streaming model is English-only.
-            if cfg["languages"] == ["en"]:
-                try:
-                    self.asr = NemotronASR(self.config["nemotron"])
-                except (ImportError, FileNotFoundError, RuntimeError):
-                    logger.warning("Nemotron unavailable; selecting local Whisper")
-            if self.asr is None:
-                self.asr = WhisperASR(self.config["whisper"] | {"languages": cfg["languages"]})
+            self.asr = self._make_asr(self.languages)
         if self.voices is None:
             voice = self.config["voice"]
             self.voices = VoicePrints(
@@ -104,12 +102,14 @@ class AudioService:
         if self.voices:
             self.voices.forget()
         self.ring.clear()
+        self.speech_intervals.clear()
         self.enrollment = self.pending_consent = None
 
     def _reset(self) -> None:
         self.pending = np.empty(0, np.float32)
         self.pending_t = None
         self.utterance.clear()
+        self.speech_audio.clear()
         self.sent = 0
         self.level.reset()
         self.normalized.clear()
@@ -119,15 +119,36 @@ class AudioService:
         if self.vad and hasattr(self.vad, "reset"):
             self.vad.reset()
 
+    def _make_asr(self, languages: list[str]):
+        """Prefer local multilingual Nemotron, then recover with local Whisper."""
+        try:
+            return NemotronASR(self.config["nemotron"] | {"languages": languages})
+        except (ImportError, FileNotFoundError, RuntimeError):
+            logger.warning("Nemotron unavailable; selecting local Whisper")
+            return WhisperASR(self.config["whisper"] | {"languages": languages})
+
+    def _speech_span(self, start: float, end: float) -> np.ndarray:
+        """Return only VAD-positive samples in an available attributed span."""
+        audio = self.ring.span(start, end)
+        parts = [
+            audio[round((max(start, a) - start) * 16000) : round((min(end, b) - start) * 16000)]
+            for a, b in self.speech_intervals
+            if a < end and b > start
+        ]
+        return np.concatenate(parts) if parts else np.empty(0, np.float32)
+
     def _handle(self, topic: str, e: dict, generation: int) -> None:
         if topic == "session.forget":
             self._reset()
             self.ring.clear()
+            self.speech_intervals.clear()
             self.voices.forget()
             self.enrollment = self.pending_consent = None
         elif topic == "paused":
             self.paused = e["paused"]
             self._reset()
+            self.ring.clear()
+            self.speech_intervals.clear()
             self.enrollment = self.pending_consent = None
         elif topic == "speech_out.playing":
             self.muted_until = (
@@ -136,26 +157,42 @@ class AudioService:
                 else e["t"] + self.config["audio"]["mute_after_reply_s"]
             )
             self._reset()
+            self.ring.clear()
+            self.speech_intervals.clear()
         elif topic == "person.changed" and e["action"] == "deleted":
             self.voices.delete(e["person_id"])
             self.enrollment = self.pending_consent = None
         elif topic == "voice.harvest" and not self.paused and self.clock() >= self.muted_until:
-            audio = self.ring.span(e["t0"], e["t1"])
+            audio = self._speech_span(e["t0"], e["t1"])
             if generation == self.worker.generation:
                 self.voices.harvest(e["person_id"], audio)
         elif topic == "command":
             name, args = e["name"], e.get("args", {})
             if name == "enroll.start":
-                if args.get("consent") is True and args.get("consent_t") is not None:
+                self.enrollment = self.pending_consent = None
+                consent_t = args.get("consent_t")
+                if (
+                    args.get("consent") is True
+                    and isinstance(consent_t, (int, float))
+                    and not isinstance(consent_t, bool)
+                    and math.isfinite(consent_t)
+                    and "track_id" in args
+                ):
                     self.pending_consent = dict(args)
             elif name == "person.delete":
                 self.voices.delete(args["person_id"])
                 self.enrollment = self.pending_consent = None
             elif name == "languages.set":
                 langs = args["langs"]
-                self.language = LanguageID(langs)
-                self.asr = WhisperASR(self.config["whisper"] | {"languages": langs})
+                language = LanguageID(langs)
+                langs = language.languages
+                asr = self._make_asr(langs)
+                # Model creation can fail or be invalidated while loading. Commit
+                # the recognizer and language detector together only on success.
+                if generation != self.worker.generation or self.worker.closed.is_set():
+                    return
                 self._reset()
+                self.language, self.asr, self.languages = language, asr, langs
         elif topic == "enroll.result" and e["part"] == "face":
             if (
                 self.pending_consent
@@ -186,7 +223,7 @@ class AudioService:
                 if a < self.enrollment["started_t"]:
                     return
                 self.enrollment["seen"].add(e["utt_id"])
-                audio = self.ring.span(a, b)
+                audio = self._speech_span(a, b)
                 self.enrollment["audio"].append(audio)
                 combined = np.concatenate(self.enrollment["audio"])
                 if len(combined) >= self.config["voice"]["enroll_s"] * 16000:
@@ -235,6 +272,14 @@ class AudioService:
             self.pending_t += 0.032
             prob = self.vad(frame)
             active, _began, ended = self.segmenter.feed(t, prob)
+            if active:
+                self.speech_audio.append(frame.copy())
+                if self.speech_intervals and abs(self.speech_intervals[-1][1] - t) < 1 / 16000:
+                    self.speech_intervals[-1] = (self.speech_intervals[-1][0], t + 0.032)
+                else:
+                    self.speech_intervals.append((t, t + 0.032))
+            while self.speech_intervals and self.speech_intervals[0][1] <= t - self.ring.seconds:
+                self.speech_intervals.popleft()
             self.worker.publish(
                 "audio.vad", {"t": t, "is_speech": active, "prob": prob}, generation
             )
@@ -268,7 +313,8 @@ class AudioService:
                         },
                         generation,
                     )
-                person, score = self.voices.match(audio)
+                speech = np.concatenate(self.speech_audio) if self.speech_audio else np.empty(0)
+                person, score = self.voices.match(speech)
                 self.worker.publish(
                     "audio.voice_match",
                     {"utt_id": self.utt_id, "person_id": person, "score": score},
@@ -276,6 +322,7 @@ class AudioService:
                 )
             if final:
                 self.utterance.clear()
+                self.speech_audio.clear()
                 self.normalized.clear()
                 self.level.reset()
                 self.sent = 0
@@ -294,7 +341,7 @@ class AudioService:
             logger.warning("Nemotron decoding failed; retrying utterance with local Whisper")
             try:
                 fallback = WhisperASR(
-                    self.config["whisper"] | {"languages": self.config["audio"]["languages"]}
+                    self.config["whisper"] | {"languages": self.languages}
                 )
                 result = fallback.feed(np.concatenate(self.normalized), final)
             except Exception:

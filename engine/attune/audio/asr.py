@@ -1,9 +1,10 @@
-"""Local sherpa-onnx Nemotron transducer adapter (English model)."""
+"""Local sherpa-onnx Nemotron 3.5 streaming transducer adapter."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Any
 
 import numpy as np
@@ -92,6 +93,12 @@ class NemotronASR:
 
     def reset(self) -> None:
         self.stream = self.recognizer.create_stream()
+        languages = self.config.get("languages", ["en"])
+        self.language = languages[0] if len(languages) == 1 else "und"
+        if hasattr(self.stream, "set_option"):
+            self.stream.set_option("language", self.language if self.language != "und" else "auto")
+        elif languages != ["en"]:
+            raise RuntimeError("installed sherpa-onnx lacks per-stream language support")
         self.samples = 0
 
     def feed(self, samples: np.ndarray, final: bool = False) -> Recognition:
@@ -116,6 +123,17 @@ class NemotronASR:
                 result.get("tokens", []),
                 result.get("timestamps", []),
             )
+            language = result.get("lang") or result.get("language") or self.language
         else:
             text, tokens, times = result.text, result.tokens, result.timestamps
-        return Recognition(text.strip(), "en", token_words(tokens, times, self.samples / 16000))
+            language = getattr(result, "lang", None) or getattr(result, "language", None)
+            language = language or self.language
+        # Current sherpa removes Nemotron's auto-language tags; accept them as well
+        # for compatible older adapters without showing special tokens in captions.
+        tag = re.search(r"<([a-z]{2,3})(?:-[A-Za-z]{2})?>", text)
+        if tag:
+            language = tag[1]
+        text = re.sub(r"<[^>]+>", "", text).strip()
+        return Recognition(
+            text, language.split("-")[0].lower(), token_words(tokens, times, self.samples / 16000)
+        )

@@ -21,13 +21,28 @@ class LLMService:
         self.bus, self.config = bus, config
         self.client = client or OllamaClient(config["llm"])
         self.worker = Worker(bus, "llm", self._handle, self._tick)
+        self.worker.health = self._health
         self.names, self.descriptions = Names(config["llm"]), Descriptions()
-        self.context = deque(maxlen=config["llm"]["reply_context_lines"])
+        self.context = deque(maxlen=config["llm"].get("reply_context_lines", 6))
         self.seen = deque(maxlen=256)
         self.translation = True
         self.paused = False
         self.lost = set()
         self.jobs = []
+        self.track_generations = {}
+        self._state_generation = self.worker.generation
+        self._error = ""
+
+    def _health(self) -> dict:
+        warm = getattr(self.client, "warm", False)
+        if warm:
+            self._error = ""
+        error = getattr(self.client, "error", "") or self._error
+        return {
+            "ok": warm and not error,
+            "detail": error or ("ready" if warm else "warming local language model"),
+            "metrics": {"warm": warm, "pending": len(self.jobs)},
+        }
 
     def start(self) -> None:
         self.clock = engine_clock(self.config)
@@ -48,6 +63,16 @@ class LLMService:
     def _queue(
         self, kind: str, messages: list, schema: dict, source: dict, generation: int
     ) -> None:
+        if kind in {"replies", "descriptions"}:
+            retained = []
+            for old in self.jobs:
+                if old[1] == kind and (
+                    kind == "replies" or old[2]["track_id"] == source["track_id"]
+                ):
+                    old[0].cancel()
+                else:
+                    retained.append(old)
+            self.jobs = retained
         future = self.client.submit(kind, messages, schema)
         self.jobs.append((future, kind, source, generation))
 
@@ -59,8 +84,17 @@ class LLMService:
         self.names.forget()
         self.descriptions.labels.clear()
         self.lost.clear()
+        self.track_generations.clear()
+        self._state_generation = self.worker.generation
+        self._error = ""
 
     def _handle(self, topic: str, e: dict, generation: int) -> None:
+        if generation != self.worker.generation and topic not {
+            "session.forget", "paused", "person.changed"
+        }:
+            return
+        if self._state_generation != self.worker.generation:
+            self._clear()
         if topic == "session.forget" or topic == "person.changed":
             self._clear()
         elif topic == "paused":
@@ -69,17 +103,18 @@ class LLMService:
         elif topic == "vision.track_lost":
             track = e["track_id"]
             self.lost.add(track)
+            self.track_generations[track] = self.track_generations.get(track, 0) + 1
             self.descriptions.labels.pop(track, None)
             for key, p in list(self.names.pending.items()):
                 if p["track_id"] == track:
                     self.names.pending.pop(key)
-                    self.worker.publish("name.proposal", p | {"state": "expired"})
+                    self.worker.publish("name.proposal", p | {"state": "expired"}, generation)
         elif topic == "touch.action" and e["target"] == "name":
-            self._answer(e["id"], e["accept"])
+            self._answer(e["id"], e["accept"], generation)
         elif topic == "command":
             args = e.get("args", {})
             if e["name"] == "name.answer":
-                self._answer(args["proposal_id"], args["accept"])
+                self._answer(args["proposal_id"], args["accept"], generation)
             elif e["name"] == "switch.set" and args["key"] == "translation":
                 self.translation = bool(args["value"])
         elif (
@@ -93,11 +128,12 @@ class LLMService:
             if self.translation and e["lang"] not in {"en", "und", ""}:
                 self._queue("translation", translate.messages(e), translate.SCHEMA, e, generation)
             if self.names.eligible(e):
+                track = e["speaker"]["track_id"]
                 self._queue(
                     "names",
                     [{"role": "system", "content": PROMPT}, {"role": "user", "content": e["text"]}],
                     NAME_SCHEMA,
-                    e,
+                    e | {"track_generation": self.track_generations.get(track, 0)},
                     generation,
                 )
             self._queue(
@@ -109,23 +145,31 @@ class LLMService:
                 "descriptions",
                 describe.messages(e["crop"]),
                 describe.SCHEMA,
-                {"track_id": e["track_id"]},
+                {
+                    "track_id": e["track_id"],
+                    "track_generation": self.track_generations.get(e["track_id"], 0),
+                },
                 generation,
             )
 
-    def _answer(self, key: str, accept: bool) -> None:
+    def _answer(self, key: str, accept: bool, generation: int) -> None:
+        if self.paused or generation != self.worker.generation:
+            return
         event = self.names.answer(key, accept, self.clock())
         if event:
-            self.worker.publish("name.proposal", event)
+            self.worker.publish("name.proposal", event, generation)
             if event["state"] in {"confirmed", "rejected"}:
                 self.worker.publish(
                     "hw.pattern",
                     {"name": "OK" if event["state"] == "confirmed" else "NO", "side": "R"},
+                    generation,
                 )
 
     def _tick(self) -> None:
+        if self._state_generation != self.worker.generation or self.paused:
+            return
         for event in self.names.expire(self.clock()):
-            self.worker.publish("name.proposal", event)
+            self.worker.publish("name.proposal", event, self._state_generation)
         pending = []
         for future, kind, source, generation in self.jobs:
             if not future.done():
@@ -138,23 +182,29 @@ class LLMService:
                 event = None
                 if kind == "translation" and self.translation:
                     topic, event = "caption.translation", translate.result(source, answer)
-                elif kind == "names" and source["speaker"]["track_id"] not in self.lost:
+                elif kind == "names" and self._current_track(source, source["speaker"]["track_id"]):
                     topic, event = "name.proposal", self.names.propose(source, answer, self.clock())
                     if event:
                         self.worker.publish("hw.pattern", {"name": "NAME", "side": "R"}, generation)
                 elif kind == "replies":
                     topic, event = "reply.suggestions", replies.result(answer)
-                elif kind == "descriptions" and source["track_id"] not in self.lost:
+                elif kind == "descriptions" and self._current_track(source, source["track_id"]):
                     topic, event = (
                         "vision.description",
                         self.descriptions.result(source["track_id"], answer),
                     )
                 if event:
                     self.worker.publish(topic, event, generation)
+                self._error = ""
             except Exception:
-                self.worker.error = "local language job failed"
+                self._error = "local language job failed"
                 logger.exception("local language job failed")
         self.jobs = pending
+
+    def _current_track(self, source: dict, track: int) -> bool:
+        return track not in self.lost and source["track_generation"] == self.track_generations.get(
+            track, 0
+        )
 
     def stop(self) -> None:
         self.client.stop()

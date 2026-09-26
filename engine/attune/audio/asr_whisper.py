@@ -46,10 +46,17 @@ class WhisperASR:
             condition_on_previous_text=False,
             vad_filter=False,
         )
+        segments = list(segments)
+        duration = len(audio) / 16000
         words = [
-            (w.word.strip(), max(0.0, w.start), min(len(audio) / 16000, w.end))
+            (
+                w.word.strip(),
+                min(duration, max(0.0, w.start)),
+                min(duration, max(0.0, w.start, w.end)),
+            )
             for segment in segments
             for w in (segment.words or [])
+            if w.word.strip()
         ]
         stable = words
         if not final:
@@ -60,4 +67,8 @@ class WhisperASR:
                 n += 1
             stable = words[:n]
         self.previous = words
-        return Recognition(" ".join(w[0] for w in stable), info.language, stable)
+        text = " ".join(w[0] for w in stable)
+        if final and all(hasattr(segment, "text") for segment in segments):
+            # Segment text preserves punctuation and scripts without word spaces.
+            text = "".join(segment.text for segment in segments).strip()
+        return Recognition(text, info.language, stable)
