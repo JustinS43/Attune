@@ -315,3 +315,64 @@ def test_interrupt_event_is_threadsafe(bus, make):
     gate.set()
     time.sleep(0.3)
     assert bus.of("reply.spoken") == [] or len(bus.of("speech_out.playing")) in (0, 2)
+
+
+# ---------------------------------------------------------------- device "none" (P-37)
+
+
+@pytest.mark.parametrize("device", ["none", "NULL", " off ", "silent"])
+def test_silent_device_names(device):
+    from attune.speech_out.player import is_silent_device
+
+    assert is_silent_device(device)
+
+
+@pytest.mark.parametrize("device", [None, "", "Speakers (Realtek)", "default"])
+def test_real_device_names(device):
+    from attune.speech_out.player import is_silent_device
+
+    assert not is_silent_device(device)
+
+
+def test_null_player_times_like_audio_but_plays_nothing():
+    from attune.speech_out.player import NullPlayer
+
+    chunks = [np.zeros(2400, np.float32)] * 5  # 0.5 s at 24 kHz
+    started = []
+    t0 = time.monotonic()
+    played = NullPlayer().play(
+        iter(chunks), 24000, threading.Event(), lambda: started.append(1)
+    )
+    assert played == pytest.approx(0.5)
+    assert started == [1]
+    assert time.monotonic() - t0 >= 0.4  # paced like real playback, so "speaking" lasts
+
+
+def test_null_player_stops_when_cancelled():
+    from attune.speech_out.player import NullPlayer
+
+    cancel = threading.Event()
+    cancel.set()
+    assert NullPlayer().play(iter([np.zeros(24000, np.float32)]), 24000, cancel) == 0.0
+    assert NullPlayer(realtime=False).play(
+        iter([np.zeros(2400, np.float32)]), 24000, threading.Event()
+    ) == pytest.approx(0.1)
+
+
+def test_device_none_speaks_through_the_null_player(bus):
+    from attune.speech_out.player import NullPlayer
+
+    service = SpeechOutService(
+        bus,
+        {"clock": time.monotonic, "speech_out": {"device": "none"}},
+        elevenlabs=False,
+        kokoro=FakeTTS("kokoro"),
+    )
+    service.start()
+    try:
+        assert isinstance(service.player, NullPlayer)
+        speak(bus)
+        assert wait_for(lambda: bus.of("reply.spoken"), 3.0)
+        assert service.status()["metrics"]["output"] == "none"
+    finally:
+        service.stop()
