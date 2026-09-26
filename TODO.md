@@ -16,19 +16,19 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 1 – Vision
 
-- [ ] V-01 Camera reader: open the webcam by name, MJPG 1080p30, one-frame buffer, clock stamps, "camera lost" recovery · M0
-- [ ] V-02 VisionService publishes `vision.frame` · M0
-- [ ] V-03 Face finder (SCRFD-10G), detection size from config, ignore faces under 36 px · M1
-- [ ] V-04 Tracker: overlap + motion, 1 s survive, 10 s lost list, re-identification, exit side · M1
-- [ ] V-05 Face prints (ArcFace w600k_r50) with the crop quality gate · M1
-- [ ] V-06 Gallery and match rules (0.45 / 0.08 / 3 times in 1 s, 2 s recheck, no name jumps) · M1
-- [ ] V-07 Enrollment (face part) with consent: 8 varied crops, refuse under 5 with a reason, rename, delete · M1
-- [ ] V-08 Lip-motion score (MediaPipe on crops, 1 s rolling std; 0.03 / 0.015) · M1
-- [ ] V-09 Who's talking, cases 1–4, hold and switch rules; publishes `caption` and `scene` · M1 (visible speaker) / M2 (all cases)
-- [ ] V-10 In-time check (lips vs. sound rhythm) · M2
-- [ ] V-11 Voice-print harvesting (`voice.harvest`) · M2
-- [ ] V-12 Instant colour label for strangers · M2
-- [ ] V-13 Tests in tests/vision using the replay reel · M2
+- [x] V-01 Camera reader: open the webcam by name, MJPG 1080p30, one-frame buffer, clock stamps, "camera lost" recovery · M0 (#5)
+- [x] V-02 VisionService publishes `vision.frame` · M0 (#5)
+- [x] V-03 Face finder (SCRFD-10G), detection size from config, ignore faces under 36 px · M1 (#5)
+- [x] V-04 Tracker: overlap + motion, 1 s survive, 10 s lost list, re-identification, exit side · M1 (#5)
+- [x] V-05 Face prints (ArcFace w600k_r50) with the crop quality gate · M1 (#5)
+- [x] V-06 Gallery and match rules (0.45 / 0.08 / 3 times in 1 s, 2 s recheck, no name jumps) · M1 (#5)
+- [x] V-07 Enrollment (face part) with consent: 8 varied crops, refuse under 5 with a reason, rename, delete · M1 (#5)
+- [x] V-08 Lip-motion score (MediaPipe on crops, 1 s rolling std; 0.03 / 0.015) · M1 (#5)
+- [x] V-09 Who's talking, cases 1–4, hold and switch rules; publishes `caption` and `scene` · M1 (visible speaker) / M2 (all cases) (#5)
+- [x] V-10 In-time check (lips vs. sound rhythm) · M2 (#5)
+- [x] V-11 Voice-print harvesting (`voice.harvest`) · M2 (#5)
+- [x] V-12 Instant colour label for strangers · M2 (#5)
+- [x] V-13 Tests in tests/vision using the replay reel · M2 (#5)
 - [ ] V-14 Stretch: Light-ASD for hard who's-talking cases · after M3, only if time
 
 ## Section 2 – Audio & Language
