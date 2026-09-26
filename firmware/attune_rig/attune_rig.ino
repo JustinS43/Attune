@@ -4,7 +4,7 @@
  * Measures, reports and plays patterns; makes no decisions about people or sounds.
  *  - READY <version> <driver> after probing the I2C motor driver (0x14 TB6612, 0x0F L298)
  *  - LV <ms> <left> <right> <motor> every CFG rate ms: peak-to-peak of each sound sensor
- *  - TOUCH TAP / HOLD / DOUBLE from the touch sensor (CFG tap_ms, hold_ms)
+ *  - TOUCH TAP / HOLD / DOUBLE / TRIPLE from the touch sensor (CFG tap_ms, hold_ms)
  *  - HB <ms> every second; the laptop's HB every 0.5 s keeps the link alive
  *  - PAT / STOP -> ACK n; bad commands -> ERR
  *  - laptop silent for 2 s -> stop all lights and the motor, LOST icon, LOST blink
@@ -90,7 +90,8 @@ unsigned long nextReport = 0;
 // touch
 bool touchStable = false, touchRaw = false;
 unsigned long touchRawChange = 0, pressStart = 0, tapReleasedAt = 0;
-bool holdSent = false, tapPending = false, secondPress = false;
+bool holdSent = false;
+uint8_t tapCount = 0;  // short taps in the current burst; each must start within tap_ms of the last
 
 // matrix
 int currentIcon = -1;
@@ -462,34 +463,32 @@ void updateTouch(unsigned long now) {
     if (touchStable) {  // pressed
       pressStart = now;
       holdSent = false;
-      secondPress = tapPending && (now - tapReleasedAt) <= cfgTapMs;
+      if (tapCount > 0 && (now - tapReleasedAt) > cfgTapMs) tapCount = 0;  // too late: a new burst
     } else {            // released
       unsigned long held = now - pressStart;
       if (holdSent) {
         // the hold was already reported
       } else if (held < cfgTapMs) {
-        if (secondPress) {
-          sendTouch(GESTURE_DOUBLE);
-          tapPending = false;
-        } else {
-          tapPending = true;
-          tapReleasedAt = now;
+        tapCount++;
+        tapReleasedAt = now;
+        if (tapCount >= 3) {  // a third tap needs no wait: nothing longer exists
+          sendTouch(GESTURE_TRIPLE);
+          tapCount = 0;
         }
       } else {
-        tapPending = false;  // between a tap and a hold: ignored
+        tapCount = 0;  // between a tap and a hold: ignored, with any taps before it
       }
-      secondPress = false;
     }
   }
   if (touchStable && !holdSent && now - pressStart >= cfgHoldMs) {
     sendTouch(GESTURE_HOLD);
     holdSent = true;
-    tapPending = false;
-    secondPress = false;
+    tapCount = 0;
   }
-  if (tapPending && !touchStable && now - tapReleasedAt > cfgTapMs) {
-    sendTouch(GESTURE_TAP);
-    tapPending = false;
+  // one or two taps are reported tap_ms after the last release, once no further tap came
+  if (tapCount > 0 && !touchStable && now - tapReleasedAt > cfgTapMs) {
+    sendTouch(tapCount == 1 ? GESTURE_TAP : GESTURE_DOUBLE);
+    tapCount = 0;
   }
 }
 

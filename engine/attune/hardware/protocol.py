@@ -18,7 +18,7 @@ SIDES = ("L", "R", "B")
 # ALERT_B (alert with no known side) is a firmware extension; see docs/hardware/wiring.md.
 ICONS = ("HEART", "ALERT_L", "ALERT_R", "ALERT_B", "PAUSE", "LOST")
 DRIVERS = ("TB6612", "L298", "NONE")
-GESTURES = {"TAP": "tap", "HOLD": "hold", "DOUBLE": "double"}
+GESTURES = {"TAP": "tap", "HOLD": "hold", "DOUBLE": "double", "TRIPLE": "triple"}
 CFG_KEYS = ("rate", "tap_ms", "hold_ms", "led")
 
 
@@ -45,7 +45,7 @@ class Levels:
 
 @dataclass(frozen=True)
 class Touch:
-    gesture: str  # tap, hold, double (bus spelling)
+    gesture: str  # tap, hold, double, triple (bus spelling)
 
 
 @dataclass(frozen=True)

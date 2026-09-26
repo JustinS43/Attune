@@ -57,8 +57,10 @@ If the compile complains about a driver-library call, the four calls used are
   `rate` ms (default 50) the board prints `LV <ms> <left> <right> <motor>` with the
   peak-to-peak of each side (0–1023). `motor` is 1 if the motor ran at any time in that window.
 - **Touch:** tap (< `tap_ms`, default 400), hold (≥ `hold_ms`, default 800, sent while still
-  held), double (second tap starts within `tap_ms` of the first). A single tap is sent
-  `tap_ms` after release, once no second tap came. 20 ms debounce.
+  held), double (second tap starts within `tap_ms` of the first), triple (a third tap within
+  `tap_ms` of the second; sent at once on its release). A single or double tap is sent `tap_ms`
+  after the last release, once no further tap came. 20 ms debounce. The laptop reads tap = yes,
+  hold = no, double = save this person, triple = pause (see the touch router).
 - **Patterns:** `PAT n side name` → `ACK n`. T3/T4 repeat until `STOP`; BELL/NAME/OK/NO play
   once over a running alarm pattern, which then continues. `STOP n` → `ACK n`.
 - **Motor safety:** 40 ms soft start (shorter for very short ticks), no single buzz longer

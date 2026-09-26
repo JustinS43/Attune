@@ -86,8 +86,16 @@ def test_touch_acknowledges_alert(rig):
     assert wait_for(lambda: rig.fake().icon == "HEART")
 
 
-def test_double_tap_pause_and_icon(rig):
+def test_double_tap_asks_to_save(rig):
     assert rig.service.simulate_touch("double")
+    assert wait_for(lambda: rig.bus.of("touch.action"))
+    assert rig.bus.of("sensors.touch")[-1]["gesture"] == "double"
+    assert rig.bus.of("touch.action")[-1] == {"target": "save", "id": None, "accept": True}
+    assert not rig.bus.of("command")  # a double tap no longer pauses
+
+
+def test_triple_tap_pause_and_icon(rig):
+    rig.bus.publish("hw.sim_touch", {"gesture": "triple"})
     assert wait_for(lambda: rig.bus.of("command"))
     assert rig.bus.of("command")[-1] == {"name": "pause.toggle", "args": {}}
     rig.bus.publish("paused", {"paused": True})
