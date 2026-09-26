@@ -25,8 +25,9 @@ protocol is the same on both.
 | `attune_rig/board.h` | R3 / R4 differences: which board, matrix or LED 13, flash (`PROGMEM`) read helpers |
 
 > **Compile status.** The UNO R3 build compiles cleanly (`arduino-cli` 1.5.1, `arduino:avr`
-> 1.8.8, Servo 1.3.0, `--warnings all`): **8,586 bytes flash (26 %), 434 bytes RAM (21 %)**,
-> leaving 1,614 bytes for the stack. It has not run on a board yet. The UNO R4 WiFi build was
+> 1.8.8, Servo 1.3.0, `--warnings all`): **8,574 bytes flash (26 %), 434 bytes RAM (21 %)**,
+> leaving 1,614 bytes for the stack. 1.1.1 runs on the team's UNO R3 and was bench-tested over
+> the serial link on 2026-09-26 (results in `docs/hardware/wiring.md`). The UNO R4 WiFi build was
 > not compiled after the R3 changes (its core was not installed), and the motor-driver
 > library calls have never been compiled; on the bench, compile first and fix any typo there
 > (library API names are the most likely spot, see below).
@@ -110,15 +111,20 @@ If the compile complains about a driver-library call, the four calls used are
 
 ## Behaviour
 
-- **Start-up:** servo build (R3): parks the servo at rest, prints `READY 1.1.0 NONE`. Motor
+- **Start-up:** servo build (R3): parks the servo at rest, prints `READY 1.1.1 NONE`. Motor
   build (R4): probes I²C (`0x14` → TB6612, `0x0F` → L298, else NONE; with `USE_SERVO_BACKUP`
-  the D9 servo becomes the tapper), prints `READY 1.1.0 <driver>`. Shows LOST (`?` on the
+  the D9 servo becomes the tapper), prints `READY 1.1.1 <driver>`. Shows LOST (`?` on the
   matrix, a blip on LED 13) until the laptop's first `HB`.
 - **Link:** every laptop `HB` refreshes a 2 s watchdog. On the first `HB` after being
   unlinked the board prints `READY` again: the laptop opens the port without toggling DTR,
   so the board usually does not reset and the boot `READY` may be long gone.
   If the watchdog fires: all lights and the buzzer stop, status shows LOST, both LEDs blink
-  dimly every 2 s (LOST) until `HB` returns.
+  dimly every 2 s (LOST) until `HB` returns. A pattern that was playing does not resume by
+  itself; the laptop sends a real alarm's T3/T4 again when it sees `READY` (H-18).
+  `loop()` reads the serial commands before it reads the clock: 1.1.0 did it the other way
+  round, and a `millis()` tick in between made the unsigned `now - lastHbIn` wrap, so the
+  watchdog dropped a live link on about 1 % of heartbeats (an alarm stopped about once a
+  minute) and a one-shot pattern was sometimes skipped (fixed in 1.1.1).
 - **Levels:** both sound sensors are sampled every loop (thousands of times a second); every
   `rate` ms (default 50) the board prints `LV <ms> <left> <right> <motor>` with the
   peak-to-peak of each side (0–1023). `motor` is 1 if the motor ran (or the servo was

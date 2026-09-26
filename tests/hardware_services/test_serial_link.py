@@ -379,3 +379,36 @@ def test_relink_after_heartbeat_gap_is_not_a_restart(rig):
 def test_heartbeat_period_is_kept_sane(value, used):
     """heartbeat_s = 0 used to send ~45 HB lines a second; 5 s would trip the 2 s stop."""
     assert serial_link.heartbeat_period(value) == pytest.approx(used)
+
+
+# ---------------------------------------------------------------- H-18
+
+
+def test_board_restart_during_an_alarm_plays_it_again(rig):
+    """A reset (brown-out, or the board dropping the link) stops everything on the board, but
+    the alarm is still sounding: its looping pattern is sent again, once per restart."""
+    fake = rig.fake()
+    rig.bus.publish("hw.pattern", {"name": "T3", "side": "left"})
+    assert wait_for(lambda: fake.active_pattern == "T3")
+    fake.reboot()  # READY at boot, and READY again on the next HB
+    assert wait_for(lambda: rig.service.link.metrics["ready_again"] >= 2, timeout=2.0)
+    assert wait_for(lambda: fake.active_pattern == "T3", timeout=2.0)
+    assert fake.background.side == "L"
+    assert fake.counts.get("PAT", 0) == 2
+
+
+def test_a_stopped_or_tested_alarm_is_not_played_again(rig):
+    fake = rig.fake()
+    rig.bus.publish("hw.pattern", {"name": "T4", "side": "right"})
+    assert wait_for(lambda: fake.active_pattern == "T4")
+    rig.bus.publish("hw.stop", {})  # "Got it", or the alert cleared
+    assert wait_for(lambda: fake.active_pattern is None)
+    rig.bus.publish(
+        "command", {"name": "pattern.test", "args": {"name": "T3", "side": "B"}}
+    )
+    assert wait_for(lambda: fake.active_pattern == "T3")
+    fake.reboot()
+    assert wait_for(lambda: rig.service.link.metrics["ready_again"] >= 2, timeout=2.0)
+    time.sleep(0.3)
+    assert fake.active_pattern is None
+    assert fake.counts.get("PAT", 0) == 2

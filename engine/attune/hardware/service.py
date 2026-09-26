@@ -8,6 +8,10 @@ A ``pattern.test`` of a repeating pattern (T3, T4) plays one cycle and then stop
 (H-17): the console's light-and-buzz buttons have no Stop, and an alarm pattern must never
 keep buzzing after a test. A newer pattern or a real alert in the meantime keeps it going.
 
+A real alert's looping pattern (T3, T4) is sent again when the board says READY while it
+should be playing (H-18): a reset (brown-out) or a dropped link stops everything on the
+board, but the alarm is still sounding. ``hw.stop`` ends it for good.
+
 With ``hardware.simulate = true`` (or ``ATTUNE_SIMULATE_HARDWARE=1``) a FakeArduino runs
 in-process instead of the rig; ``hw.sim_touch`` {gesture} injects a touch into it.
 Without a board and without the simulator the service reports ``hw.link``
@@ -19,6 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from collections.abc import Callable
 
 from . import protocol as p
@@ -28,6 +33,11 @@ from .simulator import PATTERN_STEPS, FakeArduino
 from .touch_router import TouchRouter
 
 logger = logging.getLogger(__name__)
+
+# The alarm patterns the board loops until STOP (T3, T4).
+ALARM_PATTERNS = frozenset(name for name in p.PATTERNS if PATTERN_STEPS.get(name, ([], False))[1])
+# A reset shows up as two READYs close together (at boot, then on the next HB): restart once.
+REARM_GAP_S = 1.5
 
 
 def one_cycle_stop_s(name: str) -> float | None:
@@ -72,6 +82,8 @@ class HardwareService:
         self.metrics = {"levels": 0, "touches": 0, "patterns": 0, "last_levels": None}
         self._last_pat: int | None = None  # serial number of the newest PAT sent
         self._test_timer: threading.Timer | None = None
+        self._alarm: tuple[str, str] | None = None  # (T3/T4, L/R/B) a real alert is playing
+        self._rearmed_at = float("-inf")
 
     # ------------------------------------------------------------- lifecycle
     def start(self) -> None:
@@ -185,20 +197,37 @@ class HardwareService:
     def _on_ready(self) -> None:
         self.icon = None
         self._update_icon()
+        alarm = self._alarm
+        if alarm is None or not self.link:
+            return
+        now = time.monotonic()
+        if now - self._rearmed_at < REARM_GAP_S:
+            return
+        self._rearmed_at = now
+        n = self.link.pattern(*alarm)
+        if n is not None:
+            self._last_pat = n
+            logger.warning(
+                "hardware: the board restarted during an alarm; %s %s plays again", *alarm
+            )
 
     # ------------------------------------------------------------- bus -> serial
-    def _on_pattern(self, event) -> None:
+    def _on_pattern(self, event, *, test: bool = False) -> None:
         e = fields(event)
         name = str(e.get("name", "")).upper()
         if name not in p.PATTERNS:
             logger.warning("hardware: unknown pattern %r", name)
             return
-        n = self.link.pattern(name, p.side_code(e.get("side"))) if self.link else None
+        side = p.side_code(e.get("side"))
+        if name in ALARM_PATTERNS and not test:
+            self._alarm = (name, side)
+        n = self.link.pattern(name, side) if self.link else None
         if n is not None:
             self.metrics["patterns"] += 1
             self._last_pat = n
 
     def _on_stop(self, _event=None) -> None:
+        self._alarm = None
         self._cancel_test_timer()
         if self.link:
             self.link.stop_all()
@@ -208,7 +237,7 @@ class HardwareService:
         if e.get("name") == "pattern.test":
             args = e.get("args") or {}
             name = str(args.get("name", "")).upper()
-            self._on_pattern({"name": name, "side": args.get("side", "B")})
+            self._on_pattern({"name": name, "side": args.get("side", "B")}, test=True)
             after = one_cycle_stop_s(name)
             if after is not None and self._last_pat is not None:
                 self._arm_test_stop(self._last_pat, after)
