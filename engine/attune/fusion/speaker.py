@@ -7,7 +7,10 @@ While speech is detected, each tick (15 per second) checks, in order:
    within 3 dB of each other.
 2. A visible speaker: a face that is talking (see below), or whose voice print
    matches this utterance while its lips move at least in the probable band.
-   Held at least 0.5 s; only switches to someone scoring 1.5x higher.
+   Held at least 0.5 s; only switches to someone scoring 1.5x higher. Continuity:
+   while speech runs on without a pause and no other face talks, the face keeps
+   the speech for up to `continuity_s` after its last own evidence, unless its
+   voice is vetoed or Light-ASD scores it (`_continues`).
 3. A probable visible speaker: exactly one face that passes the talking checks
    only in the probable band (`lip_uncertain`), while everyone else is still.
    Dashed tail.
@@ -298,6 +301,8 @@ class SpeakerFusion:
         self.harvester = Harvester(self.s.harvest_after_s)
         self.harvested: set[str] = set()  # voice ids given a session print (voice.harvest)
         self._decided_by: str | None = None  # why decide() chose a face; gates harvesting
+        self._evidence: tuple[int | None, float] = (None, -1e9)  # last face chosen on evidence
+        self._earned: tuple[float | None, dict[int, float]] = (None, {})  # speech run -> s talked
         self._stopped: dict[int, float] = {}  # track -> when it last stopped talking (5 s)
         self.last_seen: dict[int, float] = {}  # track -> when it was last on screen
         self._offscreen_n = 0  # "offscreen-N" voices learnt this session
@@ -665,6 +670,32 @@ class SpeakerFusion:
             if share >= s.talk_cover_share:
                 self.claimed[pid] = voice_id(tr.person_id, tr.track_id)
 
+    def _continues(self, track_id: int, now: float) -> bool:
+        """Is this face still talking in the same unbroken stretch of speech? (continuity)
+
+        A talker's evidence dips mid-sentence: a hand or a cup over the mouth, a head turn,
+        a Light-ASD window that lands on a breath. Nobody else started talking (no other
+        face is a candidate, or `decide` would have taken it), speech has not paused since
+        this face last talked on its own evidence (a pause is `speech_hangover_s`: a turn
+        can start there), that was under `continuity_s` ago, the face has earned it (see
+        below), and the voice has not vetoed it. Only while Light-ASD has no fresh score for the face (vision too slow, face
+        turned away): Light-ASD's own verdict, when it has one, is never overruled.
+        """
+        s = self.s
+        tid, t = self._evidence
+        if s.continuity_s <= 0 or tid != track_id or now - t > s.continuity_s:
+            return False
+        run = self.speech_start if self.speech_start is not None else t
+        if run > t:
+            return False  # speech paused and started again since: maybe another voice
+        # Trust is earned: a listener whose lips lined up with someone else's speech for a
+        # moment must not keep that speech. The face talked on its own evidence for at least
+        # continuity_min_s, and for continuity_share of this stretch of speech so far.
+        earned = self._earned[1].get(track_id, 0.0) if self._earned[0] == run else 0.0
+        if earned < s.continuity_min_s or earned < s.continuity_share * (now - run):
+            return False
+        return track_id not in self.asd_gate.covered(self, now)
+
     def decide(self, now: float) -> tuple[Speaker | None, float | None]:
         """The speaker right now, and the in-time score behind it (face cases only)."""
         s = self.s
@@ -698,11 +729,17 @@ class SpeakerFusion:
                 ):
                     score, best, r, why = held
             self._decided_by = why
+            self._evidence = (best.track_id, now)
+            run = self.speech_start if self.speech_start is not None else now
+            if self._earned[0] != run:
+                self._earned = (run, {})
+            earned = self._earned[1]
+            earned[best.track_id] = earned.get(best.track_id, 0.0) + 1.0 / s.rate_hz
             return Speaker("face", best.track_id, best.person_id, labels[best.track_id]), r
         if (
             cur is not None
             and cur.kind == "face"
-            and now - self._current_since < s.hold_s
+            and (now - self._current_since < s.hold_s or self._continues(cur.track_id, now))
             and any(tr.track_id == cur.track_id and verdict[tr.track_id] != "veto" for tr in fresh)
         ):
             tr = self.tracks[cur.track_id]

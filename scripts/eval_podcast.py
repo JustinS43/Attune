@@ -336,6 +336,130 @@ def prepare(args) -> int:
     return 0
 
 
+def asd_truth(args) -> int:
+    """Who talks when, for a clip whose people stay in fixed places (a static two-shot).
+
+    Light-ASD scores every face over the whole clip at once (windows of 1-6 s, as its own
+    Columbia test does; the live engine only ever sees the last 1.5 s), faces are given to
+    people by where they sit (`--regions`), and the voice clusters of `speaker_track` must
+    agree: a moment is truth only when the face model and the voices name the same person.
+    Writes `speaker_track` (and `speaker_names`) into ref.json.
+    """
+    import cv2
+    import torch  # noqa: F401  (before onnxruntime, see vision/runtime.py)
+    from eval_talker import _full_scores, _track_boxes
+    from attune.replay.player import read_wav, resample
+    from attune.vision.asd import LightASD, asd_crop
+    from attune.vision.settings import VisionSettings
+
+    folder = PODCASTS / args.name
+    ref = json.loads((folder / "ref.json").read_text(encoding="utf-8"))
+    names = [r.split(":")[0] for r in args.regions]
+    regions = [[float(v) for v in r.split(":")[1].split(",")] for r in args.regions]
+    s = VisionSettings()
+    ns = argparse.Namespace(
+        det_size=640, det_device=args.device, threads=4, min_face_px=40, until=None
+    )
+    cap = cv2.VideoCapture(str(folder / "clip.mp4"))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    fw, fh = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    boxes = _track_boxes(ns, s, cap, fps, fw)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    faces: dict[int, list] = defaultdict(list)
+    where: dict[int, Counter] = defaultdict(Counter)
+    for i, rows in enumerate(boxes):
+        ok, image = cap.read()
+        if not ok:
+            break
+        for tid, kbox, _ in rows:
+            cx, cy = (kbox[0] + kbox[2]) / 2 / fw, (kbox[1] + kbox[3]) / 2 / fh
+            who = next(
+                (k for k, r in enumerate(regions) if r[0] <= cx <= r[2] and r[1] <= cy <= r[3]),
+                None,
+            )
+            crop = asd_crop(image, kbox)
+            if crop is not None and who is not None:
+                faces[tid].append((i / fps, crop))
+                where[tid][who] += 1
+    model = LightASD(str(ROOT / s.asd_model), args.device)
+    pcm, rate = read_wav(str(folder / "clip.wav"))
+    pcm16 = resample(pcm, rate, 16000)
+    hop = 0.25
+    n = int(len(pcm16) / 16000 / hop)
+    score = np.full((len(names), n), -np.inf)
+    for tid, items in faces.items():
+        got = _full_scores(model, items, pcm16, 0.0, ((1, 3), (2, 3), (3, 2), (4, 1), (5, 1), (6, 1)))
+        if got is None:
+            continue
+        who = where[tid].most_common(1)[0][0]
+        for t, v in got:
+            k = int(t / hop)
+            if 0 <= k < n:
+                score[who, k] = max(score[who, k], v) if np.isfinite(score[who, k]) else v
+    # smooth over 0.5 s, then a clear winner: talking (> 0) and ahead of everyone else by a margin
+    face = [None] * n
+    for k in range(n):
+        col = score[:, max(0, k - 1) : k + 2]
+        col = np.where(np.isfinite(col), col, np.nan)
+        with np.errstate(all="ignore"):
+            m = np.nanmean(col, axis=1)
+        if np.all(np.isnan(m)):
+            continue
+        m = np.nan_to_num(m, nan=-10.0)
+        order = np.argsort(m)[::-1]
+        if m[order[0]] > 0 and (len(m) < 2 or m[order[0]] - m[order[1]] >= args.margin):
+            face[k] = int(order[0])
+    # Each person's voice, learnt from 1.5 s windows the face model is sure of; every window
+    # is then checked against those voices (leaving its own print out of its person's mean).
+    from attune.audio.voiceprint import CAMExtractor
+
+    cam = CAMExtractor(str(ROOT / "models" / "cam++.onnx"))
+    vec: dict[int, np.ndarray] = {}
+    for k in range(n):
+        if face[k] is None:
+            continue
+        mid = (k + 0.5) * hop
+        seg = pcm16[max(0, int((mid - 0.75) * 16000)) : int((mid + 0.75) * 16000)]
+        try:
+            v = cam(seg)
+        except ValueError:
+            continue
+        vec[k] = v / (np.linalg.norm(v) + 1e-9)
+    sums = {p: np.zeros(len(next(iter(vec.values())))) for p in range(len(names))}
+    counts = Counter()
+    for k, v in vec.items():
+        sums[face[k]] += v
+        counts[face[k]] += 1
+    track, both, faced = [], 0, 0
+    for k in range(n):
+        f = face[k]
+        ok = False
+        if f is not None and k in vec:
+            faced += 1
+            sims = []
+            for p in range(len(names)):
+                s_ = sums[p] - (vec[k] if p == f else 0)
+                c_ = counts[p] - (p == f)
+                sims.append(float(vec[k] @ s_) / max(np.linalg.norm(s_), 1e-9) if c_ > 0 else -1.0)
+            ok = int(np.argmax(sims)) == f
+            both += ok
+        track.append([round(k * hop, 3), f if ok else None])
+    to_person = {names[p]: counts[p] for p in range(len(names))}
+    ref["speaker_track"] = track
+    ref["speaker_names"] = names
+    ref["turn_speakers"] = {}
+    ref["truth"] = "light-asd (whole clip) + CAM++ voice clusters"
+    (folder / "ref.json").write_text(json.dumps(ref, indent=1), encoding="utf-8")
+    talk = sum(1 for _, v in track if v is not None)
+    print(
+        f"{args.name}: {talk * hop:.0f} s of speech with a speaker ({faced * hop:.0f} s named by "
+        f"the face model, {100 * both / max(faced, 1):.0f}% of it confirmed by the voices); "
+        f"voice cluster -> person {to_person}"
+    )
+    print("".join("." if v is None else "abcdefgh"[v] for _, v in track))
+    return 0
+
+
 def show_turns(ref: dict, limit: int = 60) -> None:
     """Each turn with its speaker cluster, so a person can check the labels."""
     by_turn: dict[int, list[dict]] = defaultdict(list)
@@ -361,7 +485,7 @@ def run(args) -> int:
             setattr(args, key, None)
     args.threads = args.threads or 4
     args.det_size = args.det_size or 640
-    args.tail = 4.0 if args.tail is None else args.tail
+    args.tail = 15.0 if args.tail is None else args.tail
     truth = Truth(people={}, intervals=[])
     got = engine_run(args, truth)
     got["name"] = args.name
@@ -552,9 +676,10 @@ def score(run: dict) -> dict:
     out["per_speaker"] = per
     # speaker changes: at a reference change between two words, is the caption label different too?
     changes = hits = 0
-    for (r1, h1), (r2, h2) in zip(matched, matched[1:]):
+    known = [(r, h) for r, h in matched if spk_of(r) is not None]
+    for (r1, h1), (r2, h2) in zip(known, known[1:]):
         s1, s2 = spk_of(r1), spk_of(r2)
-        if s1 is None or s2 is None or s1 == s2:
+        if s1 == s2 or h2["t"] - h1["t"] > 3.0:
             continue
         changes += 1
         hits += h1["seg"] != h2["seg"]
@@ -637,22 +762,40 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--set", action="append", help="config override, e.g. audio.asr_chunk_ms=160")
     r.add_argument("--cpu", action="store_true", help="vision and Light-ASD on the CPU")
     r.add_argument("--no-asd", action="store_true")
+    r.add_argument(
+        "--tail", type=float, default=15.0,
+        help="keep recording this long after the clip (a busy laptop needs time to catch up)",
+    )  # fmt: skip
     s = sub.add_parser("score", help="score a recorded run")
     s.add_argument("runs", nargs="+")
     s.add_argument("--json", action="store_true", help="print the metrics as JSON")
     t = sub.add_parser("turns", help="print a clip's reference turns and speakers")
     t.add_argument("name")
+    a = sub.add_parser("truth", help="who talks when, from Light-ASD + voices (static shots)")
+    a.add_argument("name")
+    a.add_argument(
+        "--regions", nargs="+", required=True,
+        help="name:x0,y0,x1,y1 (fractions of the frame) for each person, e.g. Rhett:0,0,0.5,1",
+    )  # fmt: skip
+    a.add_argument("--device", default="cuda")
+    a.add_argument("--margin", type=float, default=1.0, help="logit lead over the next face")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     if args.cmd == "prepare":
         return prepare(args)
     if args.cmd == "run":
         return run(args)
+    if args.cmd == "truth":
+        return asd_truth(args)
     if args.cmd == "turns":
         show_turns(json.loads((PODCASTS / args.name / "ref.json").read_text(encoding="utf-8")), 10_000)
         return 0
     for path in args.runs:
-        m = score(json.loads(Path(path).read_text(encoding="utf-8")))
+        got = json.loads(Path(path).read_text(encoding="utf-8"))
+        current = PODCASTS / str(got.get("name")) / "ref.json"
+        if current.is_file():  # the answer key may have been improved since the run
+            got["ref"] = json.loads(current.read_text(encoding="utf-8"))
+        m = score(got)
         if args.json:
             print(json.dumps({k: v for k, v in m.items() if k != "transcript"}, indent=1))
         else:
