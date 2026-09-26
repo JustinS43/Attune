@@ -59,7 +59,7 @@ def talking_face(t, x=500, phase=0.0, pid=None, name=None, status="unknown"):
     return (x, 0.2 + 0.15 * syllables(t, phase=phase), 0.05, pid, name, status)
 
 
-def still_face(x=1200, lip=0.008, pid=None, name=None, status="unknown"):
+def still_face(x=1200, lip=0.003, pid=None, name=None, status="unknown"):
     return (x, 0.1, lip, pid, name, status)
 
 
@@ -175,7 +175,9 @@ def test_hold_and_switch_rule():
     for _ in range(40):
         sim.step({1: a(0.05), 2: still_face(1300)}, speech=True, loud=loud())
     assert sim.f.current.track_id == 1
-    for _ in range(30):  # B only 1.2x higher: A keeps the bubble
+    # B only 1.2x higher: A keeps the bubble. (B starts in the middle of A's speech, so it
+    # has to keep moving in time for talk_sustain_s before it counts as talking at all.)
+    for _ in range(round(s.talk_sustain_s * FPS) + 15):
         sim.step({1: a(0.05), 2: b(0.06)}, speech=True, loud=loud())
     assert sim.f.current.track_id == 1
     sim.step({1: a(0.05), 2: b(0.08)}, speech=True, loud=loud())  # 1.6x higher: switch
@@ -184,9 +186,10 @@ def test_hold_and_switch_rule():
 
 def test_probable_speaker_is_dashed():
     sim = Sim()
-    for _ in range(20):
+    for _ in range(20):  # no sound to check against: movement in the probable band
         scene, _, _ = sim.step(
-            {1: (500, 0.2, 0.02, None, None, "unknown"), 2: still_face()}, speech=True
+            {1: (500, 0.2, 0.010, None, None, "unknown"), 2: still_face(lip=0.002)},
+            speech=True,
         )
     assert sim.f.current.kind == "probable_face"
     assert scene.faces[0].is_speaker and scene.faces[0].dashed
@@ -197,8 +200,8 @@ def test_two_uncertain_faces_are_not_guessed():
     for _ in range(20):
         sim.step(
             {
-                1: (500, 0.2, 0.02, None, None, "unknown"),
-                2: (1200, 0.2, 0.02, None, None, "unknown"),
+                1: (500, 0.2, 0.010, None, None, "unknown"),
+                2: (1200, 0.2, 0.010, None, None, "unknown"),
             },
             speech=True,
             sensors=(300, 300),
@@ -541,6 +544,8 @@ def test_a_segment_dropped_by_a_later_draft_is_retracted():
 def test_a_face_leaving_does_not_relabel_what_it_said():
     sim = Sim()
     loud = lambda: -30 + 20 * syllables(sim.t)
+    for _ in range(30):  # both faces in view, quiet, for 1 s
+        sim.step({1: still_face(500), 2: still_face()}, loud=-60)
     for _ in range(24):  # A talks for 0.8 s
         sim.step({1: talking_face(sim.t), 2: still_face()}, speech=True, loud=loud())
     t0 = sim.t

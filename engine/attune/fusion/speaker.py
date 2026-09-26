@@ -5,13 +5,40 @@ Section 1 - Vision (fusion). TODO: V-09. Plan: section 05 "Who's talking".
 While speech is detected, each tick (15 per second) checks, in order:
 1. You: both glasses sensors are above the calibrated own-voice level and
    within 3 dB of each other.
-2. A visible speaker: lip score >= 0.03 and lips in time with the sound.
+2. A visible speaker: a face that is talking (see below), or whose voice print
+   matches this utterance while its lips move at least in the probable band.
    Held at least 0.5 s; only switches to someone scoring 1.5x higher.
-3. A probable visible speaker: exactly one face in the 0.015-0.03 band while
-   everyone else is still. Dashed tail.
+3. A probable visible speaker: exactly one face that passes the talking checks
+   only in the probable band (`lip_uncertain`), while everyone else is still.
+   Dashed tail.
 4. Off-screen: after ~1 s of speech, a voice match >= 0.5 names the speaker;
    the side comes from where they left the frame (< 30 s ago), otherwise
    from the louder sound sensor (>= 3 dB). Until then: "Someone".
+
+Talking (V-19). A live face is never perfectly still: landmark jitter, lips
+parting, a yawn, a head turn. So, while speech is heard, a face is talking
+only when all of these hold:
+- its lip score (band-passed, vision/mouth.py) is at least in the probable band:
+  >= `lip_uncertain`, and >= its own noise floor (the `lip_floor_pct`
+  percentile of its lip score over the last `lip_floor_s`) x `lip_floor_ratio`
+  x lip_uncertain/lip_talking; its mouth isn't wide open (`lip_open_max`: a
+  yawn or a laugh) and its head isn't moving fast (`head_motion_max`: motion
+  blur makes the lip landmarks jump);
+- with sound available, its lips are in time with it (`sync_min_corr`):
+  shown, not merely "can't tell" (`require_sync` off skips this, for film reels
+  played over unrelated audio);
+- both have held for `talk_cover_share` of the speech since it started doing
+  so, and hold now, for `talk_confirm_s` if it started with the speech (within
+  `talk_onset_s` of the speech starting, of the face appearing, or of a visible
+  talker stopping) or for `talk_sustain_s` if it started in the middle of
+  someone else's speech: one mouth movement that happens to line up with the
+  sound fills the 1 s lip window for about 1 s, talking goes on;
+- it moved clearly (>= `lip_talking`, and its floor x `lip_floor_ratio`) at
+  some point in that time; if not, it is only a probable speaker.
+A voice match to someone else (or, for a face with a session print, a best
+voice score below `voice_reject`) vetoes the face. Voice prints are only
+harvested from a face that is talking on its own evidence with
+r >= `harvest_min_corr`.
 
 Captions: every word has a time, so a transcript is split where the speaker
 changes. If nobody qualifies yet, the first words wait up to 300 ms for a
@@ -58,7 +85,16 @@ class _TrackInfo:
     name: str | None
     status: str
     t: float
+    first_t: float = 0.0  # when the face was first seen
     mouth: deque = field(default_factory=lambda: deque(maxlen=150))
+    lips: deque = field(default_factory=deque)  # (t, lip_score) for the noise floor
+    moves: deque = field(default_factory=lambda: deque(maxlen=30))  # (t, cx, cy, width)
+    ticks: deque = field(default_factory=deque)  # (t, speaking, passing, moving) per tick
+    r: float | None = None  # in-time score this tick
+    moving: bool = False  # lip score >= this face's talking line (and not a yawn)
+    stirring: bool = False  # lip score >= this face's probable line (and not a yawn)
+    talking: bool = False  # passes every talking check this tick
+    probable: bool = False  # passes them in the probable band
 
 
 @dataclass
@@ -239,6 +275,9 @@ class SpeakerFusion:
         self.utts: dict[str, _UttMemory] = {}  # unfinished utterances already shown
         self.retractions: list[CaptionRetract] = []
         self.harvester = Harvester(self.s.harvest_after_s)
+        self.harvested: set[str] = set()  # voice ids given a session print (voice.harvest)
+        self._decided_by: str | None = None  # why decide() chose a face; gates harvesting
+        self._stopped: dict[int, float] = {}  # track -> when it last stopped talking (5 s)
 
     # ---------------- inputs ----------------
     def on_tracks(self, ev) -> None:
@@ -251,13 +290,18 @@ class SpeakerFusion:
             seen.add(tid)
             info = self.tracks.get(tid)
             if info is None:
-                info = self.tracks[tid] = _TrackInfo(tid, [], 0.0, None, None, "unknown", t)
+                info = self.tracks[tid] = _TrackInfo(tid, [], 0.0, None, None, "unknown", t, t)
             info.box = list(get(tr, "box"))
             info.lip_score = float(get(tr, "lip_score", 0.0))
             info.person_id = get(tr, "person_id")
             info.name = get(tr, "name")
             info.status = get(tr, "status", "unknown")
             info.t = t
+            info.lips.append((t, info.lip_score))
+            x, y, w, h = (float(v) for v in info.box[:4])
+            info.moves.append((t, x + w / 2, y + h / 2, max(w, 1.0)))
+            while info.lips and t - info.lips[0][0] > self.s.lip_floor_s:
+                info.lips.popleft()
             mouth = get(tr, "mouth_open")
             if mouth is not None:
                 info.mouth.append((t, float(mouth)))
@@ -270,6 +314,8 @@ class SpeakerFusion:
         side = get(ev, "side", "none")
         t = float(get(ev, "t"))
         info = self.tracks.pop(tid, None)
+        if info is not None and info.talking:
+            self._stopped[tid] = t
         self.exits[f"track-{tid}"] = (side, t)
         if info is not None and info.person_id:
             self.exits[info.person_id] = (side, t)
@@ -350,6 +396,7 @@ class SpeakerFusion:
         self.voice_matches.clear()
         self.utts.clear()
         self.harvester.reset()
+        self.harvested.clear()
 
     # ---------------- labels ----------------
     def label_for(self, info: _TrackInfo) -> str:
@@ -390,6 +437,132 @@ class SpeakerFusion:
     def _speaking(self, now: float) -> bool:
         return self.is_speech or now - self.last_speech_t <= self.s.speech_hangover_s
 
+    def _floor(self, tr: _TrackInfo, now: float) -> float:
+        """This face's resting lip score: a low percentile of its recent scores (0 until known)."""
+        if not tr.lips or now - tr.lips[0][0] < self.s.lip_floor_min_s:
+            return 0.0
+        vals = [v for t, v in tr.lips if now - t <= self.s.lip_floor_s]
+        return float(np.percentile(vals, self.s.lip_floor_pct)) if vals else 0.0
+
+    @staticmethod
+    def _head_speed(tr: _TrackInfo, now: float) -> float:
+        """How fast the face moves (face widths per second, median over the last 0.5 s)."""
+        pts = [m for m in tr.moves if now - m[0] <= 0.5]
+        speeds = [
+            math.hypot(b[1] - a[1], b[2] - a[2]) / b[3] / (b[0] - a[0])
+            for a, b in pairwise(pts)
+            if b[0] > a[0]
+        ]
+        return float(np.median(speeds)) if speeds else 0.0
+
+    def _sound_known(self, now: float) -> bool:
+        """Whether there's a loudness envelope to check lips against."""
+        return bool(self.envelope.samples) and now - self.envelope.samples[-1][0] <= 1.0
+
+    def _assess(self, now: float) -> None:
+        """Update every face's talking checks for this tick (see the module docstring)."""
+        s = self.s
+        speaking = self._speaking(now)
+        sound = self._sound_known(now)
+        run_start = self.speech_start if self.speech_start is not None else now
+        keep = max(s.talk_sustain_s, s.talk_confirm_s) + 1.0
+        for tr in self.tracks.values():
+            was_talking = tr.talking
+            self._assess_face(tr, now, speaking, sound, run_start, keep)
+            if was_talking and not tr.talking:
+                self._stopped[tr.track_id] = now
+        for tid in [k for k, t in self._stopped.items() if now - t > 5.0]:
+            del self._stopped[tid]
+
+    def _assess_face(
+        self, tr: _TrackInfo, now: float, speaking: bool, sound: bool, run_start: float, keep: float
+    ) -> None:
+        """One face's talking checks for this tick."""
+        s = self.s
+        if now - tr.t > 0.5:
+            tr.talking = tr.probable = tr.moving = tr.stirring = False
+            tr.r = None
+            return
+        need = max(s.lip_talking, s.lip_floor_ratio * self._floor(tr, now))
+        need_low = need * s.lip_uncertain / s.lip_talking
+        wide = any(v >= s.lip_open_max for t, v in tr.mouth if now - t <= 1.0)
+        unsure = wide or self._head_speed(tr, now) > s.head_motion_max
+        tr.moving = tr.lip_score >= need and not unsure
+        tr.stirring = tr.lip_score >= need_low and not unsure
+        tr.r = (
+            in_time_score(tr.mouth, self.envelope, now, s.av_offset_s, s.av_window_s)
+            if tr.stirring
+            else None
+        )
+        # With sound, being in time has to be shown. With none at all it can't be checked,
+        # and a reel played over unrelated audio (require_sync off) doesn't check it.
+        if sound and s.require_sync:
+            in_time = tr.r is not None and tr.r >= s.sync_min_corr
+        else:
+            in_time = True
+        passing = tr.stirring and in_time
+        # moving but seen too briefly to check against the sound yet: not held against it
+        unchecked = tr.stirring and sound and s.require_sync and tr.r is None
+        tr.ticks.append((now, speaking, passing or unchecked, tr.moving))
+        while tr.ticks and now - tr.ticks[0][0] > keep:
+            tr.ticks.popleft()
+        since = self._streak_start(tr) if speaking and passing else None
+        if since is None:
+            tr.talking = tr.probable = False
+            return
+        # A face that started moving in time as the speech started (or as it came into view,
+        # or as a visible talker, itself included, stopped) needs talk_confirm_s of it; one
+        # that started in the middle of someone else's speech needs talk_sustain_s (a
+        # listener's mouth moves now and then, and sometimes lines up with the sound).
+        turn = max(self._stopped.values(), default=-1e9)
+        at_onset = since <= max(run_start, tr.first_t, turn) + s.talk_onset_s
+        need_s = s.talk_confirm_s if at_onset else s.talk_sustain_s
+        steady = now - since >= need_s - 1e-6
+        clear = any(x[3] for x in tr.ticks if x[0] >= since)
+        tr.talking = steady and clear
+        tr.probable = steady and not clear
+
+    def _streak_start(self, tr: _TrackInfo) -> float:
+        """When this face's current run of passing started, over heard ticks.
+
+        The earliest passing tick from which at least `talk_cover_share` of the heard ticks
+        up to now passed, so a gap of a tick or two doesn't restart it.
+        """
+        heard = [x for x in tr.ticks if x[1]]
+        since, passed = heard[-1][0], 0
+        for n, x in enumerate(reversed(heard), 1):
+            passed += x[2]
+            if x[2] and passed >= self.s.talk_cover_share * n:
+                since = x[0]
+            elif passed < self.s.talk_cover_share * n - 3:
+                break  # can't recover further back
+        return since
+
+    def _voice_verdict(self, tr: _TrackInfo, now: float) -> str | None:
+        """What this utterance's voice match says about a face: "veto", "support" or None."""
+        start = self.speech_start if self.speech_start is not None else now
+        match = next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
+        if match is None:
+            return None
+        _, _, pid, score = match
+        vid = voice_id(tr.person_id, tr.track_id)
+        if pid is not None:
+            if pid == vid:
+                return "support"
+            # Another voice matched. It vetoes this face when it is clearly someone else: a
+            # known person, or a stranger on screen right now as another face. (A stranger's
+            # old "track-N" may be this same face, tracked again after leaving.)
+            if not pid.startswith("track-") or any(
+                pid == f"track-{t.track_id}" and now - t.t <= 0.5 for t in self.tracks.values()
+            ):
+                return "veto"
+            return None
+        # Nobody matched. The audio side reports (None, 0.0) until it has 1 s of speech, so
+        # only a real score counts: below voice_reject it matches no print, this face's too.
+        if vid in self.harvested and 0.0 < score < self.s.voice_reject:
+            return "veto"
+        return None
+
     def decide(self, now: float) -> tuple[Speaker | None, float | None]:
         """The speaker right now, and the in-time score behind it (face cases only)."""
         s = self.s
@@ -403,38 +576,45 @@ class SpeakerFusion:
 
         labels = self._labels()
         fresh = [tr for tr in self.tracks.values() if now - tr.t <= 0.5]
+        verdict = {tr.track_id: self._voice_verdict(tr, now) for tr in fresh}
         candidates = []
         for tr in fresh:
-            if tr.lip_score >= s.lip_talking:
-                r = in_time_score(tr.mouth, self.envelope, now, s.av_offset_s)
-                if r is None or r >= s.sync_min_corr:
-                    candidates.append((tr.lip_score, tr, r))
+            if verdict[tr.track_id] == "veto":
+                continue
+            if tr.talking:
+                candidates.append((tr.lip_score, tr, tr.r, "talking"))
+            elif verdict[tr.track_id] == "support" and tr.stirring and (tr.r is None or tr.r >= 0):
+                # its own voice: lips moving in the probable band and not against the sound
+                candidates.append((tr.lip_score, tr, tr.r, "voice"))
         cur = self.current
         if candidates:
-            score, best, r = max(candidates, key=lambda c: c[0])
+            score, best, r, why = max(candidates, key=lambda c: c[0])
             if cur is not None and cur.kind == "face":
                 held = next((c for c in candidates if c[1].track_id == cur.track_id), None)
                 if held is not None and (
                     now - self._current_since < s.hold_s or score < s.switch_ratio * held[0]
                 ):
-                    score, best, r = held
+                    score, best, r, why = held
+            self._decided_by = why
             return Speaker("face", best.track_id, best.person_id, labels[best.track_id]), r
         if (
             cur is not None
             and cur.kind == "face"
             and now - self._current_since < s.hold_s
-            and any(tr.track_id == cur.track_id for tr in fresh)
+            and any(tr.track_id == cur.track_id and verdict[tr.track_id] != "veto" for tr in fresh)
         ):
             tr = self.tracks[cur.track_id]
+            self._decided_by = "hold"
             return Speaker(
                 "face", tr.track_id, tr.person_id, labels[tr.track_id]
             ), self._current_in_time
 
-        band = [tr for tr in fresh if s.lip_uncertain <= tr.lip_score < s.lip_talking]
-        still = all(tr.lip_score < s.lip_uncertain for tr in fresh if tr not in band)
+        band = [tr for tr in fresh if tr.probable and verdict[tr.track_id] != "veto"]
+        still = all(not tr.stirring for tr in fresh if tr not in band)
         if len(band) == 1 and still:
             tr = band[0]
-            return Speaker("probable_face", tr.track_id, tr.person_id, labels[tr.track_id]), None
+            self._decided_by = "probable"
+            return Speaker("probable_face", tr.track_id, tr.person_id, labels[tr.track_id]), tr.r
 
         side = self._sensor_side(now)
         start = self.speech_start if self.speech_start is not None else now
@@ -661,6 +841,8 @@ class SpeakerFusion:
 
     # ---------------- tick ----------------
     def tick(self, now: float) -> tuple[Scene, list[Caption], VoiceHarvest | None]:
+        self._assess(now)
+        self._decided_by = None
         spk, r = self.decide(now)
         if not _same(spk, self.current):
             self._current_since = now
@@ -681,10 +863,20 @@ class SpeakerFusion:
         for utt in [u for u, m in self.utts.items() if now - m.t > self.s.utterance_memory_s]:
             del self.utts[utt]  # its final never came (audio restarted): stop tracking it
 
+        # A voice is learnt only from a face talking on its own evidence right now (not held,
+        # not given the speech by its voice) and clearly in time with the sound.
         confident = None
-        if spk is not None and spk.kind == "face" and r is not None and r >= self.s.sync_min_corr:
+        if (
+            spk is not None
+            and spk.kind == "face"
+            and self._decided_by == "talking"
+            and r is not None
+            and r >= self.s.harvest_min_corr
+        ):
             confident = voice_id(spk.person_id, spk.track_id)
         harvest = self.harvester.update(now, confident)
+        if harvest is not None:
+            self.harvested.add(harvest.person_id)
         return self.scene(), captions, harvest
 
     def scene(self) -> Scene:
