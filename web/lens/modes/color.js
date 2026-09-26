@@ -19,8 +19,8 @@ export function createColorMode() {
     blur: true,
     render(ctx, view, env) {
       bubbles.render(ctx, view, { ...env, obstacles });
-      obstacles = drawAlerts(ctx, env.blur, view, env.anim).map((r) => ({ ...r, x: r.x - 10, w: r.w + 20 }));
-      drawToasts(ctx, env.blur, view, env.anim, 40);
+      const rects = [...drawAlerts(ctx, env.blur, view, env.anim), ...drawToasts(ctx, env.blur, view, env.anim, 40)];
+      obstacles = rects.map((r) => ({ x: r.x - 10, y: r.y, w: r.w + 20, h: r.h }));
       drawPaused(ctx, env.blur, view, env.anim);
       drawStatus(ctx, env.blur, view, env.anim);
     },

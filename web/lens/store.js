@@ -7,7 +7,7 @@
  * Section 4 - Pages, Engine & Demo. TODO: P-06, P-07, P-08.
  */
 
-import { W, H, K, clamp, follow, wrapChars } from './hud.js';
+import { W, H, K, clamp, follow, wrapChars, nowS } from './hud.js';
 
 export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 4 };
 
@@ -36,7 +36,7 @@ export function createStore() {
     clock: 0, // source clock (engine/wall seconds for Live, film seconds for Film)
     connected: false,
     paused: false,
-    tPaused: -1e9,
+    tPaused: -1e9, // wall time of the last pause change
     sessionId: null,
     config: { ...DEFAULT_CONFIG },
     scene: { faces: [], offscreen: [], you_speaking: false },
@@ -49,8 +49,10 @@ export function createStore() {
     replySeq: 0,
   };
 
+  const wall = nowS; // appear animations run on wall time, even with the film paused
+
   function toast(kind, text, o = {}) {
-    s.toasts.push({ kind, text, t: s.clock, ...o });
+    s.toasts.push({ kind, text, t: wall(), ...o });
     if (s.toasts.length > 4) s.toasts.shift();
   }
 
@@ -77,7 +79,7 @@ export function createStore() {
         }
         break;
       case 'paused':
-        if (s.paused !== !!msg.paused) s.tPaused = s.clock;
+        if (s.paused !== !!msg.paused) s.tPaused = wall();
         s.paused = !!msg.paused;
         break;
       case 'scene': {
@@ -129,6 +131,7 @@ export function createStore() {
         s.proposals.set(msg.proposal_id, {
           ...msg,
           tStart: prev?.tStart ?? s.clock,
+          wStart: prev?.wStart ?? wall(),
           tState: prev?.state === msg.state ? prev.tState : s.clock,
         });
         break;
@@ -137,11 +140,13 @@ export function createStore() {
         if (msg.alert_id == null) break;
         const prev = s.alerts.get(msg.alert_id);
         const st = msg.state || 'start';
+        if (!prev && st === 'clear') break; // joined after it ended: nothing to show
         s.alerts.set(msg.alert_id, {
           ...msg,
           side: normSide(msg.side),
           state: st,
           tStart: prev?.tStart ?? s.clock,
+          wStart: prev?.wStart ?? wall(),
           tUpdate: s.clock,
           count: Number.isFinite(msg.count) ? msg.count : prev?.count ?? 1, // optional repeat count
           tAck: st === 'acknowledged' ? prev?.tAck ?? s.clock : prev?.tAck ?? null,
@@ -175,7 +180,8 @@ export function createStore() {
     for (const [id, p] of s.proposals) {
       if ((p.state !== 'proposed' && s.clock - p.tState > 3) || s.clock < p.tStart - 1) s.proposals.delete(id);
     }
-    s.toasts = s.toasts.filter((t) => s.clock - t.t < 3.6 && s.clock >= t.t - 0.5);
+    const now = wall();
+    s.toasts = s.toasts.filter((t) => now - t.t < 3.6);
   }
 
   /** Clear everything session-bound (scene cut in the film, "forget session", source switch). */
@@ -304,7 +310,7 @@ export function createViewBuilder(store) {
       const cut = all.length > cfg.bubble_lines;
       if (cut) all = all.slice(-cfg.bubble_lines);
       const b = {
-        key, utt_id: c.utt_id, kind: sp.kind || 'someone', text: primary, lines: all, cut,
+        key, utt_id: c.utt_id, kind: sp.kind || 'someone', text: primary, lines: all, cut, tFirst: c.tFirst,
         orig: translated ? c.text : null, lang: c.lang, translated, pending: c.lang !== 'en' && !c.translation,
         final: c.final, alpha, tUpdate: c.tUpdate, age,
         speaking: !c.final && clock - c.tUpdate < 1.2,
@@ -347,7 +353,7 @@ export function createViewBuilder(store) {
       }
       feed.push(b);
     }
-    feed.sort((a, b) => b.tUpdate - a.tUpdate);
+    feed.sort((a, b) => b.tUpdate - a.tUpdate || a.final - b.final || b.tFirst - a.tFirst);
 
     // direction of every caption relative to the wearer (for the mono and corner displays)
     for (const b of feed) {
@@ -364,7 +370,7 @@ export function createViewBuilder(store) {
     const alerts = [];
     for (const a of s.alerts.values()) {
       const meta = ALERT_META[a.kind] ?? { label: a.kind ? a.kind[0].toUpperCase() + a.kind.slice(1) : 'Sound', icon: 'sound', level: 'attention' };
-      let alpha = clamp((clock - a.tStart) / 0.25);
+      let alpha = clamp((anim - a.wStart) / 0.25);
       if (a.tClear != null) alpha *= clamp(1 - (clock - a.tClear) / 0.4);
       if (a.tAck != null) alpha *= clamp(1 - (clock - a.tAck - 1.6) / 0.5);
       if (alpha <= 0) continue;
@@ -374,7 +380,7 @@ export function createViewBuilder(store) {
         label: a.label || meta.label, detail: a.detail || SIDE_TEXT[a.side], side: a.side,
         color: level === 'urgent' ? '#FF4D4F' : level === 'info' ? '#7CC8FF' : a.kind === 'vehicle' ? '#FF9F43' : '#FFC857',
         state: a.state, acked: a.tAck != null, watch: a.state === 'watch', count: Math.max(1, a.count),
-        tStart: a.tStart, tAck: a.tAck, tUpdate: a.tUpdate, alpha, age: clock - a.tStart,
+        tStart: a.tStart, tAck: a.tAck, tUpdate: a.tUpdate, alpha, age: anim - a.wStart,
       });
     }
     alerts.sort((a, b) => (b.level === 'urgent') - (a.level === 'urgent') || b.tStart - a.tStart);
@@ -387,7 +393,7 @@ export function createViewBuilder(store) {
       if (!shown) continue;
       const item = {
         id: p.proposal_id, name: p.name, state: p.state, track_id: p.track_id, age: clock - p.tState,
-        alpha: p.state === 'proposed' ? clamp((clock - p.tStart) / 0.3) : clamp(1 - (clock - p.tState - 1.0) / 0.4),
+        alpha: p.state === 'proposed' ? clamp((anim - p.wStart) / 0.3) : clamp(1 - (clock - p.tState - 1.0) / 0.4),
       };
       if (!byTrack.has(p.track_id)) proposals.push(item);
     }
@@ -400,11 +406,11 @@ export function createViewBuilder(store) {
     else if (activeAlert) status = 'alert';
 
     return {
-      clock, anim, dt, sourceKind, config: cfg, paused: s.paused, pausedAge: clock - s.tPaused,
+      clock, anim, dt, sourceKind, config: cfg, paused: s.paused, pausedAge: anim - s.tPaused,
       connected: s.connected, status, speaking,
       faces, bubbles, offscreen: [...offMap.values()], lower, you, feed,
       alerts, activeAlert, proposals, pendingProposal,
-      toasts: s.toasts.map((t) => ({ ...t, age: clock - t.t })),
+      toasts: s.toasts.map((t) => ({ ...t, age: anim - t.t })),
     };
   };
 }

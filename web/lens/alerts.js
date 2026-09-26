@@ -210,6 +210,7 @@ export function drawAlerts(ctx, blur, view, anim) {
 // ---------------------------------------------------------------- toasts (top centre)
 export function drawToasts(ctx, blur, view, anim, topY = 40) {
   let y = topY;
+  const rects = [];
   for (const t of view.toasts) {
     const a = clamp(t.age / 0.35) * clamp((3.4 - t.age) / 0.4);
     if (a <= 0) continue;
@@ -225,10 +226,11 @@ export function drawToasts(ctx, blur, view, anim, topY = 40) {
     }
     ctx.save();
     ctx.translate(0, (1 - easeOut(a)) * -18);
-    pill(ctx, blur, W / 2, y, 56, parts, { a, align: 'center', glow: t.color ?? MINT });
+    rects.push(pill(ctx, blur, W / 2, y, 56, parts, { a, align: 'center', glow: t.color ?? MINT }));
     ctx.restore();
     y += 66;
   }
+  return rects;
 }
 
 // ---------------------------------------------------------------- paused chip

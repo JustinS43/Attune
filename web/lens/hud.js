@@ -34,6 +34,13 @@ export function setPixelScale(k) {
   PX = k;
 }
 
+/** The page's animation clock in seconds (performance.now plus any time settle() stepped ahead). */
+let skewMs = 0;
+export const nowS = () => (performance.now() + skewMs) / 1000;
+export function addSkew(ms) {
+  skewMs += ms;
+}
+
 /** Frame-rate independent smoothing factor for an exponential follow. */
 export const follow = (dt, rate) => 1 - Math.exp(-dt * rate);
 

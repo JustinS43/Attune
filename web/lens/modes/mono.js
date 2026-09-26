@@ -20,7 +20,7 @@ const VH = 200;
 const S = 1.42; // virtual px -> design px
 const F = {
   head: font(600, 19, FT),
-  body: font(400, 27, FT),
+  body: font(450, 27, FT),
   small: font(500, 14, FT),
   big: font(650, 34, FT),
   mid: font(500, 18, FT),

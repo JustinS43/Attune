@@ -12,7 +12,7 @@
 
 import { onKey, listKeys } from '../shared/keys.js';
 import { createStore, createViewBuilder } from './store.js';
-import { W, setPixelScale } from './hud.js';
+import { W, setPixelScale, nowS, addSkew } from './hud.js';
 import { createColorMode } from './modes/color.js';
 import { createMonoMode } from './modes/mono.js';
 import { createCornerMode } from './modes/corner.js';
@@ -37,7 +37,7 @@ const srCaptions = document.getElementById('captions-live');
 let lastSr = '';
 
 function emit(msg) {
-  if (sourceKind === 'live') store.state.clock = performance.now() / 1000;
+  if (sourceKind === 'live') store.state.clock = nowS();
   store.apply(msg);
   if (msg?.type === 'caption' && msg.final) {
     const text = `${msg.speaker?.label ?? 'Someone'}: ${msg.translation || msg.text}`;
@@ -189,7 +189,7 @@ async function setSource(kind) {
 function setMode(id) {
   if (!modes[id] || id === modeId) return;
   const prev = layers.find((l) => l.id === modeId);
-  if (prev) prev.until = performance.now() + 450;
+  if (prev) prev.until = nowS() * 1000 + 450;
   modeId = id;
   syncUrl();
   syncChrome();
@@ -227,7 +227,9 @@ function setNotice(key, title, detail = '', hint = '') {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+let filmSeen = false; // the first film frame has been on screen (seeks never bring the notice back)
 function syncNotice() {
+  if (!filmSeen && film?.blurSource) filmSeen = true;
   if (sourceKind === 'live') {
     if (!live?.connected) {
       setNotice('live-down', 'Connecting to Attune engine…',
@@ -236,7 +238,7 @@ function syncNotice() {
     } else if (live.frameAge > 2500) {
       setNotice('live-noframes', 'Connected · waiting for video', 'The engine is up but hasn\'t sent camera frames yet.', '');
     } else setNotice('');
-  } else if (filmState === 'loading' || (filmState === 'ready' && !film?.blurSource && !film?.info.error)) {
+  } else if (filmState === 'loading' || (filmState === 'ready' && !filmSeen && !film?.info.error)) {
     setNotice('film-loading', 'Loading the film…', 'Footage, face tracks and script', '');
   } else if (filmState === 'error' || film?.info.error) {
     setNotice('film-error', 'Film footage not found', esc(film?.info.error || filmError),
@@ -257,11 +259,10 @@ function syncTransport(now) {
 }
 
 // ---------------------------------------------------------------- frame loop
-let last = performance.now();
+let last = nowS() * 1000;
 let renderError = null;
-let skew = 0; // ms added by settle(), so the animation clock never runs backwards
-function frame(ts) {
-  step(ts + skew);
+function frame() {
+  step(nowS() * 1000);
   requestAnimationFrame(frame);
 }
 function step(now) {
@@ -401,11 +402,24 @@ window.attuneLens = {
   get film() {
     return film;
   },
+  /** Pause the film on film-time t (optionally in a mode), wait for the frame, then settle. */
+  async hold(t, mode) {
+    for (let i = 0; i < 60 && !film; i++) await new Promise((r) => setTimeout(r, 100));
+    if (mode) setMode(MODE_ALIASES[mode] ?? mode);
+    if (film.playing) film.togglePlay();
+    film.seek(t);
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 80));
+      const v = media.querySelector('video.active');
+      if (v && !v.seeking && v.readyState >= 2 && Math.abs((v.presented ?? v.currentTime) - v.want) < 0.08) break;
+    }
+    return this.settle(90);
+  },
   /** Step the renderer n frames at 60 fps right now (for screenshots of a hidden tab). */
   settle(n = 60) {
     for (let i = 0; i < n; i++) {
-      skew += 1000 / 60;
-      step(performance.now() + skew);
+      addSkew(1000 / 60);
+      step(nowS() * 1000);
     }
     return lastView?.clock;
   },
