@@ -40,12 +40,14 @@ const state = {
   screen: 'home', theme: 'light', paused: false, powered: true, cameraOn: true,
   features: { captions: true, names: true, alerts: true, translation: true },
   people: [
-    { id: 'maya', name: 'Maya Chen', seen: 12, color: '', consent: true },
-    { id: 'leo', name: 'Leo Martin', seen: 8, color: 'blue', consent: true }
+    { id: 'maya', name: 'Maya Chen', seen: 12, color: '', tier: 'close', source: 'manual' },
+    { id: 'leo', name: 'Leo Martin', seen: 8, color: 'blue', tier: 'familiar', source: 'auto' }
   ],
   contacts: [],
+  peopleTier: 'close',
   contactDraft: {name: '', photo: '', consent: false},
   editingContactId: null,
+  pendingContactId: null,
   proposal: 'Sam',
   history: [
     { speaker: 'Maya', text: 'We can meet by the entrance.', time: '2:14 PM', color: '' },
@@ -262,7 +264,7 @@ function proposalCard() {
   const card = el('div', 'card person-card proposal-card');
   const top = el('div', 'person-top');
   const copy = el('div', 'grow');
-  copy.append(el('div', 'card-title', `${name}?`), el('div', 'card-sub', 'Name heard in conversation · session only'));
+  copy.append(el('div', 'card-title', `${name}?`), el('div', 'card-sub', 'Name heard in conversation · confirm to remember'));
   top.append(avatar(name, 'amber'), copy);
   const actions = el('div', 'person-actions');
   actions.append(button('Confirm name', 'primary', 'confirm-proposal'), button(`Not ${name}`, 'outline', 'reject-proposal'));
@@ -275,22 +277,29 @@ function renderPeople() {
   heading('People', 'Your familiar faces, all in one place');
   if (state.live) content.append(pill());
   const add = el('div', 'contact-actions');
-  add.append(button('Remember someone', 'primary full', 'enroll'));
+  add.append(button('Remember someone', 'primary full', 'enroll'), button('Add a photo contact', 'outline full', 'contact-new'));
   content.append(add);
-  content.append(el('h2', 'section-title', 'Contacts'));
+  const tabs = el('div', 'person-actions');
+  for (const [tier, label] of [['close', 'Close'], ['familiar', 'Familiar'], ['other', 'Others']]) {
+    const tab = button(label, state.peopleTier === tier ? 'primary' : 'outline', 'people-tier-view');
+    tab.dataset.tier = tier;
+    tab.setAttribute('aria-pressed', String(state.peopleTier === tier));
+    tabs.append(tab);
+  }
+  content.append(tabs, el('h2', 'section-title', state.peopleTier === 'close' ? 'Close people' : state.peopleTier === 'familiar' ? 'Familiar people' : 'Other people'));
   const list = el('div', 'people-list');
   const enrolled = state.people.map(person => ({...person, contact: state.contacts.find(item => item.personId === person.id)}));
-  const uploaded = state.contacts.filter(item => !item.personId).map(item => ({id: item.id, name: item.name, contact: item, photoOnly: true}));
-  const entries = [...enrolled, ...uploaded].sort((a, b) => a.name.localeCompare(b.name));
-  if (!entries.length) list.append(el('div', 'card empty', 'No contacts yet. Invite someone to save their face.'));
+  const uploaded = state.contacts.filter(item => !item.personId).map(item => ({id: item.id, name: item.name, contact: item, photoOnly: true, tier: item.tier || 'other'}));
+  const entries = [...enrolled, ...uploaded].filter(p => (p.tier || 'other') === state.peopleTier).sort((a, b) => a.name.localeCompare(b.name));
+  if (!entries.length) list.append(el('div', 'card empty', 'No people in this page yet.'));
   for (const person of entries) {
     const card = el('div', 'card person-card');
     const top = el('div', 'person-top');
     const copy = el('div', 'grow');
-    let sub = person.photoOnly ? 'Photo contact · Recognition not set up' : `Seen ${person.seen} times · Saved with consent`;
+    let sub = person.photoOnly ? 'Photo contact · Recognition not set up' : person.source === 'auto' ? `Found in conversation · ${person.has_voice ? 'Face + voice' : 'Face only'}` : `Seen ${person.seen || person.seen_count || 0} times · Saved manually`;
     if (state.live && !person.photoOnly) {
       const parts = [person.has_face ? 'Face' : '', person.has_voice ? 'Voice' : ''].filter(Boolean).join(' + ') || 'Name only';
-      sub = `${parts} · Saved with consent${person.consent_t ? ` ${formatDate(person.consent_t)}` : ''}`;
+      sub = `${parts} · ${person.source === 'auto' ? 'Added automatically' : 'Saved manually'}${person.consent_t ? ` ${formatDate(person.consent_t)}` : ''}`;
     }
     copy.append(el('div', 'card-title', person.name), el('div', 'card-sub', sub));
     top.append(contactAvatar(person.name, person.color, person.contact?.photo), copy);
@@ -316,6 +325,21 @@ function renderPeople() {
       rename.setAttribute('aria-label', `Rename ${person.name}`);
       remove.setAttribute('aria-label', `Remove ${person.name}`);
       actions.append(rename, remove);
+      if (person.photoOnly && state.live) {
+        const recognize = button('Add face + voice', 'primary', 'recognize-contact');
+        recognize.dataset.personId = person.id;
+        actions.append(recognize);
+      }
+      if (!person.photoOnly && state.live && !person.has_voice) {
+        const voice = button('Finish voice', 'primary', 'complete-voice');
+        voice.dataset.personId = person.id;
+        actions.append(voice);
+      }
+      if (!person.photoOnly && state.live) {
+        const move = button(person.tier === 'close' ? 'Unpin' : 'Keep close', 'outline', 'toggle-close');
+        move.dataset.personId = person.id;
+        actions.append(move);
+      }
       card.append(top, actions);
     }
     list.append(card);
@@ -325,7 +349,7 @@ function renderPeople() {
   const hasProposal = state.live ? !!state.liveProposal : !!state.proposal;
   if (hasProposal) content.append(proposalCard());
   else content.append(el('div', 'card empty', 'No unconfirmed session names.'));
-  content.append(el('p', 'note', 'Photo contacts stay on this device. Face recognition is added only after the person agrees and completes live face enrollment.'));
+  content.append(el('p', 'note', 'Photo contacts stay on this device. Automatic profiles are saved on the laptop after a conversation; names can be confirmed here.'));
 }
 
 function renderNewContact() {
@@ -351,13 +375,10 @@ function renderNewContact() {
   const name = el('input', 'enroll-name');
   name.id = 'contact-name'; name.type = 'text'; name.maxLength = 60; name.placeholder = 'Their name'; name.value = draft.name;
   nameLabel.append(name);
-  const consent = el('label', 'enroll-consent');
-  const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.id = 'contact-consent'; checkbox.checked = draft.consent;
-  consent.append(checkbox, el('span', '', 'I agree to save my photo and name on this device. Ask the person in the photo to tick this themselves.'));
   const save = button('Save contact', 'primary full', 'save-contact');
-  save.id = 'save-contact'; save.disabled = !draft.photo || !draft.name.trim() || !draft.consent;
-  form.append(fileLabel, nameLabel, consent, save);
-  content.append(form, el('p', 'note', 'A photo contact appears in your list. Attune will not recognize them until they complete Remember Me in person.'));
+  save.id = 'save-contact'; save.disabled = !draft.photo || !draft.name.trim();
+  form.append(fileLabel, nameLabel, save);
+  content.append(form, el('p', 'note', 'The photo will appear in People. When Attune is connected, use Add face + voice there to connect it to recognition.'));
 }
 
 function enrollLine(name) {
@@ -462,7 +483,7 @@ function renderEnroll() {
       if (enrollment.face === 'ok') content.append(button('Skip voice for now', 'outline full enroll-skip', 'skip-voice'));
     }
   }
-  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and optional voice prints on the laptop. Your contact photo stays on this device; the spoken recording is not kept.'));
+  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and optional voice prints on the laptop. People who talk with you are also remembered as face and voice prints, never photos or audio, and you can delete any contact. Your contact photo stays on this device; the spoken recording is not kept.'));
   content.append(button(`View contacts (${state.people.length + state.contacts.filter(item => !item.personId).length})`, 'outline full enroll-contacts', 'people'));
 }
 
@@ -1017,11 +1038,34 @@ function onMessage(msg) {
       break;
     }
     case 'people':
-      state.people = (msg.people || msg.list || msg.items || []).map(p => ({id: p.person_id, name: p.name, consent_t: p.consent_t, has_face: p.has_face, has_voice: p.has_voice, color: colorFor(p.name), consent: true}));
+      state.people = (msg.people || msg.list || msg.items || []).map(p => ({id: p.person_id, name: p.name, consent_t: p.consent_t, has_face: p.has_face, has_voice: p.has_voice, source: p.source, tier: p.tier, seen_count: p.seen_count, color: colorFor(p.name)}));
       if (['people', 'settings', 'enroll'].includes(state.screen)) refresh();
       break;
     case 'enroll_result': {
+      if (msg.source === 'auto') {
+        if (msg.part === 'voice' && msg.ok) {
+          const person = state.people.find(p => p.id === msg.person_id);
+          if (person) person.has_voice = true;
+          if (state.screen === 'people') refresh();
+        }
+        break;
+      }
       const e = state.enroll;
+      const belongsToContact = msg.source === 'station'
+        ? msg.session_id && msg.session_id === station.currentSessionId()
+        : e.phase === 'face' && msg.track_id === e.trackId;
+      if (msg.part === 'face' && msg.ok && state.pendingContactId && belongsToContact) {
+        const contact = state.contacts.find(item => item.id === state.pendingContactId);
+        state.pendingContactId = null;
+        if (contact) {
+          const linked = {...contact, personId: msg.person_id};
+          saveContact(linked).then(() => {
+            Object.assign(contact, linked);
+            if (state.screen === 'people') refresh();
+          }).catch(() => showToast('Face saved, but the photo could not be linked on this device.'));
+        }
+      }
+      if (msg.source === 'station') break;
       if (msg.track_id != null && msg.track_id !== e.trackId) break;
       if (msg.part === 'face') {
         if (e.phase !== 'face') break;
@@ -1049,18 +1093,23 @@ function onMessage(msg) {
       if (msg.part === 'voice' && msg.ok) showToast(`${e.name} is saved with face and voice recognition.`);
       break;
     }
+    case 'enroll_state':
+      if (['cancelled', 'fallback'].includes(msg.phase)) state.pendingContactId = null;
+      break;
     case 'person_changed': {
       const i = state.people.findIndex(p => p.id === msg.person_id);
       if (msg.action === 'deleted' && i >= 0) state.people.splice(i, 1);
       else if (msg.action === 'renamed' && i >= 0) state.people[i].name = msg.name;
       else if (msg.action === 'enrolled' && i < 0) {
-        state.people.push({id: msg.person_id, name: msg.name, has_face: true, has_voice: false, color: colorFor(msg.name), consent: true});
-        showToast(`${msg.name}'s face is saved. Finish the voice step.`);
+        const automatic = msg.person_id.startsWith('auto-');
+        state.people.push({id: msg.person_id, name: msg.name, has_face: true, has_voice: false, source: automatic ? 'auto' : 'manual', tier: automatic ? 'other' : 'close', color: colorFor(msg.name)});
+        if (!msg.person_id.startsWith('auto-')) showToast(`${msg.name}'s face is saved. Finish the voice step.`);
       }
+      if (msg.action === 'renamed' && state.liveProposal?.name === msg.name) state.liveProposal = null;
       if (msg.action === 'deleted') {
-        const id = `person:${msg.person_id}`;
-        state.contacts = state.contacts.filter(item => item.id !== id);
-        deleteContact(id).catch(() => showToast('Could not remove the local contact photo.'));
+        const linked = state.contacts.filter(item => item.personId === msg.person_id);
+        state.contacts = state.contacts.filter(item => item.personId !== msg.person_id);
+        for (const item of linked) deleteContact(item.id).catch(() => showToast('Could not remove the local contact photo.'));
       }
       if (['people', 'settings', 'enroll'].includes(state.screen)) refresh();
       break;
@@ -1145,6 +1194,30 @@ document.addEventListener('click', async event => {
   if (!control) return;
   const action = control.dataset.action ?? control.dataset.nav;
   if (['home','people','contact-new','history','speak','enroll','settings','live'].includes(action)) return navigate(action);
+  if (action === 'people-tier-view') { state.peopleTier = control.dataset.tier; refresh(); return; }
+  if (action === 'recognize-contact') {
+    const contact = state.contacts.find(item => item.id === control.dataset.personId);
+    if (!contact) return;
+    state.pendingContactId = contact.id;
+    if (station.enabled()) station.prefill(contact.name);
+    else state.enroll.name = contact.name;
+    navigate('enroll'); return;
+  }
+  if (action === 'complete-voice') {
+    const person = state.people.find(item => item.id === control.dataset.personId);
+    if (!person) return;
+    state.pendingContactId = null;
+    if (station.enabled()) station.prefill(person.name);
+    else state.enroll.name = person.name;
+    navigate('enroll'); showToast('Rescan their face, then record their voice.'); return;
+  }
+  if (action === 'toggle-close') {
+    const person = state.people.find(p => p.id === control.dataset.personId);
+    if (!person) return;
+    const tier = person.tier === 'close' ? 'other' : 'close';
+    link.send('person.rename', {person_id: person.id, name: person.name, tier});
+    person.tier = tier; refresh(); return;
+  }
   if (action === 'select-face') { state.enroll.trackId = Number(control.dataset.trackId); portraitReady = false; refresh(); return; }
   if (action === 'take-photo') {
     if (state.enroll.photo) {
@@ -1175,8 +1248,8 @@ document.addEventListener('click', async event => {
   if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, personId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; portraitReady = false; render(); return; }
   if (action === 'save-contact') {
     const draft = state.contactDraft;
-    if (!draft.photo || !draft.name.trim() || !draft.consent) return showToast('Add a photo, name, and their consent first.');
-    const contact = {id: crypto.randomUUID(), personId: null, name: draft.name.trim(), photo: draft.photo, consentT: Date.now() / 1000};
+    if (!draft.photo || !draft.name.trim()) return showToast('Add a photo and name first.');
+    const contact = {id: crypto.randomUUID(), personId: null, name: draft.name.trim(), photo: draft.photo, tier: 'other'};
     try {
       await saveContact(contact);
       state.contacts.push(contact);
@@ -1274,7 +1347,7 @@ document.addEventListener('click', async event => {
     return;
   }
   if (action === 'forget') {
-    const message = state.live ? 'Forget this session? Strangers, session names and this session’s captions are wiped on the laptop. People who consented stay saved.' : 'Forget this session? The preview conversation and session names will disappear.';
+    const message = state.live ? 'Forget this session? People only seen this session, session names and this session’s captions are wiped on the laptop. Saved contacts stay: people who consented and people who talked with you. You can delete any contact in Contacts.' : 'Forget this session? The preview conversation and session names will disappear.';
     if (await confirmAction(message)) {
       if (state.live) { link.send('session.forget'); state.captions = []; state.liveProposal = null; }
       state.history = []; state.proposal = ''; window.speechSynthesis?.cancel(); render(); showToast('Session forgotten.');
@@ -1310,7 +1383,7 @@ document.addEventListener('input', event => {
   if (event.target.id === 'contact-name') {
     state.contactDraft.name = event.target.value;
     const save = document.querySelector('#save-contact');
-    if (save) save.disabled = !state.contactDraft.photo || !state.contactDraft.name.trim() || !state.contactDraft.consent;
+    if (save) save.disabled = !state.contactDraft.photo || !state.contactDraft.name.trim();
   }
 });
 document.addEventListener('keydown', event => {
@@ -1324,11 +1397,6 @@ document.addEventListener('change', async event => {
     state.enroll.consent = event.target.checked;
     const start = document.querySelector('#start-enroll');
     if (start) start.disabled = !state.enroll.name.trim() || !state.enroll.consent || !state.connected;
-  }
-  if (event.target.id === 'contact-consent') {
-    state.contactDraft.consent = event.target.checked;
-    const save = document.querySelector('#save-contact');
-    if (save) save.disabled = !state.contactDraft.photo || !state.contactDraft.name.trim() || !state.contactDraft.consent;
   }
   if (event.target.id === 'contact-file') {
     try { state.contactDraft.photo = await photoFromFile(event.target.files?.[0]); render(); }

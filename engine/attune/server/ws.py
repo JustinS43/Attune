@@ -160,7 +160,13 @@ def load_people(people_dir: Path) -> list[dict[str, Any]]:
                 "name": meta.get("name", folder.name),
                 "consent_t": meta.get("consent_t"),
                 "has_face": (folder / "face.npy").is_file(),
-                "has_voice": any(p.name.startswith("voice.") for p in folder.iterdir()),
+                "has_voice": (folder / "voice.json").is_file(),
+                "source": meta.get("source", "manual"),
+                "tier": meta.get(
+                    "tier", "close" if meta.get("source", "manual") == "manual" else "other"
+                ),
+                "seen_count": meta.get("seen_count", 0),
+                "last_seen_t": meta.get("last_seen_t", 0),
             }
         )
     return people
