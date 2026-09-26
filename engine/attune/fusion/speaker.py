@@ -364,41 +364,49 @@ class SpeakerFusion:
         """Stop a flickering speaker decision from chopping a sentence into pieces.
 
         A short "Someone" piece (under 2x `min_segment_s`) joins the known
-        speaker next to it, and a piece under `min_segment_s` between two pieces
-        of the same speaker joins them. Real turn changes inside a sentence stay split.
+        speaker next to it, and any other piece under `min_segment_s` joins its
+        longer neighbour. Real turn changes (each side longer) stay split.
         """
 
         def span(ws: list) -> float:
             return float(ws[-1][2]) - float(ws[0][1])
 
         short = self.s.min_segment_s
+
+        def fold(gs: list, i: int, j: int) -> None:
+            # piece i joins its neighbour j and takes j's speaker
+            lo, hi = min(i, j), max(i, j)
+            gs[lo : hi + 1] = [(gs[j][0], gs[lo][1] + gs[hi][1])]
+
+        def rule(gs: list, i: int) -> tuple[int, int | None]:
+            """(priority, neighbour to join) for piece i; lower priority acts first."""
+            spk, ws = gs[i]
+            nbrs = [k for k in (i - 1, i + 1) if 0 <= k < len(gs)]
+            known = [k for k in nbrs if gs[k][0].kind != "someone"]
+            if len(nbrs) == 2 and _same(gs[i - 1][0], gs[i + 1][0]) and span(ws) < short:
+                return 0, i - 1
+            if spk.kind == "someone" and known and span(ws) < 2 * short:
+                return 1, max(known, key=lambda k: span(gs[k][1]))
+            if span(ws) < short:
+                return 2, max(nbrs, key=lambda k: span(gs[k][1]))
+            return 9, None
+
         gs = list(groups)
-        changed = True
-        while changed and len(gs) > 1:
-            changed = False
-            for i, (spk, ws) in enumerate(gs):
-                prev = gs[i - 1] if i > 0 else None
-                nxt = gs[i + 1] if i + 1 < len(gs) else None
-                if (
-                    prev is not None
-                    and nxt is not None
-                    and _same(prev[0], nxt[0])
-                    and span(ws) < short
-                ):
-                    gs[i - 1 : i + 2] = [(prev[0], prev[1] + ws + nxt[1])]
-                elif spk.kind == "someone" and span(ws) < 2 * short:
-                    known = [
-                        j for j in (i - 1, i + 1) if 0 <= j < len(gs) and gs[j][0].kind != "someone"
-                    ]
-                    if not known:
-                        continue
-                    j = max(known, key=lambda k: span(gs[k][1]))
-                    lo, hi = min(i, j), max(i, j)
-                    gs[lo : hi + 1] = [(gs[j][0], gs[lo][1] + gs[hi][1])]
-                else:
-                    continue
-                changed = True
+        while len(gs) > 1:
+            # sandwiched flickers, then unknown words, then the shortest other piece
+            best = min(range(len(gs)), key=lambda k: (rule(gs, k)[0], span(gs[k][1])))
+            _, j = rule(gs, best)
+            if j is None:
                 break
+            fold(gs, best, j)
+            # neighbours that now share a speaker become one piece
+            merged: list = []
+            for spk, ws in gs:
+                if merged and _same(merged[-1][0], spk):
+                    merged[-1] = (spk, merged[-1][1] + ws)
+                else:
+                    merged.append((spk, ws))
+            gs = merged
         out: list[tuple[Speaker, list]] = []
         for spk, ws in gs:
             if out and _same(out[-1][0], spk):

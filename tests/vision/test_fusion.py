@@ -269,16 +269,17 @@ def test_caption_goes_to_the_speaker_and_splits_at_a_change():
             {1: still_face(400), 2: talking_face(sim.t, 1300)}, speech=True, loud=loud()
         )
     words = [
-        ("So", t_switch - 0.6, t_switch - 0.4),
-        ("what?", t_switch - 0.3, t_switch - 0.1),
-        ("Robots.", t_switch + 0.9, t_switch + 1.2),
+        ("So", t_switch - 1.0, t_switch - 0.7),
+        ("what?", t_switch - 0.4, t_switch - 0.1),
+        ("Robots", t_switch + 0.9, t_switch + 1.3),
+        ("again.", t_switch + 1.4, t_switch + 1.8),
     ]
     sim.f.on_transcript(
         {
             "utt_id": "7",
             "t_start": words[0][1],
             "t_end": words[-1][2],
-            "text": "So what? Robots.",
+            "text": "So what? Robots again.",
             "final": True,
             "lang": "en",
             "words": words,
@@ -288,7 +289,7 @@ def test_caption_goes_to_the_speaker_and_splits_at_a_change():
     _, caps, _ = sim.step({1: still_face(400), 2: still_face(1300)}, speech=True)
     assert [(c.utt_id, c.speaker.track_id, c.text) for c in caps] == [
         ("7", 1, "So what?"),
-        ("7.1", 2, "Robots."),
+        ("7.1", 2, "Robots again."),
     ]
     assert all(c.final for c in caps)
 
@@ -374,6 +375,34 @@ def test_forget_session_clears_labels():
     sim.f.forget_session()
     scene, _, _ = sim.step({2: still_face()})
     assert scene.faces[0].label == "Person"
+
+
+def test_a_short_piece_joins_its_longer_neighbour():
+    f = SpeakerFusion(FusionSettings())
+    a = Speaker("face", 1, None, "Person in white shirt", "none")
+    b = Speaker("face", 2, None, "Person in blue shirt", "none")
+    words = [
+        ("Hi,", 0.0, 0.3),
+        ("my", 0.4, 0.5),
+        ("name", 0.6, 0.9),
+        ("is", 1.0, 1.1),
+        ("Sam", 1.2, 1.5),
+    ]
+    who = [a, a, a, a, b]
+    f.timeline.extend((w[1], s) for w, s in zip(words, who))
+    caps = f._captions_for(
+        {
+            "utt_id": "3",
+            "text": "Hi, my name is Sam",
+            "final": True,
+            "words": words,
+            "t_start": 0.0,
+            "t_end": 1.5,
+        },
+        now=5.0,
+        first_seen=0.0,
+    )
+    assert [(c.speaker.track_id, c.text) for c in caps] == [(1, "Hi, my name is Sam")]
 
 
 def test_a_flickering_speaker_does_not_chop_a_sentence():
