@@ -1,4 +1,4 @@
-"""CAM++ embeddings; consented disk prints and forgettable session prints.
+"""CAM++ embeddings; manual or automatic disk prints and forgettable session prints.
 
 A saved person's `data/people/<id>/voice.json` holds their consent, one base print
 (`embedding`) and where it was made (`source`: "station" = the laptop mic at the enrollment
@@ -76,7 +76,7 @@ class CAMExtractor:
         return np.asarray(self.extractor.compute(stream), dtype=np.float32)
 
 
-def _consented_at(value) -> bool:
+def _valid_stamp(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
@@ -104,13 +104,15 @@ def write_print(
     consent_t: float,
     source: str = GLASSES,
     adapted: list[np.ndarray] | None = None,
+    automatic: bool = False,
 ) -> Path:
-    """Atomically write a consented voice print (prints only, never audio)."""
-    if not _consented_at(consent_t):
-        raise ValueError("consent is required")
+    """Atomically write a voice print (prints only, never audio)."""
+    if not _valid_stamp(consent_t):
+        raise ValueError("a capture timestamp is required")
     path = voice_path(root, person_id)
     record = {
-        "consent": True,
+        "consent": not automatic,
+        "automatic": automatic,
         "consent_t": consent_t,
         "source": source,
         "embedding": unit(vector).tolist(),
@@ -124,7 +126,7 @@ def write_print(
 
 
 class VoicePrints:
-    """Persistent prints require explicit consent; harvested updates stay in RAM."""
+    """Manual and automatic prints persist; other harvested voices stay in RAM."""
 
     def __init__(
         self,
@@ -158,12 +160,14 @@ class VoicePrints:
 
     # ------------------------------------------------------------------ storage
     def load(self, person_id: str) -> bool:
-        """(Re)read one person's consented print from disk; False (and forget it) if none."""
+        """(Re)read one person's persistent print; False (and forget it) if none."""
         try:
             path = voice_path(self.root, person_id)
             data = json.loads(path.read_text())
-            if data.get("consent") is not True or not _consented_at(data.get("consent_t")):
-                raise ValueError("no consent")
+            if not (
+                data.get("consent") is True or data.get("automatic") is True
+            ) or not _valid_stamp(data.get("consent_t")):
+                raise ValueError("no valid capture record")
             base = unit(data["embedding"])
             bank = [unit(v) for v in data.get("adapted") or []][-self.adapt_max :]
             source = STATION if data.get("source") == STATION else GLASSES
@@ -178,6 +182,20 @@ class VoicePrints:
         self.sources[person_id] = source
         self.consents[person_id] = float(data["consent_t"])
         self.adapted[person_id] = bank
+        return True
+
+    def remember_auto(self, person_id: str, session_id: str) -> bool:
+        """Persist an already harvested voice vector for an automatic face profile."""
+        vector = self.session.get(session_id)
+        if vector is None or person_id in self.enrolled:
+            return False
+        stamp = time.time()
+        write_print(self.root, person_id, vector, stamp, GLASSES, automatic=True)
+        self.session.pop(session_id, None)
+        self.enrolled = {**self.enrolled, person_id: vector}
+        self.sources[person_id] = GLASSES
+        self.consents[person_id] = stamp
+        self.adapted[person_id] = []
         return True
 
     def _drop(self, person_id: str) -> None:
@@ -199,7 +217,7 @@ class VoicePrints:
         """Save only the embedding from sufficient consented speech."""
         if (
             consent is not True
-            or not _consented_at(consent_t)
+            or not _valid_stamp(consent_t)
             or len(samples) < self.enroll_s * 16000
         ):
             raise ValueError("consent and sufficient speech are required")
@@ -290,6 +308,7 @@ class VoicePrints:
                     self.consents[person_id],
                     self.sources.get(person_id, GLASSES),
                     self.adapted[person_id],
+                    automatic=person_id.startswith("auto-"),
                 )
             except (OSError, ValueError):
                 logger.warning("Could not save an adapted voice print")

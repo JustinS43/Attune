@@ -59,7 +59,8 @@ machine; the CUDA package index is intended for the demo laptop, not this Mac.
   Only final captions confidently assigned to that face contribute audio; duplicate
   captions and pre-confirmation spans cannot extend enrollment. Five seconds of
   speech are required. Consent timestamps and embeddings live in `data/people/`;
-  raw enrollment audio stays in RAM. Harvested updates are session-only.
+  raw enrollment audio stays in RAM. Harvested updates are session-only, except for
+  automatic contacts (A-25): a harvested voice print is saved with that person's face prints.
 - EfficientAT requires the upstream mn10_as weights and installed upstream source.
   From an environment with that source on `PYTHONPATH`, export with:
 
