@@ -16,7 +16,11 @@ While speech is detected, each tick (15 per second) checks, in order:
    Dashed tail.
 4. Off-screen: after ~1 s of speech, a voice match >= 0.5 names the speaker;
    the side comes from where they left the frame (< 30 s ago), otherwise
-   from the louder sound sensor (>= 3 dB). Until then: "Someone".
+   from the louder sound sensor (>= 3 dB). Until then: "Someone". A voice
+   whose face is in view is never off screen: it goes to that face, dashed,
+   or to "Someone" when Light-ASD calls that face silent (a match that still
+   hears an earlier turn, `_stale_voice`, which also never vetoes the face
+   Light-ASD hears talking now).
 
 Talking (V-19). A live face is never perfectly still: landmark jitter, lips
 parting, a yawn, a head turn. So, while speech is heard, a face is talking
@@ -637,6 +641,8 @@ class SpeakerFusion:
         if pid is not None:
             if pid == vid or self.claimed.get(pid) == vid:
                 return "support"
+            if self._stale_voice(pid, now):
+                return None
             # Another voice matched. It vetoes this face when it is clearly someone else: a
             # known person, a voice learnt off screen, or a stranger who was on screen at the
             # same time as this face. (A stranger last seen before this face appeared may be
@@ -651,6 +657,28 @@ class SpeakerFusion:
         # Nobody matched. A low score against a session print is inconclusive in
         # background noise, so it must not overrule positive lip and sound evidence.
         return None
+
+    def _visible_track(self, vid: str, now: float) -> _TrackInfo | None:
+        """The face in view right now that voice id `vid` belongs to, if any."""
+        vid = self.claimed.get(vid, vid)
+        for tr in self.tracks.values():
+            if now - tr.t <= 0.5 and voice_id(tr.person_id, tr.track_id) == vid:
+                return tr
+        return None
+
+    def _stale_voice(self, vid: str, now: float) -> bool:
+        """Does this voice match belong to a face in view that Light-ASD says is silent now?
+
+        The match is made over the newest `voice_match_max_s` of speech, so just after a
+        turn it still hears mostly the previous talker. When that talker is on screen and
+        Light-ASD (lips and sound together, the last 0.4 s) calls them silent, the match
+        is about earlier speech: it must not veto the face that is talking now.
+        """
+        tr = self._visible_track(vid, now)
+        if tr is None:
+            return False
+        asd = self.asd_gate.covered(self, now).get(tr.track_id)
+        return asd is not None and asd.score < self.s.asd_off
 
     def _claim(self, now: float) -> None:
         """Let a face that clearly talks with an off-screen voice claim it (offscreen_claim_s)."""
@@ -765,6 +793,17 @@ class SpeakerFusion:
                     vid = self.claimed[vid]
                 elif vid.startswith("offscreen-"):  # a voice only ever heard off screen
                     return Speaker("someone", label="Someone", side=side), None
+                seen = self._visible_track(vid, now)
+                if seen is not None:
+                    # the voice of a face in view is never shown as off screen: that face,
+                    # dashed (the voice says so, the lips don't), unless Light-ASD calls it
+                    # silent (a match that still hears an earlier turn: "Someone")
+                    if self._stale_voice(vid, now):
+                        return Speaker("someone", label="Someone", side=side), None
+                    self._decided_by = "voice-in-view"
+                    return Speaker(
+                        "probable_face", seen.track_id, seen.person_id, labels[seen.track_id]
+                    ), seen.r
                 exit_side, exit_t = self.exits.get(vid, ("none", -1e9))
                 if now - exit_t <= s.offscreen_exit_memory_s and exit_side != "none":
                     side = exit_side

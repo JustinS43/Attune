@@ -64,3 +64,34 @@ def test_another_talking_face_takes_over():
     assert sim.run(2.0, {1: (300, 0.05, True, None), 2: (900, 0.0, False, None)}).track_id == 1
     spk = sim.run(1.5, {1: (300, 0.0, False, None), 2: (900, 0.05, True, None)})
     assert spk.kind == "face" and spk.track_id == 2
+
+
+# ---------------------------------------------------------------- voices of faces in view
+def _learn_voices(sim):
+    """Two strangers in view; each talks alone first, so each has a session voice print."""
+    sim.f.harvested.update({"track-1", "track-2"})
+
+
+def test_a_voice_whose_face_is_in_view_is_never_off_screen():
+    sim = Sim()
+    _learn_voices(sim)
+    faces = {1: (300, 0.0, False, None), 2: (900, 0.0, False, None)}  # no lip evidence
+    spk = sim.run(2.0, faces, voice="track-2")
+    assert spk.kind == "probable_face" and spk.track_id == 2
+
+
+def test_a_stale_voice_does_not_veto_the_face_light_asd_hears():
+    sim = Sim()
+    _learn_voices(sim)
+    # the voice window still hears face 1 (the last turn); Light-ASD: 1 silent, 2 talking
+    faces = {1: (300, 0.0, False, -3.0), 2: (900, 0.05, True, 2.5)}
+    spk = sim.run(1.5, faces, voice="track-1")
+    assert spk.kind == "face" and spk.track_id == 2
+
+
+def test_a_stale_voice_of_a_silent_face_in_view_is_someone():
+    sim = Sim()
+    _learn_voices(sim)
+    faces = {1: (300, 0.0, False, -3.0), 2: (900, 0.0, False, -3.0)}
+    spk = sim.run(2.0, faces, voice="track-1")
+    assert spk.kind == "someone"

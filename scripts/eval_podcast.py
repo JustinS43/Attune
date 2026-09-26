@@ -445,10 +445,26 @@ def asd_truth(args) -> int:
             both += ok
         track.append([round(k * hop, 3), f if ok else None])
     to_person = {names[p]: counts[p] for p in range(len(names))}
-    ref["speaker_track"] = track
+    ref["regions"] = regions
     ref["speaker_names"] = names
-    ref["turn_speakers"] = {}
-    ref["truth"] = "light-asd (whole clip) + CAM++ voice clusters"
+    if ref.get("turn_speakers"):
+        # the subtitles' turns stay (exact in time); their voice clusters get the names of
+        # the places the face model heard them talk from
+        votes: dict[int, Counter] = defaultdict(Counter)
+        for w in ref["words"]:
+            c = ref["turn_speakers"].get(str(w["turn"]))
+            k = int(w["t"] / hop)
+            if c is not None and 0 <= k < n and track[k][1] is not None:
+                votes[c][track[k][1]] += 1
+        to_name = {c: v.most_common(1)[0][0] for c, v in votes.items()}
+        ref["turn_speakers"] = {t: to_name.get(c) for t, c in ref["turn_speakers"].items()}
+        ref["speaker_track"] = []
+        ref["truth"] = "subtitle turns, CAM++ voice clusters named by whole-clip Light-ASD"
+        print(f"voice cluster -> seat: { {c: names[p] for c, p in to_name.items()} }")
+    else:
+        ref["speaker_track"] = track
+        ref["turn_speakers"] = {}
+        ref["truth"] = "light-asd (whole clip) + CAM++ voice clusters"
     (folder / "ref.json").write_text(json.dumps(ref, indent=1), encoding="utf-8")
     talk = sum(1 for _, v in track if v is not None)
     print(
@@ -575,6 +591,7 @@ def score(run: dict) -> dict:
             for k, nw in enumerate(normalize(w[0])):
                 hyp.append({
                     "w": nw, "t": (ws + we) / 2 - t0, "seg": seg_id, "spk": spk,
+                    "tid": (msg.get("speaker") or {}).get("track_id"),
                     "final": bool(msg.get("final")),
                     "shown": first.get((round(ws, 2), w[0].lower()), None),
                 })  # fmt: skip
@@ -681,6 +698,34 @@ def score(run: dict) -> dict:
             "someone": round(sum(1 for _, h in mine if h["spk"] == "someone") / len(mine), 3),
         }  # fmt: skip
     out["per_speaker"] = per
+
+    # on the right face: for clips whose people sit still (ref "regions"), the face a word
+    # was drawn on must be the seat of the person who said it
+    regions = ref.get("regions")
+    if regions:
+        fw, fh = run.get("frame_size") or [1280, 720]
+        scenes = [(float(m.get("t", 0)) - t0, m) for _, m in run["messages"] if m.get("type") == "scene"]
+        st = np.array([t for t, _ in scenes]) if scenes else np.zeros(0)
+
+        def seat(tid, t: float):
+            if tid is None or not len(st):
+                return None
+            k = int(np.clip(np.searchsorted(st, t), 0, len(st) - 1))
+            for j in (k, max(k - 1, 0), min(k + 1, len(st) - 1)):
+                for f in scenes[j][1].get("faces") or []:
+                    if f.get("track_id") == tid:
+                        x, y, w, h = f["box"]
+                        cx, cy = (x + w / 2) / fw, (y + h / 2) / fh
+                        return next(
+                            (p for p, r in enumerate(regions) if r[0] <= cx <= r[2] and r[1] <= cy <= r[3]),
+                            None,
+                        )
+            return None
+
+        on_face = [(r, h) for r, h in scored if h["tid"] is not None]
+        good = sum(1 for r, h in on_face if seat(h["tid"], h["t"]) == spk_of(r))
+        out["right_face"] = round(good / max(len(scored), 1), 4)
+        out["wrong_face"] = round((len(on_face) - good) / max(len(scored), 1), 4)
     # speaker changes: at a reference change between two words, is the caption label different too?
     changes = hits = 0
     known = [(r, h) for r, h in matched if spk_of(r) is not None]
@@ -732,6 +777,11 @@ def report(m: dict, path: Path | None = None) -> None:
         f"{m['changes_split']} of {m['speaker_changes']} speaker changes start a new bubble",
         f"speakers: accuracy {m['speaker_accuracy']:.1%}, 'Someone' {m['someone_share']:.1%}",
     ]
+    if "right_face" in m:
+        rows.append(
+            f"  on the right face {m['right_face']:.1%}, on a wrong face {m['wrong_face']:.1%} "
+            "(of all scored words; the rest is Someone or off-screen)"
+        )
     for who, v in m["per_speaker"].items():
         rows.append(f"  {who:>10s}: {v['words']} words, right {v['right']:.1%}, Someone {v['someone']:.1%}")
     rows.append("  labels: " + "; ".join(f"{k} -> {v}" for k, v in list(m["labels"].items())[:12]))
