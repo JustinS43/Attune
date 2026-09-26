@@ -1,12 +1,8 @@
-"""Entry point for `uv run python -m attune`
+"""Entry point: `python -m attune` (see main.py for the options)."""
 
-Section 4 - Pages, Engine & Demo
-TODO: P-02
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 03
+import sys
 
-What to build:
-- Parse --config and --replay <reel> and call main.run().
+from .main import main
 
-Placeholder only - no code yet (MLH: project code is written during the event).
-"""
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,19 +1,253 @@
-"""Event and message types - the code copy of docs/contracts.md
+"""Event and message types: the code copy of docs/contracts.md.
 
-Section 4 - Pages, Engine & Demo
-TODO: P-01
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05
+Section 4 - Pages, Engine & Demo. TODO: P-01.
 
-What to build:
-- One dataclass per bus event and WebSocket message listed in docs/contracts.md, same names and fields.
-- This file and docs/contracts.md change together, in a [shared] PR, and only by adding fields.
+One dataclass per bus event and shared type, with the same names and fields as
+docs/contracts.md, plus the topic, WebSocket message and command names. Field names
+match Section 1's `attune.vision.types` exactly, so events built from either module
+are interchangeable. Producers may also publish plain dicts; read events with `get()`.
 
-Placeholder only - no code yet (MLH: project code is written during the event).
+This file and docs/contracts.md change together, in a [shared] PR, and only by
+adding fields (with defaults) or events.
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import Any
+
+# ---------------------------------------------------------------------------
+# Bus topics (contracts section 2)
+# ---------------------------------------------------------------------------
+VISION_FRAME = "vision.frame"
+VISION_TRACKS = "vision.tracks"
+VISION_TRACK_LOST = "vision.track_lost"
+VISION_APPEARANCE = "vision.appearance"
+VISION_DESCRIPTION = "vision.description"
+AUDIO_BLOCK = "audio.block"
+AUDIO_VAD = "audio.vad"
+AUDIO_LEVEL = "audio.level"
+AUDIO_TRANSCRIPT = "audio.transcript"
+AUDIO_VOICE_MATCH = "audio.voice_match"
+VOICE_HARVEST = "voice.harvest"
+CAPTION = "caption"
+CAPTION_TRANSLATION = "caption.translation"
+SCENE = "scene"
+NAME_PROPOSAL = "name.proposal"
+ALERT = "alert"
+REPLY_SUGGESTIONS = "reply.suggestions"
+SENSORS_LEVELS = "sensors.levels"
+SENSORS_TOUCH = "sensors.touch"
+TOUCH_ACTION = "touch.action"
+HW_PATTERN = "hw.pattern"
+HW_STOP = "hw.stop"
+HW_LINK = "hw.link"
+SPEECH_OUT_PLAYING = "speech_out.playing"
+REPLY_SPOKEN = "reply.spoken"
+ENROLL_RESULT = "enroll.result"
+PERSON_CHANGED = "person.changed"
+SESSION_FORGET = "session.forget"
+PAUSED = "paused"
+COMMAND = "command"
+STATUS_PART = "status.part"
+# Engine-internal (Section 4): the aggregated status the hub sends to the console.
+STATUS = "status"
+
+TOPICS = frozenset(
+    {
+        VISION_FRAME,
+        VISION_TRACKS,
+        VISION_TRACK_LOST,
+        VISION_APPEARANCE,
+        VISION_DESCRIPTION,
+        AUDIO_BLOCK,
+        AUDIO_VAD,
+        AUDIO_LEVEL,
+        AUDIO_TRANSCRIPT,
+        AUDIO_VOICE_MATCH,
+        VOICE_HARVEST,
+        CAPTION,
+        CAPTION_TRANSLATION,
+        SCENE,
+        NAME_PROPOSAL,
+        ALERT,
+        REPLY_SUGGESTIONS,
+        SENSORS_LEVELS,
+        SENSORS_TOUCH,
+        TOUCH_ACTION,
+        HW_PATTERN,
+        HW_STOP,
+        HW_LINK,
+        SPEECH_OUT_PLAYING,
+        REPLY_SPOKEN,
+        ENROLL_RESULT,
+        PERSON_CHANGED,
+        SESSION_FORGET,
+        PAUSED,
+        COMMAND,
+        STATUS_PART,
+        STATUS,
+    }
+)
+
+# ---------------------------------------------------------------------------
+# WebSocket (contracts section 3 and "Pages integration additions")
+# ---------------------------------------------------------------------------
+ROLES = ("lens", "console", "phone")
+
+WS_HELLO = "hello"
+WS_WELCOME = "welcome"
+WS_COMMAND = "command"
+WS_SCENE = "scene"
+WS_CAPTION = "caption"
+WS_NAME_PROPOSAL = "name_proposal"
+WS_ALERT = "alert"
+WS_REPLY_SUGGESTIONS = "reply_suggestions"
+WS_REPLY_SPOKEN = "reply_spoken"
+WS_STATUS = "status"
+WS_PEOPLE = "people"
+WS_THUMBNAILS = "thumbnails"
+WS_EVENT_LOG = "event_log"
+WS_PAUSED = "paused"
+WS_ENROLL_RESULT = "enroll_result"
+WS_PERSON_CHANGED = "person_changed"
+WS_HW_LINK = "hw_link"
+
+_ALL = frozenset(ROLES)
+# Which roles receive each JSON message type. Frames go to pages that asked for them.
+WS_AUDIENCE: dict[str, frozenset[str]] = {
+    WS_SCENE: frozenset({"lens", "console"}),
+    WS_CAPTION: _ALL,
+    WS_NAME_PROPOSAL: _ALL,
+    WS_ALERT: _ALL,
+    WS_REPLY_SUGGESTIONS: _ALL,
+    WS_REPLY_SPOKEN: _ALL,
+    WS_PAUSED: _ALL,
+    WS_STATUS: frozenset({"console"}),
+    WS_PEOPLE: frozenset({"console", "phone"}),
+    WS_THUMBNAILS: frozenset({"console"}),
+    WS_EVENT_LOG: frozenset({"console"}),
+    WS_ENROLL_RESULT: frozenset({"console", "phone"}),
+    WS_PERSON_CHANGED: frozenset({"console", "phone"}),
+    WS_HW_LINK: frozenset({"console", "phone"}),
+}
+
+FRAME_HEADER_FORMAT = "<Qd"  # little-endian uint64 frame_no, float64 capture t
+FRAME_HEADER_BYTES = 16
+
+# ---------------------------------------------------------------------------
+# Commands (contracts section 4)
+# ---------------------------------------------------------------------------
+COMMAND_NAMES = frozenset(
+    {
+        "enroll.start",
+        "person.rename",
+        "person.delete",
+        "session.forget",
+        "pause.toggle",
+        "switch.set",
+        "languages.set",
+        "pattern.test",
+        "calibrate.step",
+        "speak",
+        "name.answer",
+        "alert.ack",
+        "mark",
+    }
+)
+
+
+def get(event: Any, name: str, default: Any = None) -> Any:
+    """Read a field from a dataclass-like object or a dict."""
+    if isinstance(event, dict):
+        return event.get(name, default)
+    return getattr(event, name, default)
+
+
+# ---------------------------------------------------------------------------
+# Shared types
+# ---------------------------------------------------------------------------
+@dataclass
+class Track:
+    track_id: int
+    box: list[float]  # [x, y, w, h] in camera pixels
+    face_px: int
+    lip_score: float
+    person_id: str | None
+    name: str | None
+    match_score: float
+    status: str  # unknown, proposed, named, enrolled
+    mouth_open: float | None = None
+
+
+@dataclass
+class Speaker:
+    kind: str  # you, you_typed, face, probable_face, offscreen, someone
+    track_id: int | None = None
+    person_id: str | None = None
+    label: str = ""
+    side: str = "none"
+
+
+@dataclass
+class FaceState:
+    track_id: int
+    box: list[float]
+    label: str
+    status: str
+    lip_score: float
+    is_speaker: bool
+    dashed: bool
+
+
+@dataclass
+class Offscreen:
+    person_id: str | None
+    label: str
+    side: str
+
+
+@dataclass
+class Command:
+    name: str
+    args: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Bus events
+# ---------------------------------------------------------------------------
+@dataclass
+class Frame:
+    frame_no: int
+    t: float
+    image: Any  # BGR numpy array, full camera resolution
+
+
+@dataclass
+class Tracks:
+    frame_no: int
+    t: float
+    tracks: list[Track]
+
+
+@dataclass
+class TrackLost:
+    track_id: int
+    t: float
+    side: str  # left, right, none
+
+
+@dataclass
+class Appearance:
+    track_id: int
+    color: str
+    crop: Any  # numpy; never sent to pages or logged
+
+
+@dataclass
+class Description:
+    track_id: int
+    label: str
 
 
 @dataclass(frozen=True)
@@ -25,12 +259,160 @@ class AudioBlock:
     samples: Any
 
 
+@dataclass
+class Vad:
+    t: float
+    is_speech: bool
+    prob: float
+
+
+@dataclass
+class Transcript:
+    utt_id: str
+    t_start: float
+    t_end: float
+    text: str
+    final: bool
+    lang: str | None
+    words: list[tuple[str, float, float]] = field(default_factory=list)
+
+
+@dataclass
+class VoiceMatch:
+    utt_id: str
+    person_id: str | None
+    score: float
+
+
+@dataclass
+class VoiceHarvest:
+    person_id: str
+    t0: float
+    t1: float
+
+
+@dataclass
+class Caption:
+    utt_id: str
+    speaker: Speaker
+    text: str
+    final: bool
+    lang: str | None
+    words: list[tuple[str, float, float]]
+
+
+@dataclass
+class CaptionTranslation:
+    utt_id: str
+    source_lang: str
+    text_en: str
+
+
+@dataclass
+class Scene:
+    frame_no: int
+    t: float
+    faces: list[FaceState]
+    offscreen: list[Offscreen]
+    you_speaking: bool
+
+
+@dataclass
+class NameProposal:
+    proposal_id: str
+    track_id: int
+    name: str
+    state: str  # proposed, confirmed, rejected, expired
+    expires_t: float
+
+
+@dataclass
+class Alert:
+    alert_id: str
+    kind: str  # smoke, co, doorbell
+    side: str
+    confidence: float
+    state: str  # start, update, watch, acknowledged, clear
+
+
+@dataclass
+class ReplySuggestions:
+    options: list[str]
+
+
+@dataclass
+class SensorLevels:
+    t: float
+    left: int
+    right: int
+    motor_on: bool
+
+
+@dataclass
+class SensorTouch:
+    t: float
+    gesture: str  # tap, hold, double
+
+
+@dataclass
+class TouchAction:
+    target: str  # alert, name, pause
+    id: str | None
+    accept: bool
+
+
+@dataclass
+class HwPattern:
+    name: str  # T3, T4, BELL, NAME, OK, NO
+    side: str  # L, R, B
+
+
+@dataclass
+class HwLink:
+    connected: bool
+    firmware: str | None = None
+    driver: str | None = None
+
+
+@dataclass
+class SpeechOutPlaying:
+    state: str  # start, end
+    t: float
+
+
+@dataclass
+class ReplySpoken:
+    text: str
+    voice: str  # elevenlabs, kokoro
+    t: float
+
+
 @dataclass(frozen=True)
 class EnrollResult:
     """Echo track_id so voice enrollment cannot reuse another person's consent."""
 
+    person_id: str | None
+    part: str  # face, voice
+    ok: bool
+    reason: str = ""
+    track_id: int | None = None
+
+
+@dataclass
+class PersonChanged:
     person_id: str
+    name: str
+    action: str  # enrolled, renamed, deleted
+
+
+@dataclass
+class Paused:
+    paused: bool
+
+
+@dataclass
+class StatusPart:
     part: str
     ok: bool
-    reason: str
-    track_id: int | None = None
+    detail: str = ""
+    metrics: dict[str, Any] = field(default_factory=dict)
