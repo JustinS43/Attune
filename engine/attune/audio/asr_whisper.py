@@ -1,12 +1,63 @@
-"""Fallback captions: faster-whisper large-v3-turbo
+"""Whisper local-agreement drafts and multilingual finals."""
 
-Section 2 - Audio & Language
-TODO: A-04
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Captions
+from __future__ import annotations
 
-What to build:
-- Local-agreement streaming (whisper_streaming method); also re-runs non-English finals if Spanish is weak.
+from pathlib import Path
+from typing import Any
 
-Placeholder only - no code yet (MLH: project code is written during the event).
-"""
+import numpy as np
+
+from .asr import Recognition
+
+
+class WhisperASR:
+    """Re-decode a bounded utterance, exposing only consecutive-pass agreement."""
+
+    def __init__(self, config: dict, model: Any = None):
+        self.config = config
+        if model is None:
+            from faster_whisper import WhisperModel
+
+            if not Path(config["model_path"]).is_dir():
+                raise FileNotFoundError(config["model_path"])
+            model = WhisperModel(
+                config["model_path"],
+                device=config["device"],
+                compute_type=config["compute_type"],
+                local_files_only=True,
+            )
+        self.model = model
+        self.reset()
+
+    def reset(self) -> None:
+        self.audio: list[np.ndarray] = []
+        self.previous: list = []
+
+    def feed(self, samples: np.ndarray, final: bool = False) -> Recognition:
+        """Return stable words on drafts and the complete hypothesis on finals."""
+        self.audio.append(samples.copy())
+        audio = np.concatenate(self.audio)
+        langs = self.config["languages"]
+        segments, info = self.model.transcribe(
+            audio,
+            word_timestamps=True,
+            language=langs[0] if len(langs) == 1 else None,
+            beam_size=1,
+            condition_on_previous_text=False,
+            vad_filter=False,
+        )
+        words = [
+            (w.word.strip(), max(0.0, w.start), min(len(audio) / 16000, w.end))
+            for segment in segments
+            for w in (segment.words or [])
+        ]
+        stable = words
+        if not final:
+            n = 0
+            for a, b in zip(words, self.previous):
+                if a[0] != b[0]:
+                    break
+                n += 1
+            stable = words[:n]
+        self.previous = words
+        return Recognition(" ".join(w[0] for w in stable), info.language, stable)

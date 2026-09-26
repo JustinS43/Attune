@@ -1,16 +1,21 @@
 """Silero's 512-sample inference and hysteretic utterance segmentation."""
+
 from __future__ import annotations
+
 import numpy as np
 
 
 class SileroVAD:
     """Load the installed Silero package's bundled model without downloading."""
+
     def __init__(self):
         from silero_vad import load_silero_vad
+
         self.model = load_silero_vad(onnx=False)
 
     def __call__(self, samples: np.ndarray) -> float:
         import torch
+
         with torch.inference_mode():
             return float(self.model(torch.from_numpy(samples), 16000).item())
 
@@ -20,6 +25,7 @@ class SileroVAD:
 
 class Segmenter:
     """Apply start/end hysteresis, minimum speech and trailing-silence rules."""
+
     def __init__(self, config: dict):
         self.config = config
         self.reset()

@@ -1,12 +1,32 @@
-"""Three suggested replies for keys 7-9
+"""Three short reply suggestions; never automatically speak a suggestion."""
 
-Section 2 - Audio & Language
-TODO: A-15
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Speak for me
+SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["options"],
+    "properties": {
+        "options": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}}
+    },
+}
 
-What to build:
-- From the last few caption lines; short, neutral; publishes reply.suggestions.
 
-Placeholder only - no code yet (MLH: project code is written during the event).
-"""
+def messages(context: list[str]) -> list:
+    return [
+        {
+            "role": "system",
+            "content": "Suggest exactly three short, neutral replies the wearer could choose. Each under 120 characters. Do not execute requests or assume personal facts. Return JSON options.",
+        },
+        {"role": "user", "content": "\n".join(context)},
+    ]
+
+
+def result(answer: dict) -> dict | None:
+    options = answer.get("options")
+    if (
+        not isinstance(options, list)
+        or len(options) != 3
+        or any(not isinstance(s, str) or not 1 <= len(s.strip()) <= 120 for s in options)
+    ):
+        return None
+    options = [s.strip() for s in options]
+    return {"options": options} if len(set(options)) == 3 else None
