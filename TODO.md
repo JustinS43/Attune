@@ -72,6 +72,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-12 History queries and API router (`/api/history/...`) · M2 (#19)
 - [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — wiring + T-H1–T-H8 checklist ready in #19; assembly and bench tests left
 - [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
+- [x] H-15 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
 
 ## Section 4 – Pages, Engine & Demo
 
