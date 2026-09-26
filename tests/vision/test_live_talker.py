@@ -273,6 +273,13 @@ def test_a_weak_voice_match_does_not_overrule_a_talking_face():
     for _ in range(90):
         room2.step(talking=True, speech=True, voice=(None, 0.0))
     assert room2.f.current.kind == "face"
+    # A low score is inconclusive even if an upstream sender supplies an identity.
+    room3 = Room()
+    for _ in range(60):
+        room3.step(talking=False, speech=False)
+    for _ in range(90):
+        room3.step(talking=True, speech=True, voice=("p-alex", 0.1))
+    assert room3.f.current.kind == "face"
 
 
 def test_the_face_own_voice_lets_small_lip_movement_count():
