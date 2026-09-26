@@ -262,6 +262,22 @@ def test_find_port(monkeypatch):
     assert serial_link.find_port() is None
 
 
+@pytest.mark.parametrize("pid", [0x0043, 0x0001])
+def test_find_port_picks_uno_r3(monkeypatch, pid):
+    """The team's UNO R3 (16U2 USB chip, 0x2341:0x0043 or :0x0001) beats clones and others."""
+    ports = [
+        SimpleNamespace(device="COM3", vid=0x1A86, pid=0x7523),  # CH340 clone
+        SimpleNamespace(device="COM4", vid=0x046D, pid=0x0825),  # a webcam
+        SimpleNamespace(device="COM8", vid=0x2341, pid=pid),
+        SimpleNamespace(device="COM1", vid=None, pid=None),
+    ]
+    import serial.tools.list_ports as lp
+
+    monkeypatch.setattr(lp, "comports", lambda: ports)
+    assert rank_port(0x2341, pid) is not None
+    assert serial_link.find_port() == "COM8"
+
+
 def test_clock_map_uses_minimum_latency():
     cm = ClockMap(window_s=10)
     # board ms 1000 arrives at engine 5.020 (20 ms latency), later 2000 at 6.001
