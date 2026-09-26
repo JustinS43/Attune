@@ -976,8 +976,8 @@ def process_stats(pid: int) -> dict:
     if WINDOWS:
         cmd = (
             f"$p = Get-Process -Id {pid} -ErrorAction SilentlyContinue; "
-            "if ($p) { '{0} {1} {2}' -f $p.WorkingSet64, $p.PrivateMemorySize64, "
-            "$p.TotalProcessorTime.TotalSeconds }"
+            "if ($p) { '{0} {1} {2} {3} {4}' -f $p.WorkingSet64, $p.PrivateMemorySize64, "
+            "$p.TotalProcessorTime.TotalSeconds, $p.Threads.Count, $p.HandleCount }"
         )
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command", cmd],
@@ -986,11 +986,13 @@ def process_stats(pid: int) -> dict:
             timeout=20,
             check=False,
         ).stdout.split()
-        if len(out) == 3:
+        if len(out) == 5:
             return {
                 "rss_mb": round(int(out[0]) / 2**20, 1),
                 "private_mb": round(int(out[1]) / 2**20, 1),
                 "cpu_s": float(out[2].replace(",", ".")),
+                "threads": int(out[3]),
+                "handles": int(out[4]),
             }
         return {}
     try:

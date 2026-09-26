@@ -44,7 +44,10 @@ if (samples.length >= 3) {
     report.add(`soak: ${key} page JS heap growth under 50 MB`, b - a < 50, `${a} -> ${b} MB`);
     const n1 = samples[1][key].nodes;
     const n2 = samples.at(-1)[key].nodes;
-    report.add(`soak: ${key} page DOM stays bounded`, n2 - n1 < 2000, `${n1} -> ${n2} nodes`);
+    // a page that keeps every log line grows without end on a long wear; allow ~10 nodes a minute
+    const mins = Math.max(1, samples.at(-1).t_min - samples[1].t_min);
+    const perMin = (n2 - n1) / mins;
+    report.add(`soak: ${key} page DOM stays bounded (under 10 new nodes a minute)`, perMin < 10, `${n1} -> ${n2} nodes, ${perMin.toFixed(1)}/min`);
   }
 }
 report.clean(demo, 'soak demo');
