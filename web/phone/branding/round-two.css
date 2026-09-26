@@ -1,0 +1,30 @@
+:root { font-family: 'Avenir Next', -apple-system, sans-serif; color: #173c45; background: #f7f4ed; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1260px; margin: auto; padding: 66px 40px 32px; }
+header { max-width: 790px; margin-bottom: 48px; }
+.eyebrow { font-size: 12px; letter-spacing: .18em; color: #438582; font-weight: 600; }
+h1 { font-size: clamp(36px, 5vw, 62px); font-weight: 500; line-height: 1.13; letter-spacing: -.045em; margin: 25px 0 19px; }
+.intro { font-size: 21px; line-height: 1.5; }
+.type-note { max-width: 690px; color: #698084; font-size: 15px; line-height: 1.65; }
+section { display: grid; grid-template-columns: 265px 1fr; gap: 40px; background: #fff; border: 1px solid #e4e9e4; border-radius: 26px; padding: 32px; margin: 24px 0; }
+.number { color: #438582; font-size: 12px; letter-spacing: .14em; }
+h2 { font-size: 30px; font-weight: 500; letter-spacing: -.035em; margin: 19px 0 8px; }
+.copy p { font-size: 14px; line-height: 1.65; color: #698084; }
+.copy .tag { font-size: 17px; line-height: 1.4; color: #173c45; }
+.copy .take { padding-top: 15px; border-top: 1px solid #e6eeea; font-size: 13px; }
+.visual { min-width: 0; }
+.light { display: flex; align-items: center; gap: 26px; background: #f7f8f4; padding: 30px 24px; border-radius: 18px; min-height: 200px; }
+.app-icon { width: 128px; height: 128px; flex: none; box-shadow: 0 12px 24px #102f3a19; border-radius: 29px; }
+.wordmark { width: calc(100% - 154px); }
+.dark { background: #102f3a; padding: 14px 30px; border-radius: 18px; display: flex; justify-content: center; margin-top: 12px; }
+.dark img { width: 330px; max-width: 100%; }
+.small-sizes { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+.small-sizes > span { font-size: 9px; color: #698084; letter-spacing: .1em; max-width: 38px; }
+.downloads { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: flex-end; }
+a { color: #207b7f; font-size: 12px; text-decoration: none; }
+a:hover { text-decoration: underline; }
+footer { display: flex; flex-wrap: wrap; gap: 20px; padding: 24px 0; }
+footer span { margin-left: auto; color: #698084; font-size: 12px; }
+@media(max-width: 950px) { section { grid-template-columns: 1fr; gap: 16px; } .copy { max-width: 650px; } .copy .take { border: none; padding: 0; } }
+@media(max-width: 560px) { main { padding: 30px 16px; } section { padding: 20px; } .light { flex-direction: column; gap: 5px; padding: 25px 10px; } .wordmark { width: 100%; } .downloads { flex-direction: column; } .small-sizes { gap: 10px; } }

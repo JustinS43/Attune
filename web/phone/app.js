@@ -23,6 +23,14 @@ const DEFAULT_PRESETS = ['Nice to meet you', 'Can you repeat that?', 'One moment
 const ALERT_TEXT = { smoke: 'Smoke alarm', co: 'Carbon monoxide alarm', doorbell: 'Doorbell' };
 const VOICE_NAME = { elevenlabs: 'ElevenLabs', kokoro: 'offline voice' };
 
+// Optional Apricot Studio palette (Ryan's colorway); the default keeps the original palette.
+const palette = params.get('palette');
+if (palette === 'apricot') {
+  app.classList.add('palette-apricot');
+  document.body.classList.add('palette-apricot-preview');
+  document.title = 'Attune · Apricot Studio';
+}
+
 const state = {
   screen: 'home', theme: 'light', paused: false, powered: true,
   features: { captions: true, names: true, alerts: true, translation: true },

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Attune shared-view together bounce symbol"><path d="M116 110q12-10 24 11" fill="none" stroke="#75D1C5" stroke-width="10" stroke-linecap="round"/>
+<g transform="translate(0 -6) rotate(-8 81.5 136.5)">
+<circle cx="81.5" cy="65" r="19" fill="#F4BC88"/>
+<path d="m29 98 18 12" stroke="#75D1C5" stroke-width="10" stroke-linecap="round"/>
+<path d="M66 102h31q23 0 23 23v23q0 23-23 23H68l-33 19 9-37q-1-2-1-5v-23q0-23 23-23Z" fill="#98DDD0"/>
+<path d="M63 127h36m-36 18h24" stroke="#17656C" stroke-width="7" stroke-linecap="round"/>
+</g>
+<g transform="translate(0 5) rotate(8 174.5 136.5)">
+<circle cx="174.5" cy="65" r="19" fill="#F4BC88"/>
+<path d="m227 98-18 12" stroke="#75D1C5" stroke-width="10" stroke-linecap="round"/>
+<path d="M159 102h31q23 0 23 23v23q0 3-1 5l9 37-33-19h-29q-23 0-23-23v-23q0-23 23-23Z" fill="#159B9E"/>
+<path d="M156 127h36m-36 18h24" stroke="#E0F7EE" stroke-width="7" stroke-linecap="round"/>
+</g></svg>
