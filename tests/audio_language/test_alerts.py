@@ -231,3 +231,30 @@ def test_alert_hop_must_cover_whole_frames(config, bus, hop):
     config["alerts"]["hop_s"] = hop
     with pytest.raises(ValueError, match="whole rhythm frames"):
         AlertService(bus, config)
+
+
+def test_sound_model_gets_up_to_ten_seconds_of_context(config, bus):
+    """EfficientAT needs clip-length input; the service passes the latest 1-10 s."""
+    from attune.alerts.service import AlertService
+
+    class Model:
+        def __init__(self):
+            self.lengths = []
+
+        def score(self, pcm):
+            self.lengths.append(len(pcm))
+            return {}
+
+    model = Model()
+    service = AlertService(bus, config, model=model)
+    service.clock = lambda: 0.0
+    audio = np.zeros(12 * 32000, np.float32)
+    for offset in range(0, len(audio), 1600):
+        service._handle(
+            "audio.block",
+            {"t": offset / 32000, "sample_rate": 32000, "samples": audio[offset : offset + 1600]},
+            0,
+        )
+    assert model.lengths[0] == 32000
+    assert model.lengths == sorted(model.lengths)
+    assert model.lengths[-1] == 10 * 32000
