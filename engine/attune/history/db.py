@@ -111,6 +111,14 @@ def op_upsert_caption(conn, row: dict) -> None:
     )
 
 
+def op_delete_caption(conn, session_id: str, utt_id: str) -> None:
+    """A caption saved from its draft whose segment was later retracted (A-22)."""
+    conn.execute(
+        "DELETE FROM rows WHERE session_id = ? AND utt_id = ? AND kind = 'caption'",
+        (session_id, utt_id),
+    )
+
+
 def op_set_translation(conn, session_id: str, utt_id: str, text_en: str) -> None:
     conn.execute(
         "UPDATE rows SET translation = ? WHERE session_id = ? AND utt_id = ? AND kind = 'caption'",
