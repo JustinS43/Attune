@@ -32,7 +32,7 @@ from .ws import Hub
 log = logging.getLogger(__name__)
 
 WEB_ROOT = Path(__file__).resolve().parents[3] / "web"
-PAGE_FOLDERS = ("lens", "panels", "shared", "phone")
+PAGE_FOLDERS = ("lens", "panels", "shared", "phone", "demo")
 REELS = Path("data") / "reels" / "film"
 
 
