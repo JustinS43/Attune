@@ -1,18 +1,78 @@
-# models/ (gitignored)
+# Local model installation
 
-Downloaded model files live here and are never committed. `scripts/download_models.py` (TODO P-14) fetches them; ask your human before running it, since it downloads several GB. The full list with sizes is in the plan, section 07 "Downloads needed", and in docs/setup.md.
+Model weights live in this directory on each laptop. They are ignored by Git. Use the
+versioned downloader rather than copying a model with the same filename from another
+project: the voice matching thresholds and saved prints depend on the exact CAM++ export.
 
-Expected layout:
+## Speaker demo setup
+
+From the repository root, use Python 3.12 and [uv](https://docs.astral.sh/uv/). Install
+the Audio and Vision extras from `engine/uv.lock`; the Audio extra includes both
+`sherpa-onnx` and `sherpa-onnx-core`. On macOS, the latter provides the native library
+needed to load CAM++.
+
+```bash
+uv sync --project engine --extra audio --extra vision --extra dev --locked
+uv run --project engine --extra audio python -c 'import sherpa_onnx; print(sherpa_onnx.__version__)'
 ```
-models/
-  asr/nemotron-3.5-streaming-560ms-int8/   Section 2
-  asr/faster-whisper-large-v3-turbo/        Section 2
-  vad/silero-v6/                            Section 2
-  voiceprint/campplus/                      Section 2
-  alerts/efficientat-mn10-as/               Section 2
-  faces/buffalo_l/                          Section 1
-  faces/yunet-sface/                        Section 1 (fallback)
-  faces/mediapipe-face-landmarker/          Section 1
-  tts/kokoro-82m-multilingual/              Section 3
+
+With permission to download the models, install the exact files used by the live speaker
+demo. The downloader pins the source revision, byte count, and SHA-256 of each file. It
+verifies a download before moving it into place and skips files already verified.
+
+```bash
+python scripts/download_models.py --yes buffalo_l face_landmarker light_asd \
+  cam_plus_plus whisper_config.json whisper_model.bin \
+  whisper_preprocessor_config.json whisper_tokenizer.json whisper_vocabulary.json
+python scripts/download_models.py --check
 ```
-Ollama models (qwen3.5:4b, optional translategemma:4b) are managed by Ollama itself.
+
+The required installed files total about 1.85 GB. `buffalo_l` downloads a 288.6 MB
+archive but installs only its face detector and recognizer; it does not install the age
+or gender models. Allow extra free space while the archive and model files are being
+downloaded.
+
+| Model | Installed path | Size | SHA-256 |
+|---|---|---:|---|
+| 3D-Speaker CAM++ | `models/cam++.onnx` | 29.6 MB | `357a834f702b80161e5b981182c038e18553c1f2ca752ed6cec2052365d4129b` |
+| Light-ASD TalkSet | `models/light_asd/finetuning_TalkSet.model` | 4.2 MB | `efc375833887eefa9d209dc92810e18519b04c3c73ea35a549f2a7f40b7d94d5` |
+| MediaPipe face landmarker | `models/faces/mediapipe/face_landmarker.task` | 3.8 MB | `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff` |
+| Buffalo_L face detector | `models/faces/buffalo_l/det_10g.onnx` | 16.9 MB | `5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91` |
+| Buffalo_L face recognizer | `models/faces/buffalo_l/w600k_r50.onnx` | 174.4 MB | `4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43` |
+| Whisper large-v3-turbo | `models/faster-whisper-large-v3-turbo/model.bin` | 1617.9 MB | `e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da` |
+
+Whisper also needs the `config.json`, `preprocessor_config.json`, `tokenizer.json`, and
+`vocabulary.json` files installed by the command above. Their exact hashes and upstream
+URLs are in [`scripts/download_models.py`](../scripts/download_models.py); `--check`
+verifies all of them. The source and usage terms are listed in
+[`docs/setup.md`](../docs/setup.md). Buffalo_L is restricted to non-commercial research.
+
+### Faster CPU rehearsal
+
+On a CPU-only laptop, the optional Whisper Base model is faster for a diagnostic demo.
+It is about 148 MB and does not replace the project's default large model.
+
+```bash
+python scripts/download_models.py --yes whisper_cpu_config.json \
+  whisper_cpu_model.bin whisper_cpu_tokenizer.json whisper_cpu_vocabulary.txt
+python scripts/download_models.py --check whisper_cpu_config.json \
+  whisper_cpu_model.bin whisper_cpu_tokenizer.json whisper_cpu_vocabulary.txt
+```
+
+In the ignored `config/attune.toml`, select it with:
+
+```toml
+[whisper]
+model_path = "models/faster-whisper-base"
+```
+
+### Other checkouts and mismatches
+
+Every checkout has its own ignored `models/` directory. To install into another checkout,
+run this repository's downloader with `--root /absolute/path/to/checkout` and the same
+model names, then repeat `--check` with that root. If a file has the right name but the
+wrong hash, rerun its named download; the downloader replaces only the invalid file.
+
+If CAM++ was replaced with a different export, existing voice prints made with that
+export will not match the new model. Re-enroll consenting people before testing saved
+names. No voice recordings or voice prints belong in Git.
