@@ -121,7 +121,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 - [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
 
-- [ ] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status
+- [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
 
 ## Gates and end-to-end checks (whole team)
 
