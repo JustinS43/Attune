@@ -41,12 +41,13 @@ A service reports its health by publishing `status.part` about once per second. 
 | `audio.vad` | 2 Audio & Lang | `t, is_speech, prob` | Every 32 ms |
 | `audio.transcript` | 2 Audio & Lang | `utt_id, t_start, t_end, text, final, lang, words: [(word, t0, t1)]` | No speaker yet |
 | `audio.voice_match` | 2 Audio & Lang | `utt_id, person_id or None, score` | After ≥ 1 s of speech |
-| `voice.harvest` | 1 Vision (fusion) | `person_id, t0, t1, talkers=1` | Section 2 adds that audio span to the session print; for a saved person it may refine their print (A-21, see "Enrollment station"). `talkers`: the most faces talking at once over the span. Sent `[voice] harvest_lag_s` after `t1`, so the span's audio has arrived |
+| `voice.harvest` | 1 Vision (fusion) | `person_id, t0, t1, talkers=1` | Section 2 adds that audio span to the session print; for a saved person it may refine their print (A-21, see "Enrollment station"). An automatic face profile may promote its associated session voice print to persistent storage. `talkers`: the most faces talking at once over the span. Sent `[voice] harvest_lag_s` after `t1`, so the span's audio has arrived |
 | `caption` | 1 Vision (fusion) | `utt_id, speaker: Speaker, text, final, lang, words` | The transcript with its speaker; split into `<utt_id>`, `<utt_id>.1`, ... where the speaker changes |
 | `caption.retract` | 1 Vision (fusion) | `utt_id` | A segment id sent earlier is no longer part of its utterance: drop it (see "Caption segments") |
 | `caption.translation` | 2 Audio & Lang | `utt_id, source_lang, text_en` | 0.5–1.2 s after a final |
 | `scene` | 1 Vision (fusion) | `frame_no, t, faces: [FaceState], offscreen: [Offscreen], you_speaking` | 15/s and on every change |
-| `name.proposal` | 2 Audio & Lang | `proposal_id, track_id, name, state, expires_t` | `state`: proposed, confirmed, rejected, expired |
+| `name.proposal` | 2 Audio & Lang | `proposal_id, track_id, name, state, expires_t` | `state`: proposed, confirmed, rejected, expired. Explicit self-introductions or repeated directly addressed names may produce a proposal; confirmation can name an automatic profile. |
+| `name.evidence` | 2 Audio & Lang | `track_id, person_id=None, name, utt_id` | A validated self-introduction or direct address associated with one visible unknown or automatic face. Vision stores only candidate counts, distinct utterance IDs and dates for automatic profiles; never transcript text. |
 | `alert` | 2 Audio & Lang | `alert_id, kind, side, confidence, state` | `kind`: smoke, co, doorbell; `state`: start, update, watch, acknowledged, clear |
 | `reply.suggestions` | 2 Audio & Lang | `options: [str, str, str]` | For keys 7–9 |
 | `sensors.levels` | 3 Hardware | `t, left, right, motor_on` | Every 50 ms, 0–1023 |
@@ -57,7 +58,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `hw.link` | 3 Hardware | `connected, firmware, driver` | On change |
 | `speech_out.playing` | 3 Hardware | `state` (`start`, `end`), `t` | Section 2 mutes mic captions until end + 0.5 s |
 | `reply.spoken` | 3 Hardware | `text, voice` (`elevenlabs`, `kokoro`), `t` | Shown as "You (typed)" and saved to history |
-| `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason, track_id=None, source="glasses", session_id=None` | "more light", "come closer"; face enrollment echoes the requested track_id to correlate voice consent. `source: "station"`: saved at the laptop (see "Enrollment station") |
+| `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason, track_id=None, source="glasses", session_id=None` | "more light", "come closer"; face enrollment echoes the requested track_id to correlate voice consent. `source: "station"`: saved at the laptop (see "Enrollment station"); `source: "auto"`: an engaged face or its voice print persisted automatically, without an enrollment UI. |
 | `enroll.progress` | 1 Vision / 2 Audio & Lang | `track_id, part` (`face`, `voice`), `fraction` (0–1), `person_id=None, hint="", source="glasses", session_id=None` | While an enrollment runs; see "Save a person" |
 | `enroll.state` | 1 Vision (station) | `session_id, client_id, phase, name, track_id, request_id, person_id, face_ok, voice_ok, sentence, need_s, reason` (+ `camera, shared, mic, score, message` in some phases) | Enrollment station: which screen the phone shows; see "Enrollment station" |
 | `enroll.preview` | 1 Vision (station) | `session_id, client_id, jpeg` (bytes), `width, height, face` ([x, y, w, h] fractions or None), `ok, hint` | ~12/s during the face step; memory only, never stored |
@@ -66,7 +67,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `save.request` | 4 Pages & Engine | `request_id, track_id, name, t, expires_t, person_id=None, proposal_id=None` | A double tap asked to save this person; pages ask them for consent |
 | `save.cancel` | 4 Pages & Engine | `request_id` (or None), `reason, track_id=None, name=""` | The request ended without an enrollment, or nobody could be saved |
 | `person.changed` | 1 Vision | `person_id, name, action` (`enrolled`, `renamed`, `deleted`) | Everyone updates their caches |
-| `session.forget` | 4 Pages & Engine | — | Every section wipes session-only data |
+| `session.forget` | 4 Pages & Engine | — | Every section wipes session-only data; persistent automatic profiles remain until deleted or replaced by ranking |
 | `paused` | 4 Pages & Engine | `paused` (bool) | All recognition pauses |
 | `camera.state` | 4 Pages & Engine | `on` (bool) | 1 Vision stops or restarts the camera; captions and alerts keep running |
 | `command` | 4 Pages & Engine | `Command` (section 4) | From the pages |
@@ -94,7 +95,7 @@ Endpoint `ws://localhost:8000/ws`. Every message is JSON `{"type": ..., "seq": n
 | `reply_suggestions` | all | options |
 | `reply_spoken` | all | text, voice |
 | `status` | console | fps, caption_delay, gpu_mem_gb, arduino, ollama, mic_level, on_battery, parts |
-| `people` | console | list of `{person_id, name, consent_t, has_face, has_voice}` |
+| `people` | console, phone | list of `{person_id, name, consent_t, has_face, has_voice, source, tier, seen_count, last_seen_t}`; `source` is `manual` or `auto`, `tier` is `close`, `familiar` or `other` |
 | `thumbnails` | console | list of `{track_id, jpeg_b64}` for enrollment picking |
 | `event_log` | console | t, text |
 
@@ -108,7 +109,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `enroll.station` | action: `start` {name, consent (true), consent_t (epoch seconds), request_id?, track_id?}; `retry`, `new_person`, `skip_voice`, `cancel` {session_id} | 1 Vision's enrollment station (face, then voice at the laptop); the hub adds the page's `client_id` |
 | `save.start` | track_id (optional) | 4 Pages & Engine: "save this person" without the touch pad (key D) |
 | `save.cancel` | request_id | 4 Pages & Engine: the person declined on the phone or console |
-| `person.rename` | person_id, name | 1 Vision |
+| `person.rename` | person_id, name, tier (optional: `close`, `familiar`, `other`) | 1 Vision |
 | `person.delete` | person_id | 1 Vision + 2 Audio & Lang (delete every file) |
 | `session.forget` | — | 4 Pages & Engine publishes `session.forget` |
 | `pause.toggle` | — | 4 Pages & Engine publishes `paused` |
@@ -332,8 +333,32 @@ spans with `talkers == 1` (a confident face match that is the lip-synced talker,
 for them and higher than for anyone else, at most once per `adapt_gap_s`: the embedding joins
 a bank of at most `adapt_max_prints` glasses prints, and their score is the better of the
 base print and the bank's mean. The base print is never replaced. `voice.json`: `consent,
-consent_t, source` (`station` or `glasses`; missing = `glasses`), `embedding`, `adapted`
+automatic` (true only for an automatic profile), `consent_t` (capture timestamp for an automatic
+profile), `source` (`station` or `glasses`; missing = `glasses`), `embedding`, `adapted`
 (the bank, when `adapt_persist`). Deleted with the person.
 
 **Privacy.** Frames, face crops and audio exist only in memory during the save; the preview
 goes only to the page that started it and is never stored. Only prints are saved.
+
+## Automatic contact memory
+
+Attune uses persistent automatic contact memory. After fusion attributes a final
+caption to a visible face (`face`, or two distinct `probable_face` finals), Vision saves that
+face's recent quality-gated prints as an unnamed `auto-...` profile. It checks the gallery
+first to avoid duplicates. A confidently harvested voice vector for that track can be saved
+under the same profile; raw audio is discarded. Automatic profiles carry `source: "auto"`
+and no consent timestamp. Manual station or glasses enrollment still requires the person
+to tick consent; these profiles carry `source: "manual"` and are protected from automatic
+replacement. A manual save of an automatic face replaces the automatic profile.
+
+Profiles are grouped as `close`, `familiar` and `other`. Manual saves start close; the wearer
+can change a profile's tier. Automatic saves start in others and move to familiar after five
+encounters at least one hour apart. The gallery holds at most 150 profiles while automatic
+profiles are available for replacement; it evicts the least encountered, oldest automatic
+profile outside close. Manual and close profiles are never evicted automatically. An explicit
+self-introduction can prompt name confirmation immediately. A contextual name requires at
+least two distinct direct addresses associated with one visible unknown or automatic face;
+the wearer can confirm the proposal before automatic promotion. Five distinct uses across at
+least two UTC dates, with a clear lead over other candidates, promote an automatic name;
+a rejected suggestion is blocked from later promotion. `person.delete` removes both face and
+voice prints. `session.forget` removes only data that was never persisted.

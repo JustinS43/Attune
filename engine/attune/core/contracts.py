@@ -36,6 +36,7 @@ CAPTION_RETRACT = "caption.retract"
 CAPTION_TRANSLATION = "caption.translation"
 SCENE = "scene"
 NAME_PROPOSAL = "name.proposal"
+NAME_EVIDENCE = "name.evidence"
 ALERT = "alert"
 REPLY_SUGGESTIONS = "reply.suggestions"
 SENSORS_LEVELS = "sensors.levels"
@@ -86,6 +87,7 @@ TOPICS = frozenset(
         CAPTION_TRANSLATION,
         SCENE,
         NAME_PROPOSAL,
+        NAME_EVIDENCE,
         ALERT,
         REPLY_SUGGESTIONS,
         SENSORS_LEVELS,
@@ -417,6 +419,14 @@ class NameProposal:
 
 
 @dataclass
+class NameEvidence:
+    track_id: int
+    person_id: str | None
+    name: str
+    utt_id: str
+
+
+@dataclass
 class Alert:
     alert_id: str
     kind: str  # smoke, co, doorbell
@@ -486,7 +496,7 @@ class EnrollResult:
     ok: bool
     reason: str = ""
     track_id: int | None = None
-    source: str = "glasses"  # "station": saved at the laptop (V-23 / A-21)
+    source: str = "glasses"  # "station": laptop save; "auto": conversation contact memory
     session_id: str | None = None  # the station save it belongs to
 
 
@@ -499,7 +509,7 @@ class EnrollProgress:
     fraction: float
     person_id: str | None = None
     hint: str = ""
-    source: str = "glasses"  # "station": saved at the laptop (V-23 / A-21)
+    source: str = "glasses"  # "station": laptop save; "auto": conversation contact memory
     session_id: str | None = None
 
 
