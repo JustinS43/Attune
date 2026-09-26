@@ -234,7 +234,7 @@ body[data-view="guide"] .gcol { opacity: 1; transform: none; }
 .gone {
   display: inline-block; margin-left: 8px; padding: 1px 7px;
   border-radius: 999px; vertical-align: 1px;
-  font: 650 10px/1.4 var(--attune-font-text); letter-spacing: 0.08em;
+  font: 650 11px/1.35 var(--attune-font-text); letter-spacing: 0.08em;
   color: #ffc857; background: rgba(255, 200, 87, 0.1); border: 1px solid rgba(255, 200, 87, 0.45);
 }
 .gcard h4 { margin: 0; font: 650 18px/1.2 var(--attune-font-display); }

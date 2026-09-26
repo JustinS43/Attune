@@ -285,3 +285,97 @@ def test_clock_map_uses_minimum_latency():
     assert cm.to_engine(2000, 6.001) == pytest.approx(6.001)
     # a late line (arrives 80 ms late) is mapped back onto the board's timeline
     assert cm.to_engine(3000, 7.081) == pytest.approx(7.001)
+
+
+# ---------------------------------------------------------------- H-17
+
+
+def test_test_pattern_plays_one_cycle_then_stops(rig):
+    """The console's light-and-buzz buttons have no Stop: a looping test ends by itself."""
+    from attune.hardware.service import one_cycle_stop_s
+
+    assert one_cycle_stop_s("T3") == pytest.approx(3.0)
+    assert one_cycle_stop_s("T4") == pytest.approx(1.2)
+    assert one_cycle_stop_s("BELL") is None
+    fake = rig.fake()
+    rig.bus.publish(
+        "command", {"name": "pattern.test", "args": {"name": "T4", "side": "R"}}
+    )
+    assert wait_for(lambda: fake.active_pattern == "T4")
+    assert wait_for(lambda: fake.active_pattern is None, timeout=3.0)
+    assert fake.counts.get("STOP", 0) == 1
+
+
+def test_test_stop_leaves_a_newer_pattern_alone(rig):
+    fake = rig.fake()
+    rig.bus.publish(
+        "command", {"name": "pattern.test", "args": {"name": "T4", "side": "L"}}
+    )
+    assert wait_for(lambda: fake.active_pattern == "T4")
+    rig.bus.publish("hw.pattern", {"name": "T3", "side": "L"})  # a real alarm meanwhile
+    assert wait_for(lambda: fake.active_pattern == "T3")
+    time.sleep(1.6)
+    assert fake.active_pattern == "T3"
+    assert fake.counts.get("STOP", 0) == 0
+
+
+def test_test_stop_leaves_an_active_alert_alone(rig):
+    fake = rig.fake()
+    rig.bus.publish(
+        "alert", {"alert_id": "a1", "kind": "smoke", "side": "left", "state": "start"}
+    )
+    rig.bus.publish(
+        "command", {"name": "pattern.test", "args": {"name": "T4", "side": "L"}}
+    )
+    assert wait_for(lambda: fake.active_pattern == "T4")
+    assert rig.service.router.current_alert() is not None
+    time.sleep(1.6)
+    assert fake.counts.get("STOP", 0) == 0
+
+
+def test_stop_cancels_the_test_timer(rig):
+    fake = rig.fake()
+    rig.bus.publish(
+        "command", {"name": "pattern.test", "args": {"name": "T3", "side": "B"}}
+    )
+    assert wait_for(lambda: fake.active_pattern == "T3")
+    rig.bus.publish("hw.stop", {})
+    assert wait_for(lambda: fake.active_pattern is None)
+    assert rig.service._test_timer is None
+
+
+def test_board_restart_is_noticed(rig):
+    """A brown-out resets the board: its clock starts again and it says READY; the laptop
+    counts it, warns, and sends the settings again."""
+    fake = rig.fake()
+    link = rig.service.link
+    assert wait_for(
+        lambda: link._board_ms is not None and link._board_ms > 700, timeout=3.0
+    )
+    cfg_before = fake.counts.get("CFG", 0)
+    fake.reboot()
+    assert wait_for(lambda: link.metrics["board_restarts"] == 1, timeout=2.0)
+    assert wait_for(lambda: link.metrics["ready_again"] >= 1, timeout=2.0)
+    assert wait_for(lambda: fake.counts.get("CFG", 0) >= cfg_before + 4, timeout=2.0)
+    assert wait_for(lambda: fake.icon == "HEART", timeout=2.0)
+    assert rig.service.status()["metrics"]["board_restarts"] == 1
+
+
+def test_relink_after_heartbeat_gap_is_not_a_restart(rig):
+    fake = rig.fake()
+    link = rig.service.link
+    link.send_heartbeat = False
+    assert wait_for(lambda: fake.icon == "LOST", timeout=2.0)
+    link.send_heartbeat = True
+    assert wait_for(lambda: fake.icon == "HEART", timeout=2.0)
+    time.sleep(0.2)
+    assert link.metrics["ready_again"] >= 1
+    assert link.metrics["board_restarts"] == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "used"), [(0, 0.1), (-1, 0.1), (5, 1.0), ("fast", 0.5), (0.25, 0.25)]
+)
+def test_heartbeat_period_is_kept_sane(value, used):
+    """heartbeat_s = 0 used to send ~45 HB lines a second; 5 s would trip the 2 s stop."""
+    assert serial_link.heartbeat_period(value) == pytest.approx(used)

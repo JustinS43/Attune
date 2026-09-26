@@ -36,7 +36,7 @@ if (palette === 'apricot') {
 }
 
 const state = {
-  screen: 'home', theme: 'light', paused: false, powered: true,
+  screen: 'home', theme: 'light', paused: false, powered: true, cameraOn: true,
   features: { captions: true, names: true, alerts: true, translation: true },
   people: [
     { id: 'maya', name: 'Maya Chen', seen: 12, color: '', consent: true },
@@ -185,6 +185,12 @@ function timeNow() {
   return new Intl.DateTimeFormat('en-US', {hour: 'numeric', minute: '2-digit'}).format(new Date());
 }
 
+/** A language worth a tag: not English and not 'und'/'unk' (the language wasn't known). */
+function isOtherLanguage(lang) {
+  const l = String(lang || '').toLowerCase().split(/[-_]/)[0];
+  return !!l && !['en', 'und', 'unk', 'xx', 'auto'].includes(l);
+}
+
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -194,6 +200,7 @@ function glassesStatus() {
   if (state.live) {
     if (!state.connected) return {title: 'Reconnecting to Attune…', sub: 'Showing the last captions received', dot: true, dotClass: 'off'};
     if (state.paused) return {title: 'Glasses connected', sub: 'Recognition is paused', dot: true, dotClass: 'paused'};
+    if (!state.cameraOn) return {title: 'Glasses connected', sub: 'Camera off · captions still live', dot: true, dotClass: 'paused'};
     return {title: 'Glasses connected', sub: 'Captions are live', dot: true};
   }
   return {title: state.powered ? 'Glasses preview ready' : 'Glasses preview off', sub: state.powered ? (state.paused ? 'Recognition paused in this demo' : 'Demo captions, not connected') : 'Turn on in Settings to resume', dot: state.powered && !state.paused};
@@ -742,7 +749,7 @@ function renderSettings() {
     const link = state.hwLink;
     content.append(pressCard({
       title: state.connected ? 'Connected to Attune' : 'Reconnecting to Attune…',
-      sub: !state.connected ? 'Commands are sent when the link is back' : state.paused ? 'Recognition is paused' : link?.connected ? `Captions live · rig firmware ${link.firmware || '?'}` : 'Captions live · light-and-buzz rig not connected',
+      sub: !state.connected ? 'Commands are sent when the link is back' : state.paused ? 'Recognition is paused' : !state.cameraOn ? 'Captions live · camera off' : link?.connected ? `Captions live · rig firmware ${link.firmware || '?'}` : 'Captions live · light-and-buzz rig not connected',
       action: 'pause', dot: true, dotClass: !state.connected ? 'off' : state.paused ? 'paused' : ''
     }));
   } else {
@@ -776,7 +783,11 @@ function renderSettings() {
   const on = state.live ? !state.paused : state.powered;
   const power = button(on ? 'Turn off glasses' : 'Turn on glasses', on ? 'danger full' : 'primary full', 'toggle-power');
   power.prepend(icon('power'));
-  actions.append(pause, power, button('Forget this session', 'outline full', 'forget'));
+  // the camera alone: captions and sound alerts keep working without it
+  const camera = button(state.cameraOn ? 'Turn camera off' : 'Turn camera on', 'outline full', 'camera');
+  camera.prepend(icon('camera'));
+  camera.setAttribute('aria-pressed', String(!state.cameraOn));
+  actions.append(pause, camera, power, button('Forget this session', 'outline full', 'forget'));
   content.append(actions, el('p', 'subtle-center', state.live
     ? 'Turning off pauses all recognition on the laptop. Nothing leaves the laptop except text you type to speak.'
     : 'Demo mode: these controls only change this preview. Open the page from the Attune laptop to go live.'));
@@ -819,7 +830,7 @@ function fillLiveFeed(feed) {
     const head = el('div', 'live-head');
     const who = el('strong', `live-name ${colorFor(name)}`, name);
     head.append(who);
-    if (c.lang && c.lang !== 'en') head.append(el('span', 'lang-tag', c.lang.toUpperCase()));
+    if (isOtherLanguage(c.lang)) head.append(el('span', 'lang-tag', c.lang.toUpperCase()));
     if (c.speaker?.kind === 'offscreen') head.append(el('span', 'side-tag', c.speaker.side === 'left' ? '← off screen' : c.speaker.side === 'right' ? 'off screen →' : 'off screen'));
     head.append(el('span', 'timeline-time', c.time));
     card.append(head, el('p', '', captionText(c)));
@@ -974,6 +985,7 @@ function onMessage(msg) {
     case 'welcome':
       state.sessionId = msg.session_id ?? state.sessionId;
       state.paused = !!msg.paused;
+      if (typeof msg.camera_on === 'boolean') state.cameraOn = msg.camera_on;
       if (Array.isArray(msg.config?.presets)) state.presets = msg.config.presets;
       station.configure(msg.config?.enroll);
       refresh();
@@ -1081,6 +1093,12 @@ function onMessage(msg) {
         showToast(`Spoken aloud with ${VOICE_NAME[msg.voice] || msg.voice}.`);
       }
       break;
+    case 'camera':
+      if (state.cameraOn === !!msg.on) break;
+      state.cameraOn = !!msg.on;
+      refresh();
+      showToast(state.cameraOn ? 'Camera on. Names are back.' : 'Camera off. Captions and sound alerts keep working.');
+      break;
     case 'hw_link':
       state.hwLink = {connected: !!msg.connected, firmware: msg.firmware, driver: msg.driver};
       if (state.screen === 'settings') refresh();
@@ -1174,6 +1192,10 @@ document.addEventListener('click', async event => {
   if (action === 'pause') {
     if (state.live) { link.send('pause.toggle'); return; }
     state.paused = !state.paused; render(); showToast(state.paused ? 'Recognition paused in the demo.' : 'Recognition resumed in the demo.'); return;
+  }
+  if (action === 'camera') {
+    if (state.live) { link.send('camera.set', {on: !state.cameraOn}); return; }
+    state.cameraOn = !state.cameraOn; render(); showToast(state.cameraOn ? 'Camera on in the demo.' : 'Camera off in the demo. Captions keep working.'); return;
   }
   if (action === 'toggle-power') {
     if (state.live) {

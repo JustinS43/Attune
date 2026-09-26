@@ -67,3 +67,5 @@ body.palette-apricot-preview {
 .palette-apricot input:focus-visible,
 .palette-apricot textarea:focus-visible,
 .palette-apricot select:focus-visible { outline-color: #ce725f; }
+/* the 11 px eyebrow needs the darker accent to reach 4.5:1 on the cream background (P-39) */
+.palette-apricot .eyebrow { color: var(--teal-strong); }
