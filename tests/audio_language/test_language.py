@@ -326,3 +326,35 @@ def test_llm_health_reports_offline_and_recovery(config, bus):
     client.warm, client.error = True, ""
     service._error = "old job failed"
     assert service._health() == {"ok": True, "detail": "ready", "metrics": {"warm": True, "pending": 0}}
+
+
+def test_warm_up_gets_the_model_load_timeout(monkeypatch):
+    """Loading the model takes seconds; only loaded answers use the short timeout."""
+    import attune.llm.client as client_module
+
+    timeouts = []
+
+    class FakeConnection:
+        def __init__(self, host, port, timeout):
+            timeouts.append(timeout)
+
+        def request(self, *args):
+            pass
+
+        def getresponse(self):
+            class Response:
+                status = 200
+
+                def read(self, n):
+                    return b'{"message": {"content": "{}"}}'
+
+            return Response()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(client_module.http.client, "HTTPConnection", FakeConnection)
+    client = OllamaClient({"timeout_s": 1.5, "load_timeout_s": 60})
+    client._request({"messages": []})
+    client._request({"messages": [{"role": "user", "content": "hi"}]})
+    assert timeouts == [60, 1.5]
