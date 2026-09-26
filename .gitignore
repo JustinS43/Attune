@@ -1,0 +1,43 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Secrets and local config
+.env
+config/attune.toml
+
+# Models and runtime data (never commit)
+models/*
+!models/README.md
+data/*
+!data/README.md
+*.onnx
+*.pt
+*.pth
+*.bin
+*.gguf
+*.safetensors
+*.tflite
+*.task
+
+# Recordings and dumps
+*.mkv
+*.mp4
+*.wav
+*.flac
+*.npy
+*.sql.gz
+*.dump
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+node_modules/
