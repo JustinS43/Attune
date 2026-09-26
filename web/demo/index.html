@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="../phone/favicon.svg">
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="./demo.css">
+  <link rel="stylesheet" href="./guide.css">
   <script type="module" src="./demo.js"></script>
 </head>
 <body data-view="split">
@@ -31,6 +32,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="3" width="9" height="18" rx="2.2"/><path d="M11 18h2"/></svg>
         <span>Phone</span>
       </button>
+      <button type="button" role="radio" data-view="guide" title="Which glasses show captions which way (Alt+4)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.8 11.2h2.4M19.8 11.2h2.4"/><rect x="3.2" y="8.2" width="7.6" height="7.4" rx="3"/><rect x="13.2" y="8.2" width="7.6" height="7.4" rx="3"/><path d="M10.8 10.8q1.2-1.1 2.4 0"/></svg>
+        <span>Glasses guide</span>
+      </button>
     </div>
     <div class="hint"><kbd>`</kbd> switch view</div>
   </header>
@@ -48,5 +53,9 @@
       <p class="caption">Attune phone app</p>
     </section>
   </main>
+
+  <section class="guide" id="guide" aria-labelledby="guide-title" tabindex="-1">
+    <noscript><p class="guide-noscript">The glasses guide needs JavaScript.</p></noscript>
+  </section>
 </body>
 </html>

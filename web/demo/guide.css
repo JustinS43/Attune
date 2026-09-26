@@ -1,0 +1,332 @@
+/*
+ * Glasses guide: the demo's fourth view (Colour / Mono / Corner and the glasses that use each).
+ *
+ * Section 4 - Pages, Engine & Demo. TODO: P-18.
+ */
+
+/* ------------------------------------------------------------------ switching views */
+.stage {
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s;
+}
+body[data-view="guide"] .stage {
+  opacity: 0;
+  transform: scale(0.985);
+  visibility: hidden; /* the frames stay loaded; they just aren't shown */
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+}
+
+.guide {
+  position: fixed;
+  inset: var(--bar-h) 0 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(14px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+  outline: none;
+}
+body[data-view="guide"] .guide {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s;
+}
+
+.guide::-webkit-scrollbar { width: 10px; }
+.guide::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------------ layout */
+.guide-inner {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 42px 32px 56px;
+}
+
+.guide-hero { text-align: center; max-width: 860px; margin: 0 auto 34px; }
+.guide-hero .attune-eyebrow { margin: 0 0 12px; color: var(--attune-mint); }
+.guide-hero h1 {
+  margin: 0;
+  font: 650 clamp(28px, 3.1vw, 42px)/1.12 var(--attune-font-display);
+  letter-spacing: -0.01em;
+  background: linear-gradient(180deg, #fff 30%, #cfe9f5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.guide-lede {
+  margin: 14px auto 0;
+  max-width: 720px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--attune-text-2);
+}
+.guide-legend {
+  display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px;
+  margin: 18px 0 0; padding: 0; list-style: none;
+  font-size: 12.5px; color: var(--attune-text-3);
+}
+.guide-legend li { display: inline-flex; align-items: center; gap: 8px; }
+.lg { display: inline-block; width: 22px; height: 12px; border-radius: 3px; }
+.lg-eye { height: 0; border-top: 2px dashed rgba(255, 255, 255, 0.4); border-radius: 0; }
+.lg-region { border: 1.5px dashed var(--attune-mint); background: rgba(124, 245, 214, 0.08); }
+.lg-dim { background: #151a22; border: 1px solid rgba(255, 255, 255, 0.1); }
+
+.guide-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 22px;
+  align-items: start;
+}
+/* Wide: the columns share row tracks (subgrid), so the mini views, chips and buttons line up. */
+@media (min-width: 1181px) {
+  .gcol { display: grid; grid-row: span 9; grid-template-rows: subgrid; row-gap: 0; align-content: start; }
+  .gcol-head { display: contents; }
+  .gcol .gtry { align-self: end; }
+  .gcol .gchips { align-content: flex-start; }
+}
+
+/* ------------------------------------------------------------------ a column (one look) */
+.gcol {
+  --acc: var(--attune-mint);
+  --acc-2: var(--attune-sky);
+  --acc-ink: #06201b;
+  position: relative;
+  padding: 24px 22px 22px;
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, var(--acc) 9%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 560ms var(--ease), transform 560ms var(--ease);
+  transition-delay: calc(var(--i) * 70ms + 60ms);
+}
+.gcol::before {
+  content: "";
+  position: absolute; left: 24px; right: 24px; top: -1px; height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--acc), var(--acc-2), transparent);
+  opacity: 0.85;
+}
+body[data-view="guide"] .gcol { opacity: 1; transform: none; }
+
+.gcol-mono { --acc: #45ff6e; --acc-2: #45ff6e; --acc-ink: #03230c; }
+.gcol-corner { --acc: #ffffff; --acc-2: #a9d6ff; --acc-ink: #0b1622; }
+
+.geyebrow {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0 0 10px;
+  font: 650 11px/1.2 var(--attune-font-text);
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--attune-text-3);
+}
+.gswatch {
+  width: 12px; height: 12px; border-radius: 4px;
+  background: linear-gradient(135deg, var(--acc), var(--acc-2));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--acc) 60%, transparent);
+}
+.gcol h2 {
+  margin: 0;
+  font: 680 32px/1.05 var(--attune-font-display);
+  letter-spacing: -0.01em;
+}
+.gtitle {
+  margin: 6px 0 0;
+  font: 600 14.5px/1.3 var(--attune-font-text);
+  color: var(--acc);
+}
+.gcol-color .gtitle { color: var(--attune-mint); }
+.gsees {
+  margin: 12px 0 0;
+  font-size: 14px; line-height: 1.55;
+  color: var(--attune-text-2);
+}
+
+.where { margin: 16px 0 0; }
+.where-svg {
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 14px 40px rgba(0, 0, 0, 0.4);
+}
+.where figcaption {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 9px;
+  font-size: 12px; line-height: 1.4;
+}
+.where-k { font-weight: 650; color: var(--attune-text); }
+.where-v { color: var(--attune-text-3); font-variant-numeric: tabular-nums; }
+
+.gchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.gchips li {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font: 600 12px/1.2 var(--attune-font-text);
+  color: var(--attune-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-variant-numeric: tabular-nums;
+}
+.gchips li:first-child { border-color: color-mix(in srgb, var(--acc) 45%, transparent); color: var(--acc); }
+.gcol-color .gchips li:first-child { color: var(--attune-mint); }
+
+.gtry {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  width: 100%; height: 46px; margin-top: 18px;
+  border: 0; border-radius: 14px;
+  background: linear-gradient(135deg, var(--acc), var(--acc-2));
+  color: var(--acc-ink);
+  font: 700 14.5px/1 var(--attune-font-text);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--acc) 22%, transparent);
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), filter 160ms;
+}
+.gtry:hover { transform: translateY(-1px); filter: brightness(1.06); box-shadow: 0 12px 32px color-mix(in srgb, var(--acc) 32%, transparent); }
+.gtry:active { transform: translateY(0); }
+.gtry svg, .gtry-mini svg { width: 14px; height: 14px; fill: currentColor; }
+.gtry:focus-visible, .gtry-mini:focus-visible, .glink:focus-visible {
+  outline: 2px solid var(--acc); outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ the glasses */
+.glist-h {
+  display: flex; align-items: center; gap: 12px;
+  margin: 28px 0 12px;
+  font: 650 11px/1.2 var(--attune-font-text);
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--attune-text-3);
+}
+.glist-h::after { content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.09); }
+
+.glist { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+
+.gcard article {
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.028);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 200ms, background 200ms;
+}
+.gcard article:hover { border-color: rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.04); }
+.gcard.is-model article {
+  border-color: color-mix(in srgb, var(--acc) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--acc) 12%, transparent), 0 10px 34px color-mix(in srgb, var(--acc) 8%, transparent);
+}
+
+.gart {
+  display: flex; justify-content: center;
+  padding: 8px 12px 0;
+  background:
+    radial-gradient(70% 90% at 50% 30%, rgba(255, 255, 255, 0.07), transparent 70%),
+    linear-gradient(180deg, #151a22, #0d1016);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.glasses-art { display: block; width: 100%; max-width: 330px; height: auto; }
+
+.gbody { padding: 14px 16px 16px; }
+.ghead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.gmaker {
+  margin: 0 0 3px;
+  font: 650 11px/1.2 var(--attune-font-text);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--attune-text-3);
+}
+.gone {
+  display: inline-block; margin-left: 8px; padding: 1px 7px;
+  border-radius: 999px; vertical-align: 1px;
+  font: 650 10px/1.4 var(--attune-font-text); letter-spacing: 0.08em;
+  color: #ffc857; background: rgba(255, 200, 87, 0.1); border: 1px solid rgba(255, 200, 87, 0.45);
+}
+.gcard h4 { margin: 0; font: 650 18px/1.2 var(--attune-font-display); }
+
+.gstatus {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font: 650 11px/1.2 var(--attune-font-text);
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.s-shipping { color: #7cf5d6; background: rgba(124, 245, 214, 0.08); }
+.s-preorder { color: #ffc857; background: rgba(255, 200, 87, 0.08); }
+.s-prototype { color: #9dd0ff; background: rgba(106, 184, 255, 0.1); }
+.s-discontinued { color: #ff9a9b; background: rgba(255, 77, 79, 0.1); }
+.s-replaced { color: rgba(255, 255, 255, 0.72); background: rgba(255, 255, 255, 0.06); }
+
+.gmodel {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin: 10px 0 0; padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  font: 650 12px/1.2 var(--attune-font-text);
+  color: var(--acc-ink);
+  background: linear-gradient(135deg, var(--acc), var(--acc-2));
+}
+.gmodel svg { width: 13px; height: 13px; fill: currentColor; }
+
+.gfacts { margin: 12px 0 0; display: grid; gap: 6px; }
+.gfacts div { display: grid; grid-template-columns: 94px 1fr; gap: 10px; }
+.gfacts dt { font-size: 12px; line-height: 1.45; color: var(--attune-text-3); }
+.gfacts dd { margin: 0; font-size: 13px; line-height: 1.45; color: var(--attune-text); font-variant-numeric: tabular-nums; }
+
+.gnote { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--attune-text-2); }
+
+.gactions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+.glink {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 600 13px/1.2 var(--attune-font-text);
+  color: #9dd0ff;
+  text-decoration: none;
+  border-radius: 4px;
+}
+.glink:hover { text-decoration: underline; text-underline-offset: 3px; }
+.glink svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.gtry-mini {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--attune-text);
+  font: 600 12.5px/1 var(--attune-font-text);
+  cursor: pointer;
+}
+.gtry-mini:hover { background: rgba(255, 255, 255, 0.1); }
+
+.guide-foot {
+  max-width: 860px;
+  margin: 34px auto 0;
+  text-align: center;
+  font-size: 12px; line-height: 1.55;
+  color: var(--attune-text-3);
+}
+.guide-foot code { font-family: var(--attune-font-mono); font-size: 11.5px; color: var(--attune-text-2); }
+.guide-noscript { padding: 40px; text-align: center; color: var(--attune-text-2); }
+
+/* ------------------------------------------------------------------ narrow */
+@media (max-width: 1180px) {
+  .guide-cols { grid-template-columns: minmax(0, 720px); justify-content: center; }
+  .gcol + .gcol { margin-top: 22px; }
+  .glist { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+@media (max-width: 640px) {
+  .guide-inner { padding: 28px 16px 40px; }
+  .gcol { padding: 20px 16px 18px; border-radius: 20px; }
+  .glist { grid-template-columns: minmax(0, 1fr); }
+  .gfacts div { grid-template-columns: 84px 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage, .guide, .gcol, .gtry { transition: none !important; }
+  .guide, .gcol { transform: none !important; }
+}
