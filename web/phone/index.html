@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f6f2">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Attune · Phone preview</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V22m-4 0h8"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m10 2-.5 2.2-2 .9-2-.9-2.3 2.3.9 2-1 2-2.1.5v3l2.2.5.9 2-.9 2L5.5 21l2-.9 2 .9.5 2h4l.5-2 2-.9 2 .9 2.3-2.3-.9-2 .9-2L21 14v-4l-2.2-.5-.9-2 .9-2L16.5 3l-2 .9-2-.9L12 2z"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M2 20v-2a6 6 0 0 1 12 0v2z"/><circle cx="17" cy="9" r="2"/><path d="M16 15a5 5 0 0 1 6 5h-5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4m4-8v12m4-16v20m4-15v10m4-7v4"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9zM16 9a5 5 0 0 1 0 6m2-9a9 9 0 0 1 0 12"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 4v16M16 4v16"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+  </svg>
+
+  <div class="desktop-hint"><span class="hint-dot"></span> ATTUNE PHONE PREVIEW <span class="hint-sep">/</span> Interactive local demo</div>
+  <div class="phone-shell">
+    <div class="phone-screen" id="app" data-theme="light">
+      <div class="status-bar" aria-hidden="true"><span>9:41</span><div class="island"></div><span class="status-icons"><span class="signal">▂▄▆</span><span>◕</span><span class="battery"></span></span></div>
+      <div class="app-viewport">
+        <main id="screen-content" tabindex="-1"></main>
+      </div>
+      <nav class="tab-bar" aria-label="Main navigation">
+        <button class="tab active" type="button" data-nav="home"><svg><use href="#i-home"></use></svg><span>Home</span></button>
+        <button class="tab" type="button" data-nav="history"><svg><use href="#i-clock"></use></svg><span>History</span></button>
+        <button class="tab" type="button" data-nav="speak"><svg><use href="#i-mic"></use></svg><span>Speak</span></button>
+        <button class="tab" type="button" data-nav="settings"><svg><use href="#i-settings"></use></svg><span>Settings</span></button>
+      </nav>
+      <div class="home-indicator" aria-hidden="true"></div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</body>
+</html>
