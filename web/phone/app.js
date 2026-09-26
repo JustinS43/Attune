@@ -42,6 +42,7 @@ const state = {
   ],
   contacts: [],
   contactDraft: {name: '', photo: '', consent: false},
+  editingContactId: null,
   proposal: 'Sam',
   history: [
     { speaker: 'Maya', text: 'We can meet by the entrance.', time: '2:14 PM', color: '' },
@@ -280,16 +281,30 @@ function renderPeople() {
     }
     copy.append(el('div', 'card-title', person.name), el('div', 'card-sub', sub));
     top.append(contactAvatar(person.name, person.color, person.contact?.photo), copy);
-    const actions = el('div', 'person-actions');
-    const rename = button('Rename', 'outline', 'rename-person');
-    const remove = button('Remove', 'outline', 'remove-person');
-    rename.dataset.personId = person.id;
-    remove.dataset.personId = person.id;
-    if (person.photoOnly) { rename.dataset.contactOnly = 'true'; remove.dataset.contactOnly = 'true'; }
-    rename.setAttribute('aria-label', `Rename ${person.name}`);
-    remove.setAttribute('aria-label', `Remove ${person.name}`);
-    actions.append(rename, remove);
-    card.append(top, actions);
+    if (state.editingContactId === person.id) {
+      const editor = el('div', 'contact-editor');
+      const label = el('label', 'enroll-label', 'Name');
+      const input = el('input', 'enroll-name');
+      input.id = 'contact-rename'; input.type = 'text'; input.maxLength = 60; input.value = person.name;
+      label.append(input);
+      const actions = el('div', 'person-actions');
+      const save = button('Save name', 'primary', 'save-rename'); save.dataset.personId = person.id;
+      if (person.photoOnly) save.dataset.contactOnly = 'true';
+      actions.append(save, button('Cancel', 'outline', 'cancel-rename'));
+      editor.append(label, actions);
+      card.append(top, editor);
+    } else {
+      const actions = el('div', 'person-actions');
+      const rename = button('Rename', 'outline', 'rename-person');
+      const remove = button('Remove', 'outline', 'remove-person');
+      rename.dataset.personId = person.id;
+      remove.dataset.personId = person.id;
+      if (person.photoOnly) { rename.dataset.contactOnly = 'true'; remove.dataset.contactOnly = 'true'; }
+      rename.setAttribute('aria-label', `Rename ${person.name}`);
+      remove.setAttribute('aria-label', `Remove ${person.name}`);
+      actions.append(rename, remove);
+      card.append(top, actions);
+    }
     list.append(card);
   }
   content.append(list);
@@ -1138,23 +1153,35 @@ document.addEventListener('click', async event => {
     state.proposal = ''; render(); showToast(accept ? 'Name confirmed for this session only.' : 'Name proposal dismissed.'); return;
   }
   if (action === 'rename-person') {
+    state.editingContactId = control.dataset.personId;
+    refresh();
+    document.querySelector('#contact-rename')?.focus();
+    return;
+  }
+  if (action === 'cancel-rename') {
+    state.editingContactId = null;
+    refresh();
+    return;
+  }
+  if (action === 'save-rename') {
+    const name = document.querySelector('#contact-rename')?.value.trim();
+    if (!name || name.length > 60) return showToast('Enter a name under 60 characters.');
     if (control.dataset.contactOnly) {
       const contact = state.contacts.find(item => item.id === control.dataset.personId);
       if (!contact) return;
-      const name = window.prompt('Rename contact', contact.name)?.trim();
-      if (name && name.length <= 60 && name !== contact.name) {
-        try { await saveContact({...contact, name}); contact.name = name; render(); }
-        catch { showToast('Could not rename this contact.'); }
-      }
-      return;
-    }
-    const person = state.people.find(item => item.id === control.dataset.personId);
-    if (!person) return;
-    const name = window.prompt('Rename saved person', person.name)?.trim();
-    if (name && name.length <= 60 && name !== person.name) {
+      try { await saveContact({...contact, name}); contact.name = name; }
+      catch { return showToast('Could not rename this contact.'); }
+    } else {
+      const person = state.people.find(item => item.id === control.dataset.personId);
+      if (!person) return;
       if (state.live) link.send('person.rename', {person_id: person.id, name});
-      person.name = name; render();
+      person.name = name;
+      const contact = state.contacts.find(item => item.personId === person.id);
+      if (contact) { contact.name = name; saveContact(contact).catch(() => showToast('Could not update the local contact photo.')); }
     }
+    state.editingContactId = null;
+    refresh();
+    showToast('Name updated.');
     return;
   }
   if (action === 'remove-person') {
