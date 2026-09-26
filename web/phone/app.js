@@ -11,6 +11,7 @@
 
 import { connect } from '../shared/ws.js';
 import { createSaveSheet } from './save.js';
+import {listContacts, saveContact, deleteContact, photoFromFile} from './contacts.js';
 
 const app = document.querySelector('#app');
 const content = document.querySelector('#screen-content');
@@ -39,6 +40,8 @@ const state = {
     { id: 'maya', name: 'Maya Chen', seen: 12, color: '', consent: true },
     { id: 'leo', name: 'Leo Martin', seen: 8, color: 'blue', consent: true }
   ],
+  contacts: [],
+  contactDraft: {name: '', photo: '', consent: false},
   proposal: 'Sam',
   history: [
     { speaker: 'Maya', text: 'We can meet by the entrance.', time: '2:14 PM', color: '' },
@@ -62,6 +65,11 @@ const state = {
   faces: new Map()
 };
 let enrollmentFeed = null;
+let portrait = '';
+let portraitReady = false;
+let latestFaceBoxes = new Map();
+let frameBusy = false;
+let lastPortraitFrameAt = 0;
 
 function icon(name, className = 'icon') {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -127,6 +135,14 @@ function iconBubble(name) {
 
 function avatar(name, color = '') {
   return el('span', `avatar ${color}`, (name || '?').slice(0, 1).toUpperCase());
+}
+
+function contactAvatar(name, color, photo) {
+  if (!photo) return avatar(name, color);
+  const image = el('img', 'avatar contact-avatar');
+  image.src = photo;
+  image.alt = '';
+  return image;
 }
 
 function previewLine(name, line, color) {
@@ -242,28 +258,34 @@ function proposalCard() {
 
 function renderPeople() {
   content.append(back(), brand());
-  heading('People', 'Familiar voices, easier to follow');
+  heading('People', 'Your familiar faces, all in one place');
   if (state.live) content.append(pill());
-  content.append(button('Add a familiar face and voice', 'outline full', 'enroll'));
-  content.append(el('h2', 'section-title', state.live ? 'Saved with consent' : 'Frequently seen'));
+  const add = el('div', 'contact-actions');
+  add.append(button('Remember someone', 'primary full', 'enroll'), button('Add a photo contact', 'outline full', 'contact-new'));
+  content.append(add);
+  content.append(el('h2', 'section-title', 'Contacts'));
   const list = el('div', 'people-list');
-  if (!state.people.length) list.append(el('div', 'card empty', state.live ? 'Nobody is saved yet. Use the Enroll tab together with the person you want to save.' : 'No saved people in this preview.'));
-  for (const person of state.people) {
+  const enrolled = state.people.map(person => ({...person, contact: state.contacts.find(item => item.personId === person.id)}));
+  const uploaded = state.contacts.filter(item => !item.personId).map(item => ({id: item.id, name: item.name, contact: item, photoOnly: true}));
+  const entries = [...enrolled, ...uploaded].sort((a, b) => a.name.localeCompare(b.name));
+  if (!entries.length) list.append(el('div', 'card empty', 'No contacts yet. Add a photo or invite someone to save their face and voice.'));
+  for (const person of entries) {
     const card = el('div', 'card person-card');
     const top = el('div', 'person-top');
     const copy = el('div', 'grow');
-    let sub = `Seen ${person.seen} times · Saved with consent`;
-    if (state.live) {
+    let sub = person.photoOnly ? 'Photo contact · Recognition not set up' : `Seen ${person.seen} times · Saved with consent`;
+    if (state.live && !person.photoOnly) {
       const parts = [person.has_face ? 'Face' : '', person.has_voice ? 'Voice' : ''].filter(Boolean).join(' + ') || 'Name only';
       sub = `${parts} · Saved with consent${person.consent_t ? ` ${formatDate(person.consent_t)}` : ''}`;
     }
     copy.append(el('div', 'card-title', person.name), el('div', 'card-sub', sub));
-    top.append(avatar(person.name, person.color), copy);
+    top.append(contactAvatar(person.name, person.color, person.contact?.photo), copy);
     const actions = el('div', 'person-actions');
     const rename = button('Rename', 'outline', 'rename-person');
     const remove = button('Remove', 'outline', 'remove-person');
     rename.dataset.personId = person.id;
     remove.dataset.personId = person.id;
+    if (person.photoOnly) { rename.dataset.contactOnly = 'true'; remove.dataset.contactOnly = 'true'; }
     rename.setAttribute('aria-label', `Rename ${person.name}`);
     remove.setAttribute('aria-label', `Remove ${person.name}`);
     actions.append(rename, remove);
@@ -275,7 +297,39 @@ function renderPeople() {
   const hasProposal = state.live ? !!state.liveProposal : !!state.proposal;
   if (hasProposal) content.append(proposalCard());
   else content.append(el('div', 'card empty', 'No unconfirmed session names.'));
-  content.append(el('p', 'note', 'Session names disappear when you forget this session. Saving a person requires their consent through enrollment.'));
+  content.append(el('p', 'note', 'Photo contacts stay on this device. Recognition is added only after the person agrees and completes face and voice enrollment.'));
+}
+
+function renderNewContact() {
+  const draft = state.contactDraft;
+  content.append(back('people'), brand());
+  heading('New contact', 'Add a photo and name to your list.', 'Keep someone close');
+  const photo = el('div', 'enroll-photo card contact-photo');
+  if (draft.photo) {
+    const image = el('img', 'enroll-preview'); image.src = draft.photo; image.alt = 'Selected contact photo';
+    photo.append(image); photo.classList.add('has-image');
+  } else {
+    const placeholder = el('div', 'enroll-photo-placeholder');
+    placeholder.append(icon('camera'), el('span', '', 'Choose a clear photo showing their whole face'));
+    photo.append(placeholder);
+  }
+  content.append(photo);
+  const form = el('div', 'enroll-form card');
+  const fileLabel = el('label', 'enroll-label', 'Photo');
+  const file = el('input', 'contact-file');
+  file.id = 'contact-file'; file.type = 'file'; file.accept = 'image/*';
+  fileLabel.append(file);
+  const nameLabel = el('label', 'enroll-label', 'Name');
+  const name = el('input', 'enroll-name');
+  name.id = 'contact-name'; name.type = 'text'; name.maxLength = 60; name.placeholder = 'Their name'; name.value = draft.name;
+  nameLabel.append(name);
+  const consent = el('label', 'enroll-consent');
+  const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.id = 'contact-consent'; checkbox.checked = draft.consent;
+  consent.append(checkbox, el('span', '', 'I agree to save my photo and name on this device. Ask the person in the photo to tick this themselves.'));
+  const save = button('Save contact', 'primary full', 'save-contact');
+  save.id = 'save-contact'; save.disabled = !draft.photo || !draft.name.trim() || !draft.consent;
+  form.append(fileLabel, nameLabel, consent, save);
+  content.append(form, el('p', 'note', 'A photo contact appears in your list. Attune will not recognize them until they complete Remember Me in person.'));
 }
 
 function enrollLine(name) {
@@ -299,11 +353,10 @@ function renderEnroll() {
   const photo = el('div', 'enroll-photo card');
   const preview = el('img', 'enroll-preview');
   preview.id = 'enroll-preview';
-  preview.alt = 'Face preview from the Attune camera';
-  if (enrollment.photo) preview.src = enrollment.photo;
-  else if (state.faces.size) preview.src = (state.enroll.trackId !== null ? state.faces.get(state.enroll.trackId) : null)?.photo || [...state.faces.values()][0].photo;
+  preview.alt = 'Full face portrait from the Attune camera';
+  if (enrollment.photo || portrait) preview.src = enrollment.photo || portrait;
   const placeholder = el('div', 'enroll-photo-placeholder');
-  placeholder.append(icon('camera'), el('span', '', state.live ? 'Waiting for a face in the Attune camera…' : 'Connect to Attune to take a photo'));
+  placeholder.append(icon('camera'), el('span', '', state.live ? 'Move back until your whole face is in view…' : 'Connect to Attune to take a photo'));
   photo.append(preview, placeholder, el('span', 'enroll-camera-label', enrollment.photo ? 'PHOTO CAPTURED' : 'LIVE CAMERA PREVIEW'));
   photo.classList.toggle('has-image', !!preview.src);
   content.append(photo);
@@ -322,10 +375,10 @@ function renderEnroll() {
 
   if (enrollment.phase === 'ready' || enrollment.phase === 'captured') {
     const shutter = button(enrollment.photo ? 'Retake photo' : 'Take my photo', enrollment.photo ? 'outline full' : 'primary full', 'take-photo');
-    shutter.disabled = !state.live || !state.connected || !state.faces.size;
+    shutter.disabled = !state.live || !state.connected || !portraitReady;
     shutter.prepend(icon('camera'));
     content.append(shutter);
-    content.append(el('p', 'note', 'Stand in front of the Attune camera in good light. Your photo is a preview; the engine collects several face views after you agree to save.'));
+    content.append(el('p', 'note', 'Step back and face the Attune camera. The portrait includes your whole face and shoulders; recognition collects several views after you agree to save.'));
     if (enrollment.photo) {
       const form = el('div', 'enroll-form card');
       const label = el('label', 'enroll-label', 'Your name');
@@ -362,24 +415,63 @@ function renderEnroll() {
       content.append(button('Try again', 'primary full', 'enroll-again'));
     }
   }
-  content.append(el('div', 'info-card enroll-privacy', 'Attune saves your name, consent time, and face and voice prints on the laptop. The preview photo and spoken recording are not kept.'));
+  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and voice prints on the laptop. Your contact photo stays on this device; the spoken recording is not kept.'));
+  content.append(button(`View contacts (${state.people.length + state.contacts.filter(item => !item.personId).length})`, 'outline full enroll-contacts', 'people'));
 }
 
 function updateEnrollPreview() {
   if (state.screen !== 'enroll' || state.enroll.photo) return;
-  const first = state.enroll.trackId !== null ? state.faces.get(state.enroll.trackId) : [...state.faces.values()][0];
   const preview = document.querySelector('#enroll-preview');
   if (!preview) return;
-  if (first) preview.src = first.photo;
+  if (portrait) preview.src = portrait;
   else preview.removeAttribute('src');
-  preview.parentElement.classList.toggle('has-image', !!first);
+  preview.parentElement.classList.toggle('has-image', !!portrait);
   const shutter = document.querySelector('[data-action="take-photo"]');
-  if (shutter) shutter.disabled = !first || !state.connected;
+  if (shutter) shutter.disabled = !portraitReady || !state.connected;
+}
+
+async function updatePortrait(frame) {
+  if (frameBusy || state.enroll.photo || state.screen !== 'enroll') return;
+  if (performance.now() - lastPortraitFrameAt < 125) return;
+  lastPortraitFrameAt = performance.now();
+  const trackId = state.enroll.trackId ?? state.faces.keys().next().value;
+  const box = latestFaceBoxes.get(trackId);
+  if (!box) { portrait = ''; portraitReady = false; updateEnrollPreview(); return; }
+  frameBusy = true;
+  try {
+    const bitmap = await createImageBitmap(frame.blob);
+    try {
+      const [x, y, w, h] = box;
+      const height = Math.max(w * 2, h * 2.25);
+      const width = height * .75;
+      const left = x + w / 2 - width / 2;
+      const top = y - h * .55;
+      if (left < 0 || top < 0 || left + width > bitmap.width || top + height > bitmap.height) {
+        portraitReady = false; portrait = ''; updateEnrollPreview(); return;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = 360; canvas.height = 480;
+      canvas.getContext('2d').drawImage(bitmap, left, top, width, height, 0, 0, 360, 480);
+      portrait = canvas.toDataURL('image/jpeg', .84);
+      portraitReady = true;
+      updateEnrollPreview();
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    portraitReady = false;
+  } finally {
+    frameBusy = false;
+  }
 }
 
 function syncEnrollmentFeed() {
   if (state.screen === 'enroll' && state.live && state.connected && !enrollmentFeed) {
-    enrollmentFeed = connect({role: 'console', frames: false, onMessage(msg) {
+    enrollmentFeed = connect({role: 'console', frames: true, onFrame: updatePortrait, onMessage(msg) {
+      if (msg.type === 'scene') {
+        latestFaceBoxes = new Map((msg.faces || []).filter(face => Number.isInteger(face.track_id) && Array.isArray(face.box)).map(face => [face.track_id, face.box]));
+        return;
+      }
       if (msg.type !== 'thumbnails') return;
       state.faces = new Map((msg.thumbnails || []).filter(face => Number.isInteger(face.track_id) && face.jpeg_b64).map(face => [face.track_id, {photo: `data:image/jpeg;base64,${face.jpeg_b64}`} ]));
       if (state.enroll.trackId !== null && !state.faces.has(state.enroll.trackId) && !state.enroll.photo) state.enroll.trackId = null;
@@ -389,7 +481,7 @@ function syncEnrollmentFeed() {
       }
     }});
   } else if ((state.screen !== 'enroll' || !state.connected) && enrollmentFeed) {
-    enrollmentFeed.close(); enrollmentFeed = null; state.faces.clear();
+    enrollmentFeed.close(); enrollmentFeed = null; state.faces.clear(); latestFaceBoxes.clear(); portrait = ''; portraitReady = false; lastPortraitFrameAt = 0;
   }
 }
 
@@ -640,7 +732,7 @@ function renderSettings() {
     settingToggle('Translation', state.live ? 'English under Spanish, on every screen' : '', 'translation', 'wave'));
   content.append(features, el('h2', 'setting-label', 'Privacy'));
   const privacy = el('div', 'card setting-group');
-  const people = pressCard({title:'Known people', sub:`${state.people.length} saved with consent`, iconName:'people', action:'people'});
+  const people = pressCard({title:'Known people', sub:`${state.people.length + state.contacts.filter(item => !item.personId).length} contacts`, iconName:'people', action:'people'});
   const history = pressCard({title:'Conversation history', sub: state.live ? 'On the laptop · deleted after 24 hours' : 'Demo memory only · engine limit 24 hours', iconName:'clock', action:'history'});
   people.className = 'setting-row'; history.className = 'setting-row';
   privacy.append(people, history);
@@ -713,7 +805,7 @@ function render() {
     tab.classList.toggle('active', active);
     if (active) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
   });
-  ({home:renderHome, people:renderPeople, history:renderHistory, speak:renderSpeak, enroll:renderEnroll, settings:renderSettings, live:renderLive})[state.screen]();
+  ({home:renderHome, people:renderPeople, 'contact-new':renderNewContact, history:renderHistory, speak:renderSpeak, enroll:renderEnroll, settings:renderSettings, live:renderLive})[state.screen]();
   syncEnrollmentFeed();
   renderHint();
   viewport.scrollTop = 0;
@@ -879,6 +971,11 @@ function onMessage(msg) {
         if (msg.ok) {
           const person = state.people.find(p => p.id === msg.person_id);
           if (person) person.has_voice = true;
+          if (msg.person_id && e.photo) {
+            const contact = {id: `person:${msg.person_id}`, personId: msg.person_id, name: e.name.trim(), photo: e.photo, consentT: Date.now() / 1000};
+            saveContact(contact).then(() => { state.contacts = [...state.contacts.filter(item => item.id !== contact.id), contact]; if (state.screen === 'people') refresh(); })
+              .catch(() => showToast('Recognition was saved, but this device could not save the contact photo.'));
+          }
         }
       }
       if (state.screen === 'enroll') refresh();
@@ -892,6 +989,11 @@ function onMessage(msg) {
       else if (msg.action === 'enrolled' && i < 0) {
         state.people.push({id: msg.person_id, name: msg.name, has_face: true, has_voice: false, color: colorFor(msg.name), consent: true});
         showToast(`${msg.name}'s face is saved. Finish the voice step.`);
+      }
+      if (msg.action === 'deleted') {
+        const id = `person:${msg.person_id}`;
+        state.contacts = state.contacts.filter(item => item.id !== id);
+        deleteContact(id).catch(() => showToast('Could not remove the local contact photo.'));
       }
       if (['people', 'settings', 'enroll'].includes(state.screen)) refresh();
       break;
@@ -967,13 +1069,18 @@ document.addEventListener('click', async event => {
   const control = event.target.closest('[data-action], [data-nav]');
   if (!control) return;
   const action = control.dataset.action ?? control.dataset.nav;
-  if (['home','people','history','speak','enroll','settings','live'].includes(action)) return navigate(action);
-  if (action === 'select-face') { state.enroll.trackId = Number(control.dataset.trackId); refresh(); return; }
+  if (['home','people','contact-new','history','speak','enroll','settings','live'].includes(action)) return navigate(action);
+  if (action === 'select-face') { state.enroll.trackId = Number(control.dataset.trackId); portrait = ''; portraitReady = false; refresh(); return; }
   if (action === 'take-photo') {
-    const entry = state.enroll.trackId !== null ? state.faces.get(state.enroll.trackId) : [...state.faces.values()][0];
-    if (!entry) return showToast('Wait until your face is in the Attune camera.');
+    if (state.enroll.photo) {
+      state.enroll.photo = '';
+      state.enroll.phase = 'ready';
+      portrait = ''; portraitReady = false;
+      render(); return;
+    }
+    if (!portraitReady || !portrait) return showToast('Move back until your whole face is visible.');
     state.enroll.trackId = state.enroll.trackId ?? [...state.faces.keys()][0];
-    state.enroll.photo = entry.photo;
+    state.enroll.photo = portrait;
     state.enroll.phase = 'captured';
     render(); return;
   }
@@ -984,7 +1091,19 @@ document.addEventListener('click', async event => {
     link.send('enroll.start', {track_id: e.trackId, name: e.name.trim(), consent: true, consent_t: Date.now() / 1000});
     render(); return;
   }
-  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; render(); return; }
+  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; portrait = ''; portraitReady = false; render(); return; }
+  if (action === 'save-contact') {
+    const draft = state.contactDraft;
+    if (!draft.photo || !draft.name.trim() || !draft.consent) return showToast('Add a photo, name, and their consent first.');
+    const contact = {id: crypto.randomUUID(), personId: null, name: draft.name.trim(), photo: draft.photo, consentT: Date.now() / 1000};
+    try {
+      await saveContact(contact);
+      state.contacts.push(contact);
+      state.contactDraft = {name: '', photo: '', consent: false};
+      navigate('people'); showToast(`${contact.name} was added to your contacts.`);
+    } catch { showToast('This device could not save the contact.'); }
+    return;
+  }
   if (action === 'theme') { state.theme = control.dataset.theme; render(); return; }
   if (action === 'toggle-feature') {
     const key = control.dataset.feature;
@@ -1019,6 +1138,16 @@ document.addEventListener('click', async event => {
     state.proposal = ''; render(); showToast(accept ? 'Name confirmed for this session only.' : 'Name proposal dismissed.'); return;
   }
   if (action === 'rename-person') {
+    if (control.dataset.contactOnly) {
+      const contact = state.contacts.find(item => item.id === control.dataset.personId);
+      if (!contact) return;
+      const name = window.prompt('Rename contact', contact.name)?.trim();
+      if (name && name.length <= 60 && name !== contact.name) {
+        try { await saveContact({...contact, name}); contact.name = name; render(); }
+        catch { showToast('Could not rename this contact.'); }
+      }
+      return;
+    }
     const person = state.people.find(item => item.id === control.dataset.personId);
     if (!person) return;
     const name = window.prompt('Rename saved person', person.name)?.trim();
@@ -1029,6 +1158,15 @@ document.addEventListener('click', async event => {
     return;
   }
   if (action === 'remove-person') {
+    if (control.dataset.contactOnly) {
+      const contact = state.contacts.find(item => item.id === control.dataset.personId);
+      if (!contact) return;
+      if (await confirmAction(`Remove ${contact.name} and their photo from this device?`)) {
+        try { await deleteContact(contact.id); state.contacts = state.contacts.filter(item => item.id !== contact.id); render(); showToast('Contact removed.'); }
+        catch { showToast('Could not remove this contact.'); }
+      }
+      return;
+    }
     const person = state.people.find(item => item.id === control.dataset.personId);
     if (!person) return;
     const message = state.live ? `Delete ${person.name}? Their face print, voice print and every saved file are removed from the laptop.` : `Remove ${person.name} from this preview?`;
@@ -1072,6 +1210,11 @@ document.addEventListener('input', event => {
     const start = document.querySelector('#start-enroll');
     if (start) start.disabled = !state.enroll.name.trim() || !state.enroll.consent || !state.connected;
   }
+  if (event.target.id === 'contact-name') {
+    state.contactDraft.name = event.target.value;
+    const save = document.querySelector('#save-contact');
+    if (save) save.disabled = !state.contactDraft.photo || !state.contactDraft.name.trim() || !state.contactDraft.consent;
+  }
 });
 document.addEventListener('keydown', event => {
   if (event.target.id === 'speak-text' && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -1079,11 +1222,20 @@ document.addEventListener('keydown', event => {
     speak();
   }
 });
-document.addEventListener('change', event => {
+document.addEventListener('change', async event => {
   if (event.target.id === 'enroll-consent') {
     state.enroll.consent = event.target.checked;
     const start = document.querySelector('#start-enroll');
     if (start) start.disabled = !state.enroll.name.trim() || !state.enroll.consent || !state.connected;
+  }
+  if (event.target.id === 'contact-consent') {
+    state.contactDraft.consent = event.target.checked;
+    const save = document.querySelector('#save-contact');
+    if (save) save.disabled = !state.contactDraft.photo || !state.contactDraft.name.trim() || !state.contactDraft.consent;
+  }
+  if (event.target.id === 'contact-file') {
+    try { state.contactDraft.photo = await photoFromFile(event.target.files?.[0]); render(); }
+    catch (error) { showToast(error.message || 'Could not read that photo.'); }
   }
   if (event.target.id === 'voice-select') state.voice = event.target.value;
   if (event.target.id === 'tone-select') state.tone = event.target.value;
@@ -1095,3 +1247,7 @@ if ('speechSynthesis' in window) {
 }
 
 render();
+listContacts().then(contacts => {
+  state.contacts = contacts;
+  if (['people', 'settings'].includes(state.screen)) refresh();
+}).catch(() => showToast('Contacts are unavailable in this browser.'));
