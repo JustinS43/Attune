@@ -4,7 +4,8 @@ Section 1 - Vision (fusion). TODO: V-09. Contracts: docs/contracts.md.
 
 Subscribes to vision, audio, sensor and name events, ticks 15 times a second,
 and publishes `scene` (every tick and immediately when the speaker changes),
-`caption` (transcripts with their speaker) and `voice.harvest`.
+`caption` (transcripts with their speaker), `caption.retract` (segment ids a later
+draft dropped) and `voice.harvest`.
 """
 
 from __future__ import annotations
@@ -97,10 +98,13 @@ class FusionService:
                 with self._lock:
                     before = self.fusion.current
                     scene, captions, harvest = self.fusion.tick(now)
+                    retractions = self.fusion.take_retractions()
                     speaker = self.fusion.current
                 self.bus.publish(T.SCENE, scene)
                 for cap in captions:
                     self.bus.publish(T.CAPTION, cap)
+                for gone in retractions:
+                    self.bus.publish(T.CAPTION_RETRACT, gone)
                 if harvest is not None and not self._paused:
                     self.bus.publish(T.VOICE_HARVEST, harvest)
                 if speaker is not before and log.isEnabledFor(logging.DEBUG):

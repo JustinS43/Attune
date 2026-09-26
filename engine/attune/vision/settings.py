@@ -64,6 +64,12 @@ class FusionSettings:
     harvest_after_s: float = 1.5
     first_words_wait_ms: float = 300.0
     min_segment_s: float = 0.8  # shorter speaker pieces of a caption merge into a neighbour
+    # A caption segment already shown keeps its speaker across drafts. It only changes when
+    # another known speaker covers this share of the segment's speech (by word time)...
+    relabel_share: float = 0.7
+    # ...or, for a segment shown as "Someone", when a known speaker covers this share.
+    claim_share: float = 0.5
+    utterance_memory_s: float = 60.0  # forget an unfinished utterance's segments after this
     rate_hz: float = 15.0
     sync_min_corr: float = 0.3
     av_offset_s: float = 0.0  # audio lags video by this much; set by the clap test

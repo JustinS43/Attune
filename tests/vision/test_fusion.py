@@ -437,3 +437,197 @@ def test_a_flickering_speaker_does_not_chop_a_sentence():
     assert [(c.utt_id, c.speaker.track_id, c.text) for c in caps] == [
         ("9", 1, "Did you hear the doorbell a minute ago")
     ]
+
+
+# ---------------- V-18 stable captions across drafts ----------------
+A = Speaker("face", 1, None, "Person in white shirt", "none")
+B = Speaker("face", 2, None, "Person in blue shirt", "none")
+SOMEONE = Speaker("someone", label="Someone", side="none")
+
+
+def spoken(n, start=0.0, step=0.3, length=0.25):
+    """n words, one every `step` seconds."""
+    return [(f"w{i}", start + i * step, start + i * step + length) for i in range(n)]
+
+
+def draft(utt, words, final=False):
+    return {
+        "utt_id": utt,
+        "t_start": words[0][1],
+        "t_end": words[-1][2],
+        "text": " ".join(w[0] for w in words),
+        "final": final,
+        "lang": "en",
+        "words": words,
+    }
+
+
+def stream(f, utt, words, timeline, every=0.56, latency=0.25):
+    """Feed growing drafts (then the final) the way Section 2 streams them. The timeline
+    only holds the decisions made by each draft's time. Returns [(captions, retracted)]."""
+    out, audio_t = [], every
+    while True:
+        final = audio_t >= words[-1][2]
+        now = audio_t + latency
+        f.timeline.clear()
+        f.timeline.extend((t, s) for t, s in timeline if t <= now)
+        ws = words if final else [w for w in words if w[2] <= audio_t]
+        if ws:
+            caps = f._captions_for(draft(utt, ws, final), now, first_seen=0.0)
+            out.append((caps or [], [r.utt_id for r in f.take_retractions()]))
+        if final:
+            return out
+        audio_t += every
+
+
+def speakers_per_id(sends):
+    seen = {}
+    for caps, _ in sends:
+        for c in caps:
+            seen.setdefault(c.utt_id, []).append((c.speaker.kind, c.speaker.track_id))
+    return seen
+
+
+def test_speaker_stays_put_across_drafts_with_a_jittery_timeline():
+    # A talks for 4 s; the decision keeps flickering to B and to nobody for a moment.
+    # Re-splitting every draft from scratch flipped the whole caption to B at 2 s.
+    words = spoken(14)
+    timeline = [
+        (0.0, A),
+        (0.6, B),
+        (1.6, A),
+        (1.9, SOMEONE),
+        (2.1, A),
+        (2.8, B),
+        (3.0, A),
+    ]
+    sends = stream(SpeakerFusion(FusionSettings()), "u1", words, timeline)
+    assert len(sends) >= 7
+    for uid, who in speakers_per_id(sends).items():
+        assert len(set(who)) == 1, (uid, who)  # one speaker per segment id, every draft
+    assert [c.utt_id for c in sends[0][0]] == ["u1"]
+    assert all(
+        c.speaker.track_id == 1 for caps, _ in sends for c in caps if c.utt_id == "u1"
+    )
+
+
+def test_label_changes_for_the_same_face_do_not_split_a_caption():
+    f = SpeakerFusion(FusionSettings())
+    named = Speaker("face", 1, None, "Person in blue", "none")
+    f.timeline.extend([(0.0, A), (1.0, named)])  # a new label arrived mid-sentence
+    caps = f._captions_for(draft("u2", spoken(8), True), now=5.0, first_seen=0.0)
+    assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u2", 1)]
+    assert caps[0].speaker.label == "Person in blue"  # the newest label is shown
+
+
+def test_a_segment_dropped_by_a_later_draft_is_retracted():
+    f = SpeakerFusion(FusionSettings())
+    words = spoken(12)  # 0.0 - 3.55 s
+    f.timeline.extend([(0.0, A), (1.2, SOMEONE)])  # the face left at 1.2 s
+    caps = f._captions_for(draft("u3", words), now=4.0, first_seen=0.0)
+    assert [(c.utt_id, c.speaker.kind) for c in caps] == [
+        ("u3", "face"),
+        ("u3.1", "someone"),
+    ]
+    assert f.take_retractions() == []
+    # the final: the recogniser dropped the last words, so the unknown piece is short
+    # enough to join the face's segment again, and "u3.1" must leave the pages
+    caps = f._captions_for(draft("u3", words[:6], True), now=4.6, first_seen=0.0)
+    assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u3", 1)]
+    assert [r.utt_id for r in f.take_retractions()] == ["u3.1"]
+    assert "u3" not in f.utts  # finished: nothing left to track
+
+
+def test_a_face_leaving_does_not_relabel_what_it_said():
+    sim = Sim()
+    loud = lambda: -30 + 20 * syllables(sim.t)
+    for _ in range(24):  # A talks for 0.8 s
+        sim.step({1: talking_face(sim.t), 2: still_face()}, speech=True, loud=loud())
+    t0 = sim.t
+    words = [
+        ("Wait", t0 - 0.5, t0 - 0.35),
+        ("I", t0 - 0.3, t0 - 0.2),
+        ("think", t0 - 0.15, t0),
+    ]
+    sim.f.on_transcript(draft("u4", words), sim.t)
+    _, caps, _ = sim.step(
+        {1: talking_face(sim.t), 2: still_face()}, speech=True, loud=loud()
+    )
+    assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u4", 1)]
+    # the speaker walks out of the frame on the left and keeps talking for 2 s
+    sim.f.on_track_lost({"track_id": 1, "t": sim.t, "side": "left"})
+    t_left = sim.t
+    sent = []
+
+    def unseen_words():
+        n = int((sim.t - t_left) / 0.3)
+        return [
+            (f"x{k}", t_left + 0.1 + 0.3 * k, t_left + 0.35 + 0.3 * k) for k in range(n)
+        ]
+
+    for i in range(64):
+        _, caps, _ = sim.step({2: still_face()}, speech=True, loud=loud())
+        sent += caps
+        if i % 17 == 16:  # drafts keep arriving with the words said off-screen
+            sim.f.on_transcript(draft("u4", words + unseen_words()), sim.t)
+    sim.f.on_transcript(draft("u4", words + unseen_words(), final=True), sim.t)
+    _, caps, _ = sim.step({2: still_face()}, speech=True, loud=loud())
+    sent += caps
+    mine = [c for c in sent if c.utt_id == "u4"]
+    # never re-sent as Someone
+    assert len(mine) >= 3 and all(c.speaker.track_id == 1 for c in mine)
+    last = {c.utt_id: c for c in caps}
+    # the words said on camera stay with the face (so do the first unseen ones, which
+    # joined it while too short to stand alone, as before)
+    assert last["u4"].text.startswith("Wait I think")
+    unseen = [c for c in caps if c.utt_id != "u4"]
+    assert unseen and all(c.speaker.kind in ("someone", "offscreen") for c in unseen)
+    # and it holds only words said while unseen
+    assert all(w[1] >= t_left for c in unseen for w in c.words)
+    assert sim.f.take_retractions() == []
+
+
+def test_a_genuine_turn_change_still_splits_across_drafts():
+    words = spoken(18)  # 0.0 - 5.35 s
+    # A until 2.7 s, then B answers; the decision lags the change by 0.3 s
+    timeline = [
+        (0.0, SOMEONE),
+        (0.2, A),
+        (1.1, SOMEONE),
+        (1.2, A),
+        (3.0, B),
+        (4.1, A),
+        (4.3, B),
+    ]
+    sends = stream(SpeakerFusion(FusionSettings()), "u5", words, timeline)
+    for uid, who in speakers_per_id(sends).items():
+        assert len(set(who)) == 1, (uid, who)
+    final = sends[-1][0]
+    assert [(c.utt_id, c.speaker.track_id) for c in final] == [("u5", 1), ("u5.1", 2)]
+    assert final[1].words[0][1] >= 2.7  # the answer's first words went back to B
+    assert all(not gone for _, gone in sends)
+
+
+def test_first_words_wait_only_once_per_utterance():
+    sim = Sim()
+    sim.step({}, speech=True)
+    words = [("Hello", sim.t, sim.t + 0.3)]
+    sim.f.on_transcript(draft("u6", words), sim.t)
+    _, caps, _ = sim.step({}, speech=True, dt=0.35)
+    assert len(caps) == 1 and caps[0].speaker.kind == "someone"
+    # the next draft still has nobody to show, but it is not held back again
+    words = words + [("there", sim.t, sim.t + 0.2)]
+    sim.f.on_transcript(draft("u6", words), sim.t)
+    _, caps, _ = sim.step({}, speech=True)
+    assert [c.text for c in caps] == ["Hello there"]
+
+
+def test_a_someone_segment_takes_the_face_that_turns_up():
+    f = SpeakerFusion(FusionSettings())
+    words = spoken(6)
+    f.timeline.append((0.0, SOMEONE))
+    caps = f._captions_for(draft("u7", words[:3]), now=1.2, first_seen=0.0)
+    assert caps[0].speaker.kind == "someone"
+    f.timeline.append((0.1, A))  # a late decision covering those words
+    caps = f._captions_for(draft("u7", words), now=2.0, first_seen=0.0)
+    assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u7", 1)]
