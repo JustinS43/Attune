@@ -1,0 +1,69 @@
+/* Optional Apricot Studio palette. Enabled only with ?palette=apricot. */
+body.palette-apricot-preview {
+  background:
+    radial-gradient(circle at 16% 12%, #f0bea250, transparent 31%),
+    radial-gradient(circle at 86% 83%, #f4cf7c3d, transparent 30%),
+    #fcf6f0;
+}
+
+.palette-apricot {
+  --bg: #fcf6f0;
+  --surface: #ffffff;
+  --surface-soft: #f8e9df;
+  --ink: #233a4a;
+  --muted: #775f5a;
+  --line: #ead8ce;
+  --teal: #af6151;
+  --teal-strong: #9c4f43;
+  --teal-wash: #f5ddd0;
+  --button-text: #ffffff;
+  --shadow: 0 9px 27px #7d43320f;
+}
+
+.palette-apricot[data-theme="dark"] {
+  --bg: #172c39;
+  --surface: #233d4a;
+  --surface-soft: #314b56;
+  --ink: #fff9f5;
+  --muted: #e7bba9;
+  --line: #5f5a5d;
+  --teal: #f08b73;
+  --teal-strong: #f5a38e;
+  --teal-wash: #553d3d;
+  --button-text: #233a4a;
+  --shadow: 0 8px 25px #0003;
+  background: radial-gradient(circle at 50% 6%, #2f4854, #172c39 56%);
+}
+
+.palette-apricot .brand {
+  width: 147px;
+  height: 40px;
+  background: url("./branding/colorways/04-apricot-studio-wordmark-light.svg") left center / contain no-repeat;
+  margin-bottom: 23px;
+}
+
+.palette-apricot[data-theme="dark"] .brand {
+  background-image: url("./branding/colorways/04-apricot-studio-wordmark-dark.svg");
+}
+
+.palette-apricot .brand > * { display: none; }
+.palette-apricot .demo-pill:before { background: #ce725f; }
+.palette-apricot .feature-card {
+  background: linear-gradient(145deg, #f5ddd0, #fff3e8);
+}
+.palette-apricot[data-theme="dark"] .feature-card {
+  background: linear-gradient(145deg, #553d3d, #314b56);
+}
+.palette-apricot .avatar { background: #f0bea2; color: #5e382f; }
+.palette-apricot .avatar.blue { background: #b9d5dc; color: #233a4a; }
+.palette-apricot .avatar.amber { background: #f4cf7c; color: #5b4321; }
+.palette-apricot .avatar.violet { background: #d7b9d0; color: #593c55; }
+.palette-apricot .timeline-dot { background: #ce725f; }
+.palette-apricot .timeline-dot.violet { background: #9a688e; }
+.palette-apricot .timeline-dot.blue { background: #5f93a3; }
+.palette-apricot .timeline-name.violet { color: #8c577f; }
+.palette-apricot .timeline-name.blue { color: #477f91; }
+.palette-apricot button:focus-visible,
+.palette-apricot input:focus-visible,
+.palette-apricot textarea:focus-visible,
+.palette-apricot select:focus-visible { outline-color: #ce725f; }
