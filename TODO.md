@@ -10,7 +10,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 ## Kickoff (whole team, hour 0–1)
 
 - [ ] K-01 Put each person's name next to their section in AGENTS.md and docs/feature-map.md
-- [ ] K-02 Pick up the hardware with the plan's checklist (section 04), and note the driver board model and webcam model here
+- [ ] K-02 Pick up the hardware with the plan's checklist (section 04), and note the driver board model and webcam model here — webcam: Logitech C922 Pro Stream (1080p30, built-in mic, set as camera and mic in config); driver board: not picked up yet
 - [ ] K-03 Read docs/contracts.md together and agree on it before anyone codes against it
 - [ ] K-04 Everyone: clone, copy `.env.example` to `.env` and `config/attune.example.toml` to `config/attune.toml`, run `uv sync --project engine`
 
@@ -31,6 +31,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-13 Tests in tests/vision using the replay reel · M2 (#5)
 - [ ] V-14 Stretch: Light-ASD for hard who's-talking cases · after M3, only if time
 - [x] V-15 Live dev runner: `devview --all` runs vision, fusion, audio, alerts and LLM together on one bus and clock, with `--audio-file` replay (#15)
+- [x] V-16 Keep a sentence in one caption when the speaker decision flickers (short and "Someone" pieces join their neighbour) (#22, #23)
+- [x] V-17 Camera on/off from a page: `camera.set` stops or restarts the webcam (#30)
 
 ## Section 2 – Audio & Language
 
@@ -49,7 +51,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-13 Translation of non-English finals · M2 — real model translated "¿Dónde está la estación de tren?" to "Where is the train station?" (#12)
 - [x] A-14 Garment descriptions from the fixed lists · M2 — real model described a crop as "Person in blue shirt"; 0.4-0.9 s per crop (#12)
 - [x] A-15 Suggested replies for keys 7–9 · M2 — real model returned three reply suggestions (#12)
-- [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3 — wizard, profiles and guide implemented; manual clap annotations and Section 4 integration/venue run pending
+- [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3 — wizard, profiles and guide implemented; CalibrationService runs in `python -m attune` and the console has the step buttons (#20, #18); manual clap annotations and a venue run pending
 - [x] A-17 Test tone generator (T3, T4) · M2 — generator implemented and both frequency bands tested; PR number pending GitHub access
 - [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
 
@@ -85,16 +87,22 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-11 History panel (Y): sessions, timeline, search, person filter, sounds you missed, talk-time chart · M2 (#18)
 - [x] P-12 Keyboard shortcuts (C S Y H E F P, 1–9) · M1 (#21)
 - [ ] P-13 Session log, reel recorder and replay mode · M1 — session log and WAV player done (#20); reel recorder and replay mode left
-- [ ] P-14 Setup: docs/setup.md, check_setup.py, download_models.py, start script with auto-restart · M3
-- [ ] P-15 OBS setup, demo script, backup video, Devpost write-up and slides · M3 – M4
+- [ ] P-14 Setup: docs/setup.md, check_setup.py, download_models.py, start script with auto-restart · M3 — docs/setup.md written (#20, #26); check_setup.py, download_models.py and the start script left
+- [ ] P-15 OBS setup, demo script, backup video, Devpost write-up and slides · M3 – M4 — launch film cut (two versions) made; re-render in the three glasses looks in progress
 - [x] P-16 Tests in tests/pages_engine (bus, WebSocket hub, commands) · M2 (#20)
 - [x] P-17 Demo page (/demo/): glasses view and phone app side by side, or either one full size · M3 (#26)
 - [x] P-18 Demo: glasses guide tab (Colour / Mono / Corner and the glasses that use each) · M3 (#29)
 - [x] P-19 Demo: camera on/off switch (engine really stops the webcam; captions keep running) · M3 (#30)
+- [x] P-21 Three glasses looks match real devices: Colour = Meta Orion class, Mono = Even Realities G1 band with 9 heights, Corner = Meta Ray-Ban Display right-eye square (+ docs/glasses-realism.md) · M3 (#28)
+- [x] P-22 Film source in the lens: two-decoder player with a watchdog (no more black footage), chrome that scales with the window · M2 (#25, #28)
+- [x] P-23 Phone app: Ryan's logo designs, colorways and the Apricot Studio palette (`?palette=apricot`), kept working with the live engine · M3 (#24)
+- [x] P-24 Engine works with a USB webcam (Logitech C922): MSMF hardware transforms off before OpenCV loads · M0 (#27)
+- [ ] P-25 Caption layout polish: one steady slot per person, no jumping bubbles, calm Mono and Corner lines · M3 — in progress
+- [ ] P-26 Re-render the launch film in the three glasses looks (Colour, Mono, Corner) from the lens's own renderers · M3 – M4 — pipeline in progress, renders after P-25
 
 ## Gates and end-to-end checks (whole team)
 
-- [ ] M0 · Camera, mic and Arduino all feed the engine; the lens view shows video
+- [ ] M0 · Camera, mic and Arduino all feed the engine; the lens view shows video — camera (C922) and mic feed `python -m attune` and the lens shows live video with face tags; Arduino runs on the simulator until the rig is built
 - [ ] M1 · Enrolled faces are named, and captions land in the right bubble; first rehearsal reel recorded
 - [ ] M2 · Every feature works on its own (alerts, names by touch, translation, descriptions, spoken replies, history)
 - [ ] T-E1 Caption delay: median ≤ 1.0 s, 90th percentile ≤ 1.5 s
