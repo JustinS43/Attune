@@ -103,6 +103,10 @@ def pick_camera(
         external = [cam for cam in cams if _is_external(cam)]
         if external:
             return external[0]
+        # A station requests the built-in camera by name with fallback disabled.
+        for cam in cams:
+            if _matches(name, cam.name):
+                return cam
         return cams[0] if fallback_any and cams else None
     for cam in cams:
         if name and name.lower() in cam.name.lower():
