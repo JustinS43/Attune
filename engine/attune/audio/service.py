@@ -81,7 +81,12 @@ class AudioService:
             self.mic = self.mic or MicReader(
                 cfg, self.clock, lambda block: self.worker.publish("audio.block", block)
             )
-            self.mic.start()
+            self.worker.health = self.mic.health
+            try:
+                self.mic.start()
+            except Exception:
+                self.stop()
+                raise
 
     def stop(self) -> None:
         """Stop capture and invalidate pending inference before clearing session data."""

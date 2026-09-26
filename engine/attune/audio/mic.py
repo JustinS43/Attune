@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AudioRing:
     """Keep a bounded mono stream; reject spans crossing capture gaps."""
 
-    def __init__(self, seconds: float = 30, rate: int = 16000):
+    def __init__(self, seconds: float = 30, rate: int = 16000) -> None:
         self.seconds, self.rate = seconds, rate
         self.blocks: deque = deque()
         self.lock = threading.RLock()
@@ -51,67 +51,148 @@ class AudioRing:
             self.blocks.clear()
 
 
-class MicReader:
-    """Read 48 kHz blocks; reconnect to the default input after device loss."""
+class CaptureResampler:
+    """Preserve sample time across chunk boundaries and expose capture gaps."""
 
-    def __init__(self, config: dict, clock: Callable, deliver: Callable, sd: Any = None):
+    def __init__(self, sample_rate: int, gap_tolerance: float) -> None:
+        import soxr
+
+        self.sample_rate, self.gap_tolerance = sample_rate, gap_tolerance
+        self.streams = {
+            rate: soxr.ResampleStream(sample_rate, rate, 1, dtype="float32")
+            for rate in (16000, 32000)
+        }
+        self.reset()
+
+    def reset(self) -> None:
+        """Discard filter history when the source stream loses continuity."""
+        for stream in self.streams.values():
+            stream.clear()
+        self.origin: float | None = None
+        self.previous_end: float | None = None
+        self.produced = dict.fromkeys(self.streams, 0)
+
+    def feed(self, t: float, samples: np.ndarray, overflow: bool = False) -> list[dict]:
+        """Return available output with first-sample timestamps on the capture clock."""
+        if overflow or (
+            self.previous_end is not None and abs(t - self.previous_end) > self.gap_tolerance
+        ):
+            self.reset()
+        self.previous_end = t + len(samples) / self.sample_rate
+        if self.origin is None:
+            self.origin = t
+        blocks = []
+        for rate, stream in self.streams.items():
+            out = stream.resample_chunk(samples)
+            if len(out):
+                blocks.append(
+                    {
+                        "t": self.origin + self.produced[rate] / rate,
+                        "sample_rate": rate,
+                        "samples": out,
+                    }
+                )
+                self.produced[rate] += len(out)
+        return blocks
+
+
+class MicReader:
+    """Read mono PCM; recover on the host's default input after device loss."""
+
+    def __init__(
+        self,
+        config: dict,
+        clock: Callable[[], float],
+        deliver: Callable[[dict], None],
+        sd: Any = None,
+    ) -> None:
         self.config, self.clock, self.deliver, self.sd = config, clock, deliver, sd
         self.stop_event = threading.Event()
-        self.thread = None
+        self.thread: threading.Thread | None = None
         self.stream = None
         self.queue: queue.Queue = queue.Queue(maxsize=200)
         self.dropped = 0
+        self.overflows = 0
         self.detail = "not started"
+        self.connected = False
+        self._clock_offset: float | None = None
+        self.resampler: CaptureResampler | None = None
 
     def start(self) -> None:
-        """Load lightweight device bindings and launch capture."""
+        """Load device bindings and launch exactly one capture worker."""
+        if self.thread and self.thread.is_alive():
+            if self.stop_event.is_set():
+                raise RuntimeError("previous microphone worker is still stopping")
+            return
         if self.sd is None:
             import sounddevice
 
             self.sd = sounddevice
-        import soxr
-
-        rate = self.config["sample_rate"]
-        self.resamplers = {
-            r: soxr.ResampleStream(rate, r, 1, dtype="float32") for r in (16000, 32000)
-        }
+        self.resampler = CaptureResampler(
+            self.config["sample_rate"], self.config["block_ms"] / 2000
+        )
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._run, daemon=True, name="mic")
         self.thread.start()
 
     def _device(self, fallback: bool) -> int | None:
-        if fallback:
-            return None
         name = self.config["device_name"].casefold()
         devices, hosts = self.sd.query_devices(), self.sd.query_hostapis()
-        for i, device in enumerate(devices):
-            if (
-                device["max_input_channels"]
-                and name in device["name"].casefold()
-                and (sys.platform != "win32" or "WASAPI" in hosts[device["hostapi"]]["name"])
-            ):
-                return i
+        if not fallback:
+            for i, device in enumerate(devices):
+                if (
+                    device["max_input_channels"]
+                    and name in device["name"].casefold()
+                    and (sys.platform != "win32" or "WASAPI" in hosts[device["hostapi"]]["name"])
+                ):
+                    return i
+        # Passing None on Windows could select the default MME/DirectSound device.
+        if sys.platform == "win32":
+            for host in hosts:
+                if "WASAPI" in host["name"]:
+                    device = host["default_input_device"]
+                    if device >= 0 and devices[device]["max_input_channels"]:
+                        return device
+            raise RuntimeError("no Windows WASAPI input device available")
         return None
 
     def _callback(self, data: np.ndarray, frames: int, timing: Any, status: Any) -> None:
+        if self.stop_event.is_set():
+            return
         if status:
-            self.detail = "capture overflow"
-        # PortAudio clocks are relative to its stream; translate through currentTime.
-        t = self.clock() - max(0.0, timing.currentTime - timing.inputBufferAdcTime)
+            self.overflows += 1
+        # Establish one mapping for this PortAudio stream. Repeatedly sampling the
+        # Python clock would turn callback scheduling jitter into false PCM gaps.
+        if self._clock_offset is None:
+            self._clock_offset = self.clock() - timing.currentTime
+        t = self._clock_offset + timing.inputBufferAdcTime
         try:
             self.queue.put_nowait((t, data[:, 0].copy(), bool(status)))
         except queue.Full:
             self.dropped += 1
+
+    def health(self) -> dict:
+        """Report capture availability independently of recognition worker health."""
+        return {
+            "ok": self.connected,
+            "detail": self.detail,
+            "metrics": {"capture_dropped": self.dropped, "capture_overflows": self.overflows},
+        }
+
+    def _drain(self) -> None:
+        while True:
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                return
 
     def _run(self) -> None:
         fallback = False
         while not self.stop_event.is_set():
             try:
                 device = self._device(fallback)
-                for resampler in self.resamplers.values():
-                    resampler.clear()
-                origin, produced = None, {16000: 0, 32000: 0}
-                previous_end = None
+                self.resampler.reset()
+                self._clock_offset = None
                 with self.sd.InputStream(
                     device=device,
                     samplerate=self.config["sample_rate"],
@@ -121,7 +202,8 @@ class MicReader:
                     callback=self._callback,
                 ) as stream:
                     self.stream = stream
-                    self.detail = "default mic" if device is None else "preferred mic"
+                    self.connected = True
+                    self.detail = "fallback mic" if fallback or device is None else "preferred mic"
                     while not self.stop_event.is_set():
                         try:
                             t, samples, overflow = self.queue.get(timeout=0.2)
@@ -129,41 +211,28 @@ class MicReader:
                             if not stream.active:
                                 raise RuntimeError("microphone disconnected")
                             continue
-                        if overflow or (previous_end is not None and abs(t - previous_end) > 0.005):
-                            for resampler in self.resamplers.values():
-                                resampler.clear()
-                            origin, produced = None, {16000: 0, 32000: 0}
-                        previous_end = t + len(samples) / self.config["sample_rate"]
-                        if origin is None:
-                            origin = t
-                        # Resampler output counts, rather than callback arrival jitter, timestamp PCM.
-                        for rate, resampler in self.resamplers.items():
-                            out = resampler.resample_chunk(samples)
-                            if len(out):
-                                self.deliver(
-                                    {
-                                        "t": origin + produced[rate] / rate,
-                                        "sample_rate": rate,
-                                        "samples": out,
-                                    }
-                                )
-                                produced[rate] += len(out)
+                        for block in self.resampler.feed(t, samples, overflow):
+                            if self.stop_event.is_set():
+                                break
+                            self.deliver(block)
             except Exception:
-                logger.exception("microphone unavailable; retrying default input")
-                self.detail, fallback = "microphone unavailable", True
-                self.stop_event.wait(0.5)
+                if not self.stop_event.is_set():
+                    logger.exception("microphone unavailable; retrying default input")
+                    self.detail, fallback = "microphone unavailable", True
             finally:
+                self.connected = False
                 self.stream = None
-                while not self.queue.empty():
-                    try:
-                        self.queue.get_nowait()
-                    except queue.Empty:
-                        break
+                self._drain()
+            if not self.stop_event.is_set():
+                self.stop_event.wait(0.5)
+        self.detail = "stopped"
+        self.resampler.reset()
 
     def stop(self) -> None:
-        """Release capture within the service shutdown budget."""
+        """Stop accepting callbacks and release capture within the shutdown budget."""
         self.stop_event.set()
-        if self.stream:
-            self.stream.abort()
+        stream = self.stream
+        if stream is not None:
+            stream.abort()
         if self.thread:
             self.thread.join(timeout=0.4)

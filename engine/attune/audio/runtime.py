@@ -41,6 +41,7 @@ class Worker:
         self.inbox: queue.Queue = queue.Queue(maxsize=256)
         self.controls: queue.SimpleQueue = queue.SimpleQueue()
         self.cleanup: Callable | None = None
+        self.health: Callable[[], dict] | None = None
         self.closed = threading.Event()
         self.thread: threading.Thread | None = None
         self.generation = 0
@@ -132,13 +133,14 @@ class Worker:
                 logger.exception("%s tick failed", self.part)
             if time.monotonic() - health >= 1:
                 health = time.monotonic()
+                capture = self.health() if self.health else {}
                 self.publish(
                     "status.part",
                     {
                         "part": self.part,
-                        "ok": not self.error,
-                        "detail": self.error or "running",
-                        "metrics": {"dropped": self.dropped},
+                        "ok": not self.error and capture.get("ok", True),
+                        "detail": self.error or capture.get("detail", "running"),
+                        "metrics": {"dropped": self.dropped, **capture.get("metrics", {})},
                     },
                 )
 
