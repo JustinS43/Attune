@@ -431,6 +431,7 @@ function renderEnroll() {
       content.append(button('View saved people', 'primary full', 'people'), button('Enroll another person', 'outline full enroll-again', 'enroll-again'));
     } else if (enrollment.phase === 'error') {
       content.append(button('Try again', 'primary full', 'enroll-again'));
+      if (enrollment.face === 'ok') content.append(button('Skip voice for now', 'outline full enroll-skip', 'skip-voice'));
     }
   }
   content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and optional voice prints on the laptop. Your contact photo stays on this device; the spoken recording is not kept.'));
@@ -1112,7 +1113,7 @@ document.addEventListener('click', async event => {
   }
   if (action === 'skip-voice') {
     const e = state.enroll;
-    if (e.phase !== 'voice' || e.face !== 'ok' || !e.personId) return;
+    if (!['voice', 'error'].includes(e.phase) || e.face !== 'ok' || !e.personId) return;
     e.phase = 'done'; e.voice = 'skipped';
     render(); showToast(`${e.name}'s face is saved without voice.`); return;
   }
