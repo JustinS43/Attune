@@ -21,7 +21,12 @@ class FakeDevices:
         self.opened: list[str] = []
 
     def list_cameras(self):
-        return [CameraInfo(i, 0, name) for i, name in enumerate(self.plugged)]
+        return [
+            CameraInfo(i, 0, name, 1133, 2381)
+            if name == BRIO
+            else CameraInfo(i, 0, name)
+            for i, name in enumerate(self.plugged)
+        ]
 
     def capture(self, devices_at_open):
         fake = self
@@ -108,6 +113,21 @@ def test_named_camera_is_not_rechecked(devices, monkeypatch):
     finally:
         cam.stop()
     assert len(calls) == 1  # only the open; no enumeration while on the named camera
+
+
+def test_macos_prefers_any_usb_camera_without_matching_a_model_name(monkeypatch):
+    monkeypatch.setattr(camera_mod.sys, "platform", "darwin")
+    cameras = [
+        CameraInfo(0, 0, "FaceTime HD Camera"),
+        CameraInfo(1, 0, BRIO, 1133, 2381),
+        CameraInfo(2, 0, "C922 Pro Stream Webcam", 1133, 2097),
+    ]
+    monkeypatch.setattr(camera_mod, "list_cameras", lambda: cameras)
+    assert camera_mod.pick_camera("Logitech") == cameras[1]
+    assert camera_mod.pick_camera("unmatched") == cameras[1]
+    cameras[:] = cameras[:1]
+    assert camera_mod.pick_camera("Logitech", fallback_any=False) is None
+    assert camera_mod.pick_camera("Logitech", fallback_any=True) == cameras[0]
 
 
 def test_open_without_frames_retries_a_smaller_mode_before_reporting_connected(

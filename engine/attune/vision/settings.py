@@ -12,7 +12,7 @@ from typing import Any
 
 @dataclass
 class VisionSettings:
-    camera_name: str = "Logitech"
+    camera_name: str = "Logitech"  # macOS prefers any USB webcam instead
     camera_fallback_any: bool = True  # use another camera if the named one is missing
     width: int = 1920
     height: int = 1080
