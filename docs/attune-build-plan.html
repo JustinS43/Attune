@@ -1,0 +1,1379 @@
+<meta charset="utf-8">
+<title>Attune Build Plan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root {
+  --ground: #EEF1F4; --panel: #FFFFFF; --panel-2: #F5F7F9;
+  --ink: #15202B; --ink-2: #4E5C6D; --ink-3: #738094;
+  --rule: #D8DEE5; --rule-2: #B9C3CF;
+  --accent: #0A7F6C; --accent-ink: #075C4E; --accent-soft: #DCF1EB;
+  --ok: #1B7447; --ok-soft: #E0F2E7;
+  --info: #22579F; --info-soft: #E2EBF8;
+  --check: #875500; --check-soft: #FFF0D2;
+  --risk: #AE261C; --risk-soft: #FBE3DF;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #0C1015; --panel: #131920; --panel-2: #10151B;
+    --ink: #E2E8EF; --ink-2: #A0ADBC; --ink-3: #72808F;
+    --rule: #232D37; --rule-2: #36434F;
+    --accent: #56D3BC; --accent-ink: #8DEAD9; --accent-soft: #0F2F29;
+    --ok: #6ED399; --ok-soft: #10281B; --info: #8AB4F2; --info-soft: #13223A;
+    --check: #F0B452; --check-soft: #2C210D; --risk: #F2877E; --risk-soft: #35150F;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0C1015; --panel: #131920; --panel-2: #10151B;
+  --ink: #E2E8EF; --ink-2: #A0ADBC; --ink-3: #72808F;
+  --rule: #232D37; --rule-2: #36434F;
+  --accent: #56D3BC; --accent-ink: #8DEAD9; --accent-soft: #0F2F29;
+  --ok: #6ED399; --ok-soft: #10281B; --info: #8AB4F2; --info-soft: #13223A;
+  --check: #F0B452; --check-soft: #2C210D; --risk: #F2877E; --risk-soft: #35150F;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--ground); color: var(--ink); font: 400 16px/1.62 var(--f-body); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.wrap { max-width: 1260px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 36px); padding-block: 28px 96px; }
+
+.masthead { display: grid; gap: 18px; padding-bottom: 22px; border-bottom: 2px solid var(--ink); }
+.eyebrow { font: 500 12px/1.3 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { font: 600 clamp(38px, 5.4vw, 60px)/1 var(--f-display); letter-spacing: -0.01em; margin: 6px 0 0; }
+.lede { font-size: 18px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.glance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule-2); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.glance div { padding: 14px 16px 15px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.glance div:nth-child(3n) { border-right: 0; }
+.glance div:nth-last-child(-n+3) { border-bottom: 0; }
+.glance dt { font: 500 11px/1.3 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.glance dd { margin: 4px 0 0; font-size: 15px; line-height: 1.45; }
+.glance b { font-weight: 600; }
+@media (max-width: 820px) {
+  .glance { grid-template-columns: minmax(0, 1fr); }
+  .glance div { border-right: 0; }
+  .glance div:nth-last-child(-n+3) { border-bottom: 1px solid var(--rule); }
+  .glance div:last-child { border-bottom: 0; }
+}
+
+.layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 44px; align-items: start; margin-top: 30px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 18px); max-height: calc(100vh - 36px); overflow: auto; padding-right: 4px; }
+.toc h2 { font: 500 11px/1.3 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: toc; }
+.toc li { counter-increment: toc; }
+.toc a { display: grid; grid-template-columns: 26px minmax(0, 1fr); padding: 6px 8px; border-radius: 7px; color: var(--ink-2); text-decoration: none; font-size: 14.5px; line-height: 1.35; }
+.toc a::before { content: counter(toc, decimal-leading-zero); font: 500 12px/1.6 var(--f-mono); color: var(--ink-3); }
+.toc a:hover { background: var(--panel); color: var(--ink); }
+.toc a.is-current { background: var(--accent-soft); color: var(--accent-ink); }
+.toc a.is-current::before { color: var(--accent-ink); }
+.legend { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); display: grid; gap: 8px; font-size: 13px; color: var(--ink-2); }
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  nav.toc { position: static; max-height: none; overflow: visible; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 14px; }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+
+main { min-width: 0; }
+main > section { padding-top: 26px; margin-top: 38px; border-top: 1px solid var(--rule-2); }
+main > section:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+.sec-num { font: 500 12px/1 var(--f-mono); letter-spacing: .1em; color: var(--accent-ink); text-transform: uppercase; }
+h2 { font: 600 clamp(28px, 3.3vw, 38px)/1.06 var(--f-display); margin: 6px 0 12px; text-wrap: balance; }
+h3 { font: 600 22px/1.2 var(--f-display); margin: 30px 0 8px; text-wrap: balance; }
+h4 { font: 600 16px/1.35 var(--f-body); margin: 20px 0 6px; }
+p, ul, ol { max-width: 74ch; }
+p { margin: 0 0 12px; }
+ul, ol { padding-left: 22px; margin: 0 0 14px; }
+li { margin: 3px 0; }
+li::marker { color: var(--ink-3); }
+.intro { font-size: 17px; color: var(--ink-2); }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+.id { font: 500 .84em/1 var(--f-mono); color: var(--accent-ink); white-space: nowrap; }
+strong { font-weight: 600; }
+
+.badge { display: inline-block; font: 500 11px/1 var(--f-mono); letter-spacing: .02em; padding: 4px 8px 4px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
+.b-ok { color: var(--ok); background: var(--ok-soft); }
+.b-info { color: var(--info); background: var(--info-soft); }
+.b-check { color: var(--check); background: var(--check-soft); }
+.b-risk { color: var(--risk); background: var(--risk-soft); }
+.b-plain { color: var(--ink-2); background: var(--panel); border: 1px solid var(--rule-2); padding: 3px 7px; }
+
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); margin: 12px 0 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 14.2px; line-height: 1.5; }
+.tbl.wide table { min-width: 720px; }
+.tbl.mid table { min-width: 600px; }
+th { text-align: left; font: 500 11px/1.35 var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); background: var(--panel-2); padding: 10px 12px; border-bottom: 1px solid var(--rule-2); vertical-align: bottom; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .sub { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+td.k { font-weight: 600; }
+
+.box { border-radius: 12px; padding: 14px 16px 15px; margin: 14px 0 18px; max-width: 80ch; }
+.box > :last-child { margin-bottom: 0; }
+.box .lbl { display: block; font: 500 11px/1.3 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
+.box.dry { background: var(--accent-soft); }
+.box.dry .lbl { color: var(--accent-ink); }
+.box.warn { background: var(--check-soft); }
+.box.warn .lbl { color: var(--check); }
+.box.risk { background: var(--risk-soft); }
+.box.risk .lbl { color: var(--risk); }
+.box.info { background: var(--info-soft); }
+.box.info .lbl { color: var(--info); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 12px 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px 15px; }
+.card h4 { margin: 0 0 6px; }
+.card p, .card ul { font-size: 14.5px; margin-bottom: 0; }
+
+ol.seq { list-style: none; padding: 0; counter-reset: seq; display: grid; gap: 10px; max-width: 80ch; }
+ol.seq > li { counter-increment: seq; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; margin: 0; }
+ol.seq > li::before { content: counter(seq); width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--ink); display: grid; place-items: center; font: 500 12px/1 var(--f-mono); margin-top: 1px; }
+
+.timeline { display: grid; gap: 0; max-width: 84ch; margin: 12px 0 16px; border-left: 2px solid var(--rule-2); }
+.timeline > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 7px 0 7px 14px; position: relative; }
+.timeline > div::before { content: ""; position: absolute; left: -6px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }
+.timeline .t { font: 500 13px/1.5 var(--f-mono); color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.timeline .d { font-size: 15px; }
+.timeline .d .sub { display: block; color: var(--ink-2); font-size: 13.5px; }
+
+ul.checks { list-style: none; padding: 0; display: grid; gap: 6px; max-width: 80ch; }
+ul.checks li { margin: 0; }
+ul.checks label { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; cursor: pointer; }
+ul.checks input { width: 17px; height: 17px; margin: 3px 0 0; accent-color: var(--accent); }
+ul.checks input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--rule-2); }
+
+.arch { margin: 14px 0 12px; max-width: 900px; }
+.tier { border: 1px solid var(--rule-2); border-radius: 12px; background: var(--panel); padding: 12px 14px 14px; }
+.tier.brain { border: 1.5px solid var(--accent); }
+.tier-h { font: 500 11px/1.3 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 10px; }
+.tier-h span { font: 400 12.5px/1.3 var(--f-body); letter-spacing: 0; text-transform: none; color: var(--ink-3); margin-left: 6px; }
+.tier.brain .tier-h { color: var(--accent-ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { flex: 1 1 104px; min-width: 0; background: var(--panel-2); border: 1px solid var(--rule); border-radius: 9px; padding: 8px 10px 9px; }
+.chip b { display: block; font-weight: 600; font-size: 14px; line-height: 1.3; }
+.chip span { display: block; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); margin-top: 1px; }
+.chip.key { border-color: var(--accent); background: var(--accent-soft); }
+.links { display: flex; flex-wrap: wrap; gap: 0 32px; padding: 0 0 0 26px; }
+.link { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 44px; }
+.link i { position: relative; justify-self: center; width: 2px; height: 100%; min-height: 44px; background: var(--ink-3); }
+.link i::after { content: ""; position: absolute; left: -5px; bottom: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid var(--ink-3); }
+.link.both i::before { content: ""; position: absolute; left: -5px; top: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid var(--ink-3); }
+.link em { font: 400 13px/1.4 var(--f-body); color: var(--ink-2); padding: 6px 0; }
+.link em b { color: var(--ink); font-weight: 600; }
+.pipeline { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.25fr) auto minmax(0, 1.15fr) auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.stage.stack { display: grid; gap: 6px; }
+.arrow { color: var(--ink-3); font: 500 18px/1 var(--f-mono); text-align: center; }
+@media (max-width: 760px) {
+  .pipeline { grid-template-columns: minmax(0, 1fr); }
+  .arrow { transform: rotate(90deg); }
+}
+.figcap { font-size: 13.5px; color: var(--ink-2); margin: -8px 0 16px; max-width: 80ch; }
+details.more { margin: 8px 0 16px; max-width: 84ch; }
+details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-ink); }
+.foot { margin-top: 64px; padding-top: 18px; border-top: 2px solid var(--ink); font-size: 13.5px; color: var(--ink-2); display: grid; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <div class="eyebrow">Attune · hackathon prototype · build plan v3</div>
+      <h1>Attune build plan</h1>
+    </div>
+    <p class="lede">How to build the Attune prototype end to end: a webcam and MLH Hardware Lab sensors taped to your glasses, and free AI software running entirely on your laptop. The prototype puts captions on the right faces, learns names, translates, and turns doorbells and smoke alarms into lights and buzzes. Nothing here is built yet; every step says how to check that it works.</p>
+    <div class="meta">
+      <span class="badge b-plain">Plan date 2026-09-25</span>
+      <span class="badge b-plain">Status: plan only</span>
+      <span class="badge b-ok">3 feasibility tests run</span>
+      <span class="badge b-check">Stack tests saved for later</span>
+    </div>
+    <dl class="glance">
+      <div><dt>The brain</dt><dd>Your <b>Dell Precision 5690</b> with its RTX 3500 Ada (12 GB). Everything runs locally and works offline.</dd></div>
+      <div><dt>Hardware</dt><dd><b>12 MLH menu items</b>, plus your glasses, tape and laptop. The webcam also needs a <b>USB-C to USB-A adapter</b>.</dd></div>
+      <div><dt>Software cost</dt><dd><b>$0.</b> Local AI: NVIDIA and InsightFace models, Ollama with Qwen 3.5. Sponsor add-ons: <b>ElevenLabs</b> (free MLH credits) and <b>Tiger Data</b> (free, runs on the laptop).</dd></div>
+      <div><dt>Targets</dt><dd>Captions within <b>1 s</b>, the right speaker at least <b>90%</b> of the time, a smoke alarm flagged within <b>4 s</b>, and <b>no false alarms</b> in 10 minutes.</dd></div>
+      <div><dt>Before the event</dt><dd>Install the tools, download about <b>12 GB</b> of models and packages, and run the 8 stack tests in <a href="#tests">section 7</a>.</dd></div>
+      <div><dt>Biggest risks</dt><dd>Wiring the Grove parts to the Arduino, NVIDIA's speech model on Windows, and a noisy hall. See <a href="#risks">section 9</a>.</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#decisions">Key decisions</a></li>
+        <li><a href="#demo">The demo and targets</a></li>
+        <li><a href="#system">How it fits together</a></li>
+        <li><a href="#hardware">Hardware</a></li>
+        <li><a href="#software">Software</a></li>
+        <li><a href="#dryrun">Dry runs</a></li>
+        <li><a href="#tests">Test plan</a></li>
+        <li><a href="#schedule">Build schedule</a></li>
+        <li><a href="#risks">Risks and fallbacks</a></li>
+        <li><a href="#dayof">Day-of checklists</a></li>
+        <li><a href="#appendix">Settings and sources</a></li>
+      </ol>
+      <div class="legend">
+        <div><span class="badge b-ok">Verified</span> tested on this laptop or confirmed this week</div>
+        <div><span class="badge b-info">Researched</span> docs say so, not tested here yet</div>
+        <div><span class="badge b-check">Check</span> confirm at setup or at pickup</div>
+        <div><span class="id">HW-T3</span> IDs are referred to across the plan</div>
+      </div>
+    </nav>
+
+    <main>
+      <section id="decisions">
+        <div class="sec-num">Section 01</div>
+        <h2>Key decisions</h2>
+        <p class="intro">These nine choices shape everything below. Each one came out of research this week, or out of a test on this laptop.</p>
+        <ol class="seq">
+          <li><div><strong>The laptop is the brain; the glasses only sense and signal.</strong> The rig sees, hears, flashes, buzzes and takes a tap. All thinking happens on the laptop's GPU, and no internet is needed.</div></li>
+          <li><div><strong>One Python engine owns the camera, the microphone and the Arduino.</strong> The browser pages only draw what the engine tells them: the lens view and the operator console, both on the laptop. There is no phone in the system. Only one program can safely hold a webcam, and this keeps timing in one place.</div></li>
+          <li><div><strong>Faces come from InsightFace, not MediaPipe.</strong> We measured MediaPipe's built-in face finder: it only reliably sees faces within about <strong>1 m</strong> <span class="badge b-ok">Verified</span>. InsightFace's SCRFD detector, run on the full 1080p frame, is built to find small faces, so it should reach 3–4 m <span class="badge b-info">Researched</span>. MediaPipe stays, but only to read lip movement on each cropped face.</div></li>
+          <li><div><strong>Captions use NVIDIA's Nemotron 3.5 streaming speech model.</strong> It transcribes while you speak, adds punctuation and names the language. It runs natively on Windows through sherpa-onnx's official ONNX build, with faster-whisper as the fallback. <span class=\"badge b-info\">Researched</span></div></li>
+          <li><div><strong>"Who's talking" combines lips, voice and loudness.</strong>
+            <ul>
+              <li><strong>Visible speaker:</strong> the face whose lips move while speech is heard. The rule uses how much the lip opening varies over a rolling 1-second window. We measured it on the film's video clips. <span class="badge b-ok">Verified</span></li>
+              <li><strong>"You":</strong> the wearer's own voice is recognized by how loud it is at the two sound sensors on the glasses, about 10 cm from their mouth.</li>
+              <li><strong>Off-screen speakers:</strong> placed left or right by comparing the two sensors.</li>
+            </ul></div></li>
+          <li><div><strong>One local language model does names, translation and descriptions.</strong> The Qwen 3.5 model already installed in Ollama returns names as structured data. It translates, and it describes a stranger's clothing. Using one model keeps GPU memory under control. A tap on the touch sensor confirms any name before it's used.</div></li>
+          <li><div><strong>Two independent checks for alarms.</strong> A sound-recognition model (EfficientAT) runs alongside a detector for the standard smoke-alarm rhythm of three beeps and a pause. Together they give alerts that are both fast and hard to fool. The LEDs and motor then signal the alarm on the side it came from.</div></li>
+          <li><div><strong>Consent first, and people's data stays on the laptop.</strong> Only people who agree are enrolled. Strangers are remembered for the current session only and are described by their clothing, never their body. There's a switch to forget the session. The only thing that goes online is a reply the wearer types for ElevenLabs to speak.</div></li>
+          <li><div><strong>Two sponsor add-ons, both on the laptop.</strong> ElevenLabs speaks replies the wearer types, through the laptop's speakers, which makes Attune two-way. Tiger Data stores the conversation history, so the wearer can scroll back through what was said.</div></li>
+        </ol>
+      </section>
+
+      <section id="demo">
+        <div class="sec-num">Section 02</div>
+        <h2>The demo and targets</h2>
+        <p class="intro">Everything in this plan serves a three-minute live demo. Build toward this script, rehearse it, and measure against the targets.</p>
+
+        <h3>Demo script (3 minutes)</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Time</th><th>Beat</th><th>What happens</th><th>What judges see</th></tr></thead>
+          <tbody>
+            <tr><td class="num">0:00</td><td class="k">Quick start</td><td>The wearer looks at two teammates in turn. In the console, each ticks consent, types their name and records a 5-second voice memo ("I'm Maya, I'm on the team").</td><td>A "Maya saved" chip; the name tag locks onto Maya's face.</td></tr>
+            <tr><td class="num">0:30</td><td class="k">Conversation</td><td>Maya and Leo talk. Leo steps out of view to the left and keeps talking. The wearer answers.</td><td>Bubbles on the right faces. An off-screen bubble at the left edge with an arrow. "You" captions at the bottom.</td></tr>
+            <tr><td class="num">1:10</td><td class="k">New person</td><td>A judge, not enrolled, walks up and says "Hi, I'm Sam."</td><td>"Person in blue jacket" becomes "Sam? tap to confirm". The wearer taps the glasses arm and the label becomes "Sam". The wearer presses a suggested reply, and the laptop says "Nice to meet you, Sam!" in an ElevenLabs voice.</td></tr>
+            <tr><td class="num">1:40</td><td class="k">Translation</td><td>Maya says a line in Spanish.</td><td>English in the bubble, with the Spanish original shown small and an "ES" tag.</td></tr>
+            <tr><td class="num">2:10</td><td class="k">Alerts</td><td>A teammate plays a doorbell on the JBL from the right, then a smoke-alarm recording from the left.</td><td>An amber "Doorbell, right" chip, then a red "Smoke alarm, left" banner. The left LED flashes and the motor buzzes the three-beep rhythm. A tap acknowledges it.</td></tr>
+            <tr><td class="num">2:40</td><td class="k">Privacy</td><td>The operator presses "Forget this session".</td><td>Sam's label disappears; Maya and Leo stay, because they consented. The history panel shows the whole conversation from Tiger Data, and Sam's lines are gone.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Targets to measure against</h3>
+        <div class="tbl mid"><table>
+          <thead><tr><th>Measure</th><th class="num">Target</th><th>How it's measured</th></tr></thead>
+          <tbody>
+            <tr><td>Caption delay, from end of a word to text on the lens view</td><td class="num">≤ 1.0 s median<br>≤ 1.5 s p90</td><td>Clap-and-say test on the rehearsal recording (<span class="id">T-E1</span>)</td></tr>
+            <tr><td>Right speaker</td><td class="num">≥ 90%</td><td>Rehearsal recording compared to a hand-written log of who spoke (<span class="id">T-E2</span>)</td></tr>
+            <tr><td>Enrolled face named</td><td class="num">≤ 1 s at ≤ 3 m</td><td>Walk-in test; a wrong name counts as a failure, while "unknown" is fine</td></tr>
+            <tr><td>Wrong names shown</td><td class="num">0</td><td>Whole rehearsal</td></tr>
+            <tr><td>Name learned from "I'm X"</td><td class="num">≥ 90% proposed</td><td>Script of 10 introductions</td></tr>
+            <tr><td>False name proposals</td><td class="num">≤ 1 per 10 min</td><td>10 minutes of normal talk</td></tr>
+            <tr><td>Smoke alarm, three-beep pattern</td><td class="num">≤ 4 s, ≥ 95% of tries</td><td>JBL at 1–3 m, 20 tries (<span class="id">T-E3</span>)</td></tr>
+            <tr><td>Doorbell</td><td class="num">≤ 2 s</td><td>Same setup</td></tr>
+            <tr><td>False alerts</td><td class="num">0 in 10 min</td><td>Talk with music playing (<span class="id">T-E4</span>)</td></tr>
+            <tr><td>Left/right correct</td><td class="num">≥ 90%</td><td>Sounds at least 45° to one side</td></tr>
+            <tr><td>Lens view smoothness</td><td class="num">≥ 24 fps</td><td>Console FPS counter</td></tr>
+            <tr><td>Stability</td><td class="num">30 min, no restart</td><td>Soak test (<span class="id">T-E5</span>)</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="system">
+        <div class="sec-num">Section 03</div>
+        <h2>How it fits together</h2>
+        <p class="intro">The glasses sense and signal, the chest pack connects the glasses parts to the laptop, and the laptop does all the thinking. One Python program on the laptop, the engine, runs every model and feeds two pages on the laptop's screen.</p>
+        <div class="arch" role="img" aria-label="System diagram: the glasses rig connects to the chest pack by Grove cables; the Arduino in the pack and the webcam connect to the laptop by USB; the laptop's Attune engine feeds the lens view and the operator console, and speaks typed replies through the laptop's speakers.">
+          <div class="tier">
+            <div class="tier-h">Glasses rig <span>taped to your glasses</span></div>
+            <div class="chips">
+              <div class="chip"><b>Webcam</b><span>Video and microphone</span></div>
+              <div class="chip"><b>Sound sensors</b><span>Left and right temples</span></div>
+              <div class="chip"><b>Touch sensor</b><span>Tap, hold, double tap</span></div>
+              <div class="chip"><b>LEDs</b><span>Left and right hinges</span></div>
+              <div class="chip"><b>Buzz motor</b><span>Right temple tip</span></div>
+            </div>
+          </div>
+          <div class="links">
+            <div class="link both"><i></i><em><b>Grove cables:</b> sound levels and touches go down; lights and buzz come back</em></div>
+          </div>
+          <div class="tier">
+            <div class="tier-h">Chest pack <span>taped to your shirt</span></div>
+            <div class="chips">
+              <div class="chip"><b>Arduino UNO R4 WiFi</b><span>Measures, reports and plays light and buzz patterns</span></div>
+              <div class="chip"><b>Motor driver</b><span>On I²C; powers the motor</span></div>
+              <div class="chip"><b>Breadboard</b><span>5 V and ground rails</span></div>
+            </div>
+          </div>
+          <div class="links">
+            <div class="link both"><i></i><em><b>USB serial:</b> levels and taps up, patterns down</em></div>
+            <div class="link"><i></i><em><b>USB video and audio:</b> the webcam's own cable, straight to the laptop</em></div>
+          </div>
+          <div class="tier brain">
+            <div class="tier-h">Laptop · Attune engine <span>one Python program, all on the GPU and CPU here</span></div>
+            <div class="pipeline">
+              <div class="stage"><div class="chip"><b>Capture</b><span>Camera, mic and Arduino link, on one clock</span></div></div>
+              <div class="arrow" aria-hidden="true">→</div>
+              <div class="stage stack">
+                <div class="chip"><b>Faces</b><span>Find, track, name</span></div>
+                <div class="chip"><b>Lip motion</b><span>Per face</span></div>
+                <div class="chip"><b>Speech</b><span>Voice activity, captions, voice prints</span></div>
+                <div class="chip"><b>Alert listener</b><span>Sound model and rhythm check</span></div>
+              </div>
+              <div class="arrow" aria-hidden="true">→</div>
+              <div class="stage stack">
+                <div class="chip key"><b>Who's talking</b><span>Fuses everything into one scene</span></div>
+                <div class="chip"><b>Ollama</b><span>Names, translation, descriptions, suggested replies</span></div>
+                <div class="chip"><b>Tiger Data</b><span>Conversation history</span></div>
+              </div>
+              <div class="arrow" aria-hidden="true">→</div>
+              <div class="stage"><div class="chip"><b>Web server</b><span>Pages and live link</span></div></div>
+            </div>
+          </div>
+          <div class="links">
+            <div class="link"><i></i><em><b>WebSockets:</b> video and face boxes to the lens view; captions and alerts to every page</em></div>
+          </div>
+          <div class="tier">
+            <div class="tier-h">Screen and speakers <span>all on the laptop</span></div>
+            <div class="chips">
+              <div class="chip"><b>Lens view</b><span>Laptop screen, recorded by OBS</span></div>
+              <div class="chip"><b>Operator console</b><span>Panels for enrolling, speaking and history</span></div>
+              <div class="chip"><b>Laptop speakers</b><span>Typed replies, spoken by ElevenLabs</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="figcap">The engine is the only program that touches the camera, the microphone and the Arduino. The pages only draw what it sends them.</p>
+
+        <div class="box info"><span class="lbl">Changed since the CAD page</span>
+          <p>The first version of the CAD page described a browser app that read the camera and serial port itself (both pages now match). This plan moves that work into a Python engine for two reasons. The strongest free models (InsightFace, Nemotron, EfficientAT) run on the GPU from Python. And one owner for every device keeps audio, video and sensor timing on one clock. The rig, the parts and the pin map stay the same.</p>
+        </div>
+
+        <h3>Where each job runs</h3>
+        <p>The engine is one process with several worker threads. Heavy maths runs in native GPU libraries, so Python's single-thread limit doesn't bottleneck it. If the lens view drops below 24 fps or captions start lagging, move the face workers into a second process. That is the first fix to reach for.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Job</th><th>Tool</th><th>Runs on</th><th>How often</th><th class="num">Time budget</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Camera reader</td><td>OpenCV</td><td>CPU thread</td><td>30 frames/s, keeps only the newest</td><td class="num">&lt; 5 ms</td></tr>
+            <tr><td class="k">Face finder and tracker</td><td>InsightFace SCRFD-10G</td><td>GPU (ONNX Runtime)</td><td>Every frame; 15 fps minimum</td><td class="num">≤ 15 ms</td></tr>
+            <tr><td class="k">Face namer</td><td>ArcFace (buffalo_l)</td><td>GPU (ONNX Runtime)</td><td>Only faces that need a check, ≤ 10/s</td><td class="num">~3 ms each</td></tr>
+            <tr><td class="k">Lip motion</td><td>MediaPipe Face Landmarker on crops</td><td>CPU</td><td>Every frame, up to 4 faces</td><td class="num">~5 ms each</td></tr>
+            <tr><td class="k">Microphone reader</td><td>sounddevice (WASAPI)</td><td>Audio callback</td><td>10 ms blocks at 48 kHz</td><td class="num">—</td></tr>
+            <tr><td class="k">Voice activity</td><td>Silero VAD</td><td>CPU</td><td>Every 32 ms</td><td class="num">&lt; 1 ms</td></tr>
+            <tr><td class="k">Captions</td><td>Nemotron streaming ASR (sherpa-onnx, INT8)</td><td>GPU (ONNX Runtime)</td><td>Every 560 ms chunk</td><td class="num">30–60 ms</td></tr>
+            <tr><td class="k">Voice prints</td><td>CAM++ (sherpa-onnx)</td><td>CPU</td><td>Once per utterance</td><td class="num">~20 ms</td></tr>
+            <tr><td class="k">Alert listener</td><td>EfficientAT mn10</td><td>GPU</td><td>1 s window every 0.5 s</td><td class="num">~10 ms</td></tr>
+            <tr><td class="k">Rhythm detector</td><td>Own tone and timing check</td><td>CPU</td><td>Every 10 ms</td><td class="num">&lt; 1 ms</td></tr>
+            <tr><td class="k">Arduino link</td><td>pyserial</td><td>CPU thread</td><td>20 readings/s in, commands out</td><td class="num">—</td></tr>
+            <tr><td class="k">Scene fusion</td><td>Own rules</td><td>Main loop</td><td>15 times/s and on every new event</td><td class="num">~2 ms</td></tr>
+            <tr><td class="k">Language jobs</td><td>Ollama, qwen3.5:4b</td><td>Its own process, GPU</td><td>On demand, one at a time</td><td class="num">0.5–1.7 s</td></tr>
+            <tr><td class="k">Web server and live link</td><td>FastAPI, uvicorn</td><td>Main loop</td><td>Video 30 fps; captions and alerts immediately</td><td class="num">—</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>One sentence's path, with timings</h3>
+        <p>Maya, already enrolled and in view, says "So what are we building?" in about 1.5 seconds. These are the expected timings; <span class="id">T-E1</span> measures the real ones.</p>
+        <div class="timeline">
+          <div><span class="t">0 ms</span><span class="d">Maya starts talking. The webcam mic sends audio to the engine in 10 ms blocks.</span></div>
+          <div><span class="t">60–100 ms</span><span class="d">Silero VAD marks speech.</span></div>
+          <div><span class="t">300–500 ms</span><span class="d">Maya's lip-motion score crosses 0.03. Hers is the only face with moving lips, so Maya becomes the speaker.<span class="sub">If no face qualifies yet, the first words wait up to 300 ms for a speaker before showing in a neutral bubble.</span></span></div>
+          <div><span class="t">600–800 ms</span><span class="d">The first 560 ms chunk is decoded in about 40 ms. "So what" appears in grey in Maya's bubble.</span></div>
+          <div><span class="t">every 560 ms</span><span class="d">The bubble grows as each new chunk is decoded.</span></div>
+          <div><span class="t">1.5 s</span><span class="d">Maya stops talking.</span></div>
+          <div><span class="t">1.9–2.1 s</span><span class="d">After 400 ms of silence the utterance ends. The final, punctuated text replaces the grey draft.<span class="sub">The line is saved to the Tiger Data history.</span></span></div>
+          <div><span class="t">2.1 s</span><span class="d">The final text goes to the name-learning filter. It contains no "I'm…" phrase, so the language model isn't called.</span></div>
+        </div>
+        <p>Video takes a separate, shorter path. Each frame reaches the lens view about 100–130 ms after the camera captured it. The frame and its face boxes travel in the same message, so tags never drift off faces.</p>
+      </section>
+
+      <section id="hardware">
+        <div class="sec-num">Section 04</div>
+        <h2>Hardware</h2>
+        <p class="intro">Everything comes from the MLH Hardware Lab menu, plus your glasses, tape and laptop. The placement and pins match the <a href="https://claude.ai/artifact/B6nYohjjWpL2ovXTKWQxja">CAD page</a>. Check the items marked below at pickup, because each one changes part of the plan.</p>
+
+        <h3>Parts</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Menu item</th><th class="num">Qty</th><th>Job in the prototype</th><th>Check at pickup</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Logitech Webcam</td><td class="num">1</td><td>The glasses' eyes and ears: 1080p video, plus the microphone for captions</td><td>Which model? A Brio 100 (1080p, 58°) is best. A C270 is 720p, so faces must be about 30% closer. Its cable is USB-A.</td></tr>
+            <tr><td class="k">Sound Sensor</td><td class="num">2</td><td>Left/right direction of sounds, and telling your voice from other people's</td><td>Get two; with one, direction is lost but alerts still work</td></tr>
+            <tr><td class="k">LED Socket Kit</td><td class="num">2</td><td>Alert light in the corner of each eye</td><td>LED color; a bright red or white LED works best</td></tr>
+            <tr><td class="k">Touch Sensor</td><td class="num">1</td><td>Tap for yes, hold for no, double tap to pause</td><td>—</td></tr>
+            <tr><td class="k">130 Mini DC Brushless Motor</td><td class="num">1</td><td>Buzz for alerts and confirmations</td><td>Two wire leads already attached. Three wires means a motor the driver can't run.</td></tr>
+            <tr><td class="k">Arduino Kit</td><td class="num">1</td><td>Reads the sensors, drives the lights and motor, talks to the laptop</td><td>Board is an UNO R4 WiFi; is its cable USB-C to C, or USB-C to A?</td></tr>
+            <tr><td class="k">Solderless Breadboard</td><td class="num">1</td><td>5 V and ground rails that every module shares</td><td>—</td></tr>
+            <tr><td class="k">Motor/Servo Driver Board</td><td class="num">1</td><td>Powers the motor, which a pin can't do directly</td><td>The model name printed on it (see the next table)</td></tr>
+            <tr><td class="k">Grove Jumper Wires</td><td class="num">6 + 2 spare</td><td>One cable per module</td><td>Length; longer is better</td></tr>
+            <tr><td class="k">Male to Male Jumper Wires</td><td class="num">≈25</td><td>Breadboard wiring, and adapting Grove plugs if needed</td><td>—</td></tr>
+            <tr><td class="k">JBL Go Speaker</td><td class="num">1</td><td>Plays the doorbell and smoke-alarm recordings. Not worn.</td><td>Charged; pair it with a teammate's phone</td></tr>
+            <tr><td class="k">Ceramic Capacitors</td><td class="num">1</td><td>A 0.1 µF capacitor (marked "104") across the motor to cut electrical noise that would disturb the sound sensors</td><td>New since the CAD page, which listed capacitors as unused</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Backup, only if needed:</strong> the menu's Servo Motor becomes a tapper on pin D9 if the driver can't run the motor. <strong>Ask the lab staff</strong> (not on the menu, but labs often have them): a Grove Base Shield, Grove-to-male-jumper cables, and a USB-C to USB-A adapter or a USB-C hub.</p>
+
+        <h3>At the lab desk</h3>
+        <ul class="checks">
+          <li><label><input type="checkbox"><span>Read the model name printed on the driver board, and note which column below it matches.</span></label></li>
+          <li><label><input type="checkbox"><span>Confirm the motor has two leads attached, so no soldering is needed.</span></label></li>
+          <li><label><input type="checkbox"><span>Open the Arduino kit: note the board (UNO R4 WiFi) and the USB cable type.</span></label></li>
+          <li><label><input type="checkbox"><span>Check the webcam model on its label: Brio 100 or C270.</span></label></li>
+          <li><label><input type="checkbox"><span>Ask for a Grove Base Shield, or Grove-to-male-jumper cables. Either one replaces the fiddly pins-in-plugs wiring.</span></label></li>
+          <li><label><input type="checkbox"><span>Ask whether they have a USB-C to USB-A adapter or hub, in case yours is missing or the Arduino cable is USB-A.</span></label></li>
+          <li><label><input type="checkbox"><span>Take 2 spare Grove cables, and one 0.1 µF ceramic capacitor.</span></label></li>
+          <li><label><input type="checkbox"><span>Ask whether the Servo Motor is available if you need it later.</span></label></li>
+          <li><label><input type="checkbox"><span>Check the JBL's charge, and borrow a USB-C cable to top it up.</span></label></li>
+          <li><label><input type="checkbox"><span>Note the return time and whether a soldering station or multimeter is at the workbench.</span></label></li>
+        </ul>
+
+        <h3>Which motor driver is it?</h3>
+        <div class="tbl mid"><table>
+          <thead><tr><th></th><th>Grove I2C Motor Driver (TB6612FNG)</th><th>Grove I2C Motor Driver V1.3 (L298)</th></tr></thead>
+          <tbody>
+            <tr><td class="k">How to tell</td><td>"TB6612FNG" printed on the board</td><td>"V1.3" and a large L298 chip with a heatsink</td></tr>
+            <tr><td class="k">Address on the I²C bus</td><td>0x14</td><td>0x0F</td></tr>
+            <tr><td class="k">Motor voltage</td><td>2.5–13.5 V, so 5 V from USB works</td><td>Needs 6–15 V, so USB's 5 V is too low</td></tr>
+            <tr><td class="k">Arduino library</td><td>Grove_Motor_Driver_TB6612FNG</td><td>Grove_I2C_Motor_Driver_v1_3</td></tr>
+            <tr><td class="k">What to do</td><td>Use it as planned <span class="badge b-ok">Likely</span></td><td>Try it at 5 V. If the motor barely turns, switch to the Servo Motor as a tapper on D9.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Plugging into the laptop</h3>
+        <p>The Dell Precision 5690 has only USB-C and Thunderbolt ports, plus HDMI, and no USB-A. Plan the ports before you arrive. <span class="badge b-check">Check</span></p>
+        <div class="tbl mid"><table>
+          <thead><tr><th>Laptop port</th><th>Plugs in</th><th>Needs</th></tr></thead>
+          <tbody>
+            <tr><td class="k">USB-C port 1</td><td>Laptop charger</td><td>Stay plugged in: on battery the GPU slows down sharply</td></tr>
+            <tr><td class="k">USB-C port 2</td><td>Webcam</td><td>A USB-C to USB-A adapter. Dell reportedly includes one in the box; check your bag.</td></tr>
+            <tr><td class="k">USB-C port 3</td><td>Arduino</td><td>If the kit cable is USB-C to C, nothing. If it's USB-A, a second adapter or a USB-C to C cable; any USB-C to C cable works.</td></tr>
+            <tr><td class="k">Wi-Fi</td><td>Venue Wi-Fi</td><td>Only needed for ElevenLabs replies. If it's down, the offline voice speaks instead.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Power</h3>
+        <p>Everything on the rig runs from the Arduino's USB 5 V, so stay under about <strong>0.5 A</strong> in total. These are estimates; <span class="id">T-H6</span> measures them.</p>
+        <div class="tbl mid"><table>
+          <thead><tr><th>Load</th><th class="num">Current</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Arduino board, Wi-Fi off</td><td class="num">~0.05–0.1 A</td><td>The USB bridge chip is always on</td></tr>
+            <tr><td>Built-in LED matrix</td><td class="num">&lt; 0.02 A</td><td>Status icons only</td></tr>
+            <tr><td>2 sound sensors, touch sensor</td><td class="num">~0.015 A</td><td>About 5 mA each</td></tr>
+            <tr><td>2 LEDs at full brightness</td><td class="num">~0.04 A</td><td>About 20 mA each</td></tr>
+            <tr><td>Driver board logic</td><td class="num">~0.015 A</td><td>Its own small controller</td></tr>
+            <tr><td>Motor, buzzing with the tape weight</td><td class="num">~0.15–0.3 A</td><td>About 1 A for a few ms at start; 0.8–2 A if stalled, so never let it stall</td></tr>
+            <tr><td class="k">Total, motor running</td><td class="num">~0.3–0.5 A</td><td>OK with short buzzes and a soft start</td></tr>
+          </tbody>
+        </table></div>
+        <p>If the Arduino ever resets during a buzz, the motor's start-up surge is pulling the 5 V down. Lower the buzz strength, lengthen the soft start, and check the capacitor.</p>
+
+        <h3>Wiring</h3>
+        <p>Same pins as the CAD page. The best option is a Grove Base Shield, which stacks on the Arduino so the Grove cables plug straight in. Without one, run the Grove cables to the breadboard as the CAD page shows.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Part</th><th>Wire used</th><th>Arduino pin</th><th>Base Shield port</th><th>Without a shield</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Sound Sensor, left</td><td>Yellow (signal)</td><td class="mono">A0</td><td class="mono">A0</td><td>Yellow to A0; red and black to the 5 V and GND rails</td></tr>
+            <tr><td class="k">Sound Sensor, right</td><td>Yellow</td><td class="mono">A1</td><td class="mono">A1</td><td>Yellow to A1</td></tr>
+            <tr><td class="k">Touch Sensor</td><td>Yellow</td><td class="mono">D2</td><td class="mono">D2</td><td>Yellow to D2</td></tr>
+            <tr><td class="k">LED Socket, left</td><td>Yellow</td><td class="mono">D5</td><td class="mono">D5</td><td>Yellow to D5 (a dimmable pin)</td></tr>
+            <tr><td class="k">LED Socket, right</td><td>Yellow</td><td class="mono">D6</td><td class="mono">D6</td><td>Yellow to D6 (a dimmable pin)</td></tr>
+            <tr><td class="k">Motor/Servo Driver, control</td><td>Yellow = SCL, white = SDA</td><td class="mono">SCL, SDA</td><td>Any I2C port</td><td>To the SCL and SDA pins beside AREF, not the Qwiic socket, which is 3.3 V</td></tr>
+            <tr><td class="k">Motor/Servo Driver, power</td><td>Screw terminal</td><td class="mono">5V, GND</td><td>Shield 5 V and GND pins</td><td>Jumpers from the rails into the terminal</td></tr>
+            <tr><td class="k">Motor</td><td>Two leads and the capacitor</td><td>Driver output M1</td><td>—</td><td>Clamp the capacitor's legs in the M1 terminal with the motor leads, so no soldering is needed</td></tr>
+            <tr><td class="k">Backup servo</td><td>Signal, 5 V, GND</td><td class="mono">D9</td><td>Jumpers (the shield has no D9 port)</td><td>Signal to D9, power to the rails</td></tr>
+          </tbody>
+        </table></div>
+        <ul>
+          <li>Set the Base Shield's voltage switch to <strong>5 V</strong>.</li>
+          <li>Each Grove port carries two signal lines, but these modules only use the yellow one, so neighboring ports (A0 and A1, D5 and D6) don't clash.</li>
+          <li>Pushing jumper pins into Grove plugs works, but the contact is loose. Push one pin per hole, tape every joint, and check each one with the workbench multimeter's continuity beep.</li>
+          <li>Label both ends of every cable with tape ("L sound", "R LED"). Crossed left and right cables are the most likely wiring bug, and <span class="id">T-H3</span> catches it.</li>
+        </ul>
+
+        <h3>Mounting on the glasses</h3>
+        <ul>
+          <li><strong>Webcam</strong> over the bridge, aimed straight ahead, with two wraps of tape around its clip. Level it later with the calibration step.</li>
+          <li><strong>Sound sensors</strong> outside each temple, about 2 cm behind the hinge, microphones facing out.</li>
+          <li><strong>LEDs</strong> on each hinge, bent back so you see them at the edge of your vision without them blocking your view.</li>
+          <li><strong>Touch sensor</strong> on the right temple where your finger lands naturally. It works through one layer of tape.</li>
+          <li><strong>Motor</strong> at the right temple tip, with a lump of tape off-centre on the shaft so it wobbles. Keep the tape lump clear of hair and cables.</li>
+          <li><strong>Cables</strong> taped along the temples every few centimetres, down behind the ears to the chest pack. Leave a small tape loop at each temple tip and at the collar, so a tug pulls the loop and not the connectors.</li>
+          <li><strong>Retainer:</strong> a strip of tape joining the two temple tips behind your head stops the front-heavy rig from sliding down your nose.</li>
+        </ul>
+
+        <h3>What the Arduino does</h3>
+        <p>The firmware is small and dependable, and it makes no decisions about people or sounds; the laptop does. It measures, reports, and plays patterns with exact timing.</p>
+        <div class="cards">
+          <div class="card"><h4>Sound levels</h4><p>Reads both sound sensors thousands of times a second. Every 50 ms it reports each side's loudness: the gap between the highest and lowest reading, because the sensor outputs raw audio. It marks readings taken while the motor runs, since the motor adds noise.</p></div>
+          <div class="card"><h4>Touch gestures</h4><p>Tap (under 0.4 s) means yes. Hold (0.8 s or more) means no. A double tap (two taps within 0.4 s) pauses or resumes recognition. The sensor calibrates itself at power-up, so don't touch it while plugging in.</p></div>
+          <div class="card"><h4>Lights and buzz</h4><p>Plays named patterns from the table below, so the rhythm stays exact even if the laptop is busy. The motor starts with a 40 ms soft ramp, and no single buzz lasts longer than 0.6 s.</p></div>
+          <div class="card"><h4>Safety stop</h4><p>If the laptop sends nothing for 2 s, all lights and the motor stop. The motor never runs more than 60% of any 2 seconds.</p></div>
+          <div class="card"><h4>Status display</h4><p>The board's built-in 12×8 LED matrix shows a heartbeat when linked, "!" and an arrow during an alert, "P" when paused and "?" when the laptop link is lost. It's handy for debugging on your chest.</p></div>
+          <div class="card"><h4>Start-up</h4><p>Looks for the driver on the I²C bus (0x14 or 0x0F), then announces itself with its version and the driver it found. The board's Wi-Fi stays off; USB is simpler and faster.</p></div>
+        </div>
+
+        <h4>Light and buzz patterns</h4>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Pattern</th><th>Light</th><th>Buzz</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td class="k">T3</td><td>LED on the alarm's side: 0.5 s on, 0.5 s off, three times, then 1.5 s dark; repeats</td><td>Same rhythm, 0.45 s buzzes</td><td>Smoke or fire alarm (three-beep pattern)</td></tr>
+            <tr><td class="k">T4</td><td>Four quick 0.1 s flashes, then 5 s dark</td><td>Four quick ticks</td><td>Carbon monoxide pattern, if detected</td></tr>
+            <tr><td class="k">BELL</td><td>Two 150 ms flashes on that side</td><td>Two 120 ms buzzes</td><td>Doorbell</td></tr>
+            <tr><td class="k">NAME</td><td>Right LED fades in and out once over 1 s</td><td>None</td><td>"Sam? Tap to confirm"</td></tr>
+            <tr><td class="k">OK</td><td>One 100 ms blink</td><td>One 80 ms tick</td><td>A tap was accepted</td></tr>
+            <tr><td class="k">NO</td><td>None</td><td>Two 40 ms ticks</td><td>A hold was accepted</td></tr>
+            <tr><td class="k">LOST</td><td>Both LEDs blink dimly every 2 s</td><td>None</td><td>Laptop link lost</td></tr>
+          </tbody>
+        </table></div>
+
+        <h4>Messages over USB</h4>
+        <p>Plain text lines at 115200 baud. The laptop finds the Arduino by its USB ID instead of a fixed COM number. It opens the port without toggling DTR, so the board doesn't reset, waits up to 3 s for <code>READY</code>, and reconnects automatically if the cable is pulled.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Direction</th><th>Message</th><th>When</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Arduino → laptop</td><td><code>READY</code> with version and driver</td><td>At start</td><td>Firmware version, and which driver answered on I²C (or none)</td></tr>
+            <tr><td>Arduino → laptop</td><td><code>LV</code> time, left, right, motor flag</td><td>Every 50 ms</td><td>Loudness of each sound sensor (0–1023), the board's clock, and whether the motor was running</td></tr>
+            <tr><td>Arduino → laptop</td><td><code>TOUCH</code> TAP, HOLD or DOUBLE</td><td>On a gesture</td><td>Touch gestures</td></tr>
+            <tr><td>Arduino → laptop</td><td><code>HB</code> time</td><td>Every 1 s</td><td>Heartbeat</td></tr>
+            <tr><td>Arduino → laptop</td><td><code>ACK</code> number, or <code>ERR</code> text</td><td>After a command, or on a fault</td><td>Confirms command n, or reports faults such as "driver missing"</td></tr>
+            <tr><td>Laptop → Arduino</td><td><code>PAT</code> number, side, name</td><td>On events</td><td>Play a pattern (T3, T4, BELL, NAME, OK, NO) on side L, R or B (both)</td></tr>
+            <tr><td>Laptop → Arduino</td><td><code>STOP</code></td><td>When an alert is acknowledged</td><td>Stop all patterns</td></tr>
+            <tr><td>Laptop → Arduino</td><td><code>HB</code></td><td>Every 0.5 s</td><td>Laptop heartbeat; if it's missing for 2 s, the Arduino stops everything</td></tr>
+            <tr><td>Laptop → Arduino</td><td><code>MX</code> icon</td><td>On a state change</td><td>Which icon the LED matrix shows</td></tr>
+            <tr><td>Laptop → Arduino</td><td><code>CFG</code> key, value</td><td>After <code>READY</code></td><td>Report rate, gesture timings, LED brightness</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="software">
+        <div class="sec-num">Section 05</div>
+        <h2>Software</h2>
+        <p class="intro">Every tool here is free and runs on the laptop without internet. Where two tools were close, the plan picks the one with the better measured accuracy and keeps the other as the fallback.</p>
+
+        <h3>The stack</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Job</th><th>Choice</th><th>License</th><th>Why this one</th><th>Fallback</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Runtime</td><td>Python 3.12 in a uv virtual environment</td><td>Open source</td><td>Keeps the engine's packages apart from your system Python 3.13</td><td>—</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Web server, live link</td><td>FastAPI with uvicorn WebSockets</td><td>MIT, BSD</td><td>One process serves the pages and pushes updates</td><td>—</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Camera</td><td>OpenCV, Media Foundation backend, MJPG 1080p30</td><td>Apache 2.0</td><td>Direct and fast, with no browser in between</td><td>DirectShow backend; the built-in camera for desk work</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Microphone</td><td>sounddevice (WASAPI) at 48 kHz, resampled with soxr</td><td>MIT, LGPL</td><td>Low delay; OBS can share the same mic</td><td>SciPy resampling</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Voice activity</td><td>Silero VAD v6</td><td>MIT</td><td>Tiny and accurate, and runs on the CPU</td><td>WebRTC VAD</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Captions</td><td>NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, run through sherpa-onnx (official INT8 export, 560 ms chunks, about 650 MB)</td><td>NVIDIA open model license (check the card)</td><td>Transcribes while you speak, with punctuation and language ID across 40 locales. Chunks of 0.08–1.12 s; 9.2% word errors on FLEURS at 1.12 s. The sherpa-onnx build runs natively on Windows, so no NeMo or WSL2.</td><td>faster-whisper large-v3-turbo with a streaming wrapper (1–2 s delay)</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Voice prints</td><td>CAM++ (3D-Speaker) through sherpa-onnx</td><td>Apache 2.0</td><td>Tiny, runs on the CPU, and shares the same runtime as the captions. Needs about 1 s of speech; 3 s is more reliable.</td><td>WeSpeaker ResNet34 or SpeechBrain ECAPA; Streaming Sortformer for full diarization</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Face finding</td><td>InsightFace SCRFD-10G</td><td>Code MIT; weights non-commercial</td><td>Best at small, distant faces</td><td>YuNet (MIT)</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Face naming</td><td>ArcFace ResNet50 from the buffalo_l pack</td><td>Weights non-commercial</td><td>Strong accuracy; same pack as the finder</td><td>SFace (Apache 2.0)</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Tracking</td><td>Overlap matching with motion prediction, plus face-print re-identification (ByteTrack style)</td><td>Own</td><td>Keeps IDs steady between name checks</td><td>—</td><td>—</td></tr>
+            <tr><td class="k">Lip motion</td><td>MediaPipe Face Landmarker on face crops</td><td>Apache 2.0</td><td>The signal is verified on video</td><td>Light-ASD (MIT), a trained active-speaker model</td><td><span class="badge b-ok">Verified signal</span></td></tr>
+            <tr><td class="k">Sound alerts</td><td>EfficientAT mn10_as, plus an own rhythm detector</td><td>MIT</td><td>47 mAP on AudioSet, tiny and fast. The rhythm check makes alarms hard to fake.</td><td>PANNs CNN14 (MIT) or YAMNet (Apache 2.0)</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Language jobs</td><td>Ollama with qwen3.5:4b, already installed</td><td>Ollama MIT; check the model card</td><td>One model for names, translation and descriptions saves GPU memory</td><td>qwen3.5:2b if memory is tight; TranslateGemma 4B for translation</td><td><span class="badge b-check">Check accuracy</span></td></tr>
+            <tr><td class="k">Text language check</td><td>Lingua</td><td>Apache 2.0</td><td>Reliable on short sentences</td><td>The ASR's own language ID</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Pages</td><td>Plain HTML and canvas, styled like the films' HUD</td><td>Own</td><td>No build step, and fast to change</td><td>—</td><td>—</td></tr>
+            <tr><td class="k">Spoken replies</td><td>ElevenLabs, low-latency voice</td><td>Paid service; free MLH credits</td><td>Natural voice for replies the wearer types; MLH sponsor prize</td><td>Kokoro, offline</td><td><span class="badge b-check">Needs Wi-Fi</span></td></tr>
+            <tr><td class="k">Offline voice</td><td>Kokoro-82M through sherpa-onnx</td><td>Apache 2.0</td><td>Tiny and fast, natural-sounding, with English and Spanish voices</td><td>Piper</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">History</td><td>Tiger Data's TimescaleDB on local PostgreSQL</td><td>Free to self-host</td><td>Time-series history with auto-delete and fast search; MLH sponsor prize</td><td>Plain PostgreSQL</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Recording</td><td>OBS Studio</td><td>GPL-2.0</td><td>Records the lens view with the GPU's encoder, so it costs almost no CPU</td><td>Chrome's built-in recorder</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">Arduino tools</td><td>Arduino IDE 2 or arduino-cli, the driver's library, pyserial</td><td>AGPL, MIT, BSD</td><td>Standard tools</td><td>—</td><td><span class="badge b-info">Researched</span></td></tr>
+          </tbody>
+        </table></div>
+        <div class="box warn"><span class="lbl">License note</span>
+          <p>The buffalo_l face models are licensed for non-commercial research. That's fine for a hackathon demo. For a product, swap in YuNet and SFace (MIT and Apache 2.0), which fit the same slots. Everything else in the stack allows commercial use. Check the Qwen and Nemotron model cards before shipping anything.</p>
+        </div>
+
+        <h3>Capture</h3>
+        <ul>
+          <li>Open the webcam by name rather than number, because the built-in camera is usually camera 0. Ask for MJPG at 1920×1080 and 30 fps, with a one-frame buffer so frames never queue up.</li>
+          <li>Stamp every frame and every audio block with the same clock on arrival. USB video usually trails audio by 50–100 ms; a clap test measures the exact offset (see calibration).</li>
+          <li>Use the webcam's own microphone. It sits on the glasses, like a real product's would. Turn off Windows audio enhancements for it, and set the input level so your own voice peaks around −6 dBFS.</li>
+          <li>Resample once into two streams: 16 kHz for speech and 32 kHz for the alert model.</li>
+          <li>Keep the last 30 s of audio and 5 s of frames in memory. The voice-print and description jobs read from them, and replay mode records them.</li>
+          <li>If the webcam disappears, switch to the laptop's built-in mic and show "Camera lost" while captions keep running.</li>
+        </ul>
+
+        <h3>Faces: find, track, name</h3>
+        <ul>
+          <li><strong>Find.</strong> SCRFD runs on every frame, starting at a 960-pixel detection size; <span class="id">T-S3</span> picks between 640, 960 and 1280 by speed and range. Faces under 36 px wide are ignored.</li>
+          <li><strong>Track.</strong> Each new box is matched to an existing track by overlap, using where that track was heading. A track survives 1 s without a detection, for someone turning away, then moves to a 10 s "lost" list. If the same face returns within 10 s, it gets its old track and name back.</li>
+          <li><strong>Remember exits.</strong> When a track is lost within 10% of the left or right edge, the engine notes "left the frame on the left" and the time. This drives the off-screen arrow.</li>
+          <li><strong>Name.</strong> ArcFace turns a straightened 112×112 face crop into a 512-number face print. Only good crops count: at least 60 px wide, roughly facing the camera, and not blurred.</li>
+          <li><strong>Match rules.</strong> A name appears only when the best match scores ≥ 0.45 and beats the runner-up by ≥ 0.08, three times within 1 s; the 0.45 is tuned in <span class="id">T-S3</span>. Named faces are rechecked every 2 s, and after three failed rechecks the tag returns to "unknown". A tag never jumps straight from one name to another, so a wrong name is much rarer than an "unknown".</li>
+          <li><strong>Nothing else is inferred.</strong> The buffalo_l pack also contains an age and gender model. It is never loaded.</li>
+        </ul>
+
+        <h4>Enrolling someone, with consent</h4>
+        <ol class="seq">
+          <li><div>The operator presses <strong>Enroll</strong> in the console and picks the person's face from live thumbnails.</div></li>
+          <li><div>The person reads a one-line notice: "Attune stores a face print and a voice print on this laptop to show your name. You can delete them anytime." They tick consent themselves, and the console records their name and the time.</div></li>
+          <li><div>They face the webcam from about 1 m and turn their head a little left and right for 5 s. The engine keeps the 8 most varied good crops. With fewer than 5 it refuses and says why ("more light" or "come closer").</div></li>
+          <li><div>They talk for 5 s. Silero trims the silence and CAM++ stores a voice print.</div></li>
+          <li><div>Their tag switches to their name at once. The console lists everyone enrolled, with Rename and Delete; Delete removes every file for that person.</div></li>
+        </ol>
+
+        <h3>Who's talking</h3>
+        <p>While speech is detected, the fusion step runs 15 times a second and checks these cases in order:</p>
+        <ol class="seq">
+          <li><div><strong>You.</strong> Both glasses sensors read above your calibrated own-voice level, within 3 dB of each other. Your mouth is about 10 cm from them, so your voice arrives about 15–25 dB louder than anyone else's. The caption goes to the "You" bar at the bottom.</div></li>
+          <li><div><strong>A visible speaker.</strong> A face's lip-motion score (the variation of mouth opening over 1 s) is ≥ 0.03, and its lips move in time with the sound. The speaker is held at least 0.5 s, and only changes to someone scoring 1.5× higher. The bubble points at that face.</div></li>
+          <li><div><strong>A probable visible speaker.</strong> Exactly one face is in the uncertain band (0.015–0.03) and everyone else is still. The bubble points at that face with a dashed tail.</div></li>
+          <li><div><strong>Off-screen.</strong> No visible lips are moving. After about 1 s of speech, the voice print is compared with enrolled and session voices, and a match of ≥ 0.5 names the speaker. The side comes from where that person left the frame if that was under 30 s ago; otherwise the louder sound sensor decides, if it's at least 3 dB ahead. Until then the bubble says "Someone" with a side arrow, or sits at the bottom with a "?".</div></li>
+          <li><div><strong>Voice-print harvesting.</strong> When case 2 has been confident for 1.5 s of speech, that stretch of voice is added to the person's print for this session. That's what lets case 4 name strangers too.</div></li>
+        </ol>
+        <p>The <strong>in-time check</strong> in case 2 compares the rhythm of mouth opening with the rhythm of the sound over the last second, after the calibrated offset. Talking moves the lips with the syllables; smiling, nodding and chewing don't. The dry runs showed it's needed (<a href="#dryrun">section 6</a>). When two people talk at once, the caption goes to the higher score. The demo script avoids overlaps.</p>
+
+        <h3>Captions</h3>
+        <ul>
+          <li><strong>Speech on and off.</strong> Speech starts when Silero's probability passes 0.5 and ends below 0.35. Blips under 250 ms are ignored, and 400 ms of silence ends an utterance.</li>
+          <li><strong>Streaming.</strong> Nemotron decodes 560 ms chunks; <span class="id">T-S2</span> also tries 320 and 1120 ms. It adds punctuation and capitals and reports the language. Draft text shows grey, and final text white.</li>
+          <li><strong>Word times.</strong> Every word carries a timestamp, so if the speaker changes mid-sentence, the text is split at the change.</li>
+          <li><strong>Loudness.</strong> Your voice is far louder in the glasses mic than anyone else's. Each utterance is level-matched before the ASR sees it.</li>
+          <li><strong>Fallback.</strong> faster-whisper large-v3-turbo with whisper_streaming's method, which only shows words that two passes agree on. That's a 1–2 s delay with the same features.</li>
+          <li><strong>Other languages.</strong> The sherpa-onnx build exposes Nemotron's language setting, so the engine can use auto-detect or lock to English and Spanish. If Spanish is weak in <span class="id">T-S2</span>, utterances flagged as another language are re-run through Whisper.</li>
+          <li><strong>No noise filter on the caption audio.</strong> Modern speech models usually get worse on cleaned-up audio, because the cleanup adds artifacts. DeepFilterNet stays an A/B test for very loud halls only.</li>
+          <li><strong>Layout.</strong> A bubble holds at most 2 lines of about 42 characters, older text scrolls off, and it fades 4 s after the last word. The history panel keeps the full transcript.</li>
+        </ul>
+
+        <h3>Learning names</h3>
+        <ul>
+          <li><strong>Word filter first.</strong> Only sentences with an introduction phrase go to the language model: "I'm", "I am", "my name", "call me", "this is", "meet", "me llamo", "soy". That saves a model call on every sentence and cuts false proposals.</li>
+          <li><strong>Structured answer.</strong> Ollama must reply in a fixed JSON shape: whether it's an introduction, the name, whose name it is (the speaker's or someone else's), and a confidence. Temperature is 0 and thinking is off. The prompt carries about 8 examples, half of them traps such as "I'm tired", "I'm Sam's sister" and "I'm going to Sam's".</li>
+          <li><strong>Sanity checks.</strong> The name must be 1–3 words and not a common word; a stop-list of about 200 words ("fine", "good", "here", "sorry") catches those. Introductions attributed to "You" are ignored, because your own name is known.</li>
+          <li><strong>Confirm by touch.</strong> The tag becomes "Sam?" with "tap to confirm", and the right LED glows once. A tap accepts the name for this session only. A hold rejects it. After 10 s with no answer, the proposal expires.</li>
+          <li><strong>Upgrade with consent.</strong> The console then offers "Enroll Sam permanently?", which needs Sam's own consent through the same enrollment steps.</li>
+          <li><strong>Touch priority.</strong> An active alert takes the tap first (acknowledge), then a pending name. Otherwise a tap does nothing.</li>
+        </ul>
+
+        <h3>Describing strangers</h3>
+        <ul>
+          <li><strong>Instant color.</strong> Once an unknown face has been steady for 1 s, the engine looks at the region below it (the upper body) and finds its main color by clustering the pixels. The tag reads "Person in blue" within about 1 s, with no language model involved.</li>
+          <li><strong>Refined garment.</strong> In the background, the qwen3.5 vision model gets the upper-body crop and must answer from fixed lists, enforced by a JSON schema. The tag becomes "Person in blue jacket" about 1–2 s later.</li>
+          <li><strong>Duplicates.</strong> If two strangers get the same label, the second adds an accessory or a number ("Person in blue jacket, 2").</li>
+        </ul>
+        <div class="tbl mid"><table>
+          <thead><tr><th>List</th><th>Allowed words</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Colors</td><td>black, white, grey, navy, blue, green, red, orange, yellow, purple, pink, brown, beige</td></tr>
+            <tr><td class="k">Garments</td><td>jacket, coat, hoodie, sweater, shirt, T-shirt, top, dress, vest</td></tr>
+            <tr><td class="k">Accessories (optional)</td><td>cap, hat, glasses, scarf, headphones, lanyard, backpack</td></tr>
+          </tbody>
+        </table></div>
+        <p>Words about gender, age, body, skin or ethnicity can't come out, because they aren't in the lists.</p>
+
+        <h3>Translation</h3>
+        <ul>
+          <li><strong>Trigger.</strong> A final utterance whose language isn't English. The ASR's guess is double-checked by Lingua on the text, because short sentences are easy to mislabel.</li>
+          <li><strong>Engine.</strong> The same qwen3.5:4b, told to translate only, at temperature 0. The upgrade is TranslateGemma 4B, a dedicated translation model (3.3 GB), if memory allows. The light fallback is Opus-MT Spanish→English through CTranslate2, which is small and quick on the CPU.</li>
+          <li><strong>Display.</strong> While Maya speaks Spanish, Maya's bubble shows the Spanish draft in italics with an "ES" tag. About 0.5–1.2 s after the final, the English replaces it, with the Spanish in small type underneath.</li>
+          <li><strong>Expected languages.</strong> The console can set them (English and Spanish, say), which prevents rare mislabels as Portuguese or Italian.</li>
+          <li><strong>One job at a time.</strong> Ollama runs one request at a time, so the engine queues jobs by priority: translation, then names, then descriptions.</li>
+        </ul>
+
+        <h3>Sound alerts</h3>
+        <p>Two independent listeners feed one decision.</p>
+        <ul>
+          <li><strong>The model.</strong> Every 0.5 s, EfficientAT (mn10_as) scores the last 1 s of 32 kHz audio against 527 sound classes. Classes are picked by name (Smoke detector, Fire alarm, Doorbell, Ding-dong, Speech, Music), never by number, because different models number them differently.</li>
+          <li><strong>The rhythm detector.</strong> Every 10 ms it tracks tone energy in two bands: 2.8–3.4 kHz, where most alarms sound, and 470–570 Hz, for the low-pitched alarms used in bedrooms. It checks the on/off timing against the two standard patterns. T3 is three 0.5 s beeps with 0.5 s gaps, then 1.5 s off; T4 is four 0.1 s beeps, then 5 s off. It allows ±20% on timing and requires a pure tone, which rules out speech.</li>
+        </ul>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Alert</th><th>Fires when</th><th class="num">Expected time</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Smoke or fire</td><td>The model scores ≥ 0.5 for smoke detector or fire alarm in 2 of the last 3 windows, and the rhythm detector has heard at least 2 correctly spaced beeps</td><td class="num">~2–3 s</td></tr>
+            <tr><td class="k">Smoke or fire, rhythm only</td><td>The rhythm detector confirms 2 full T3 cycles, even if the model is unsure</td><td class="num">~7 s</td></tr>
+            <tr><td class="k">Carbon monoxide</td><td>The rhythm detector confirms 2 full T4 cycles</td><td class="num">~7 s</td></tr>
+            <tr><td class="k">Watch mode</td><td>A smoke or fire score of 0.3–0.5 only arms a 10 s watch: a console indicator, with no alert</td><td class="num">—</td></tr>
+            <tr><td class="k">Doorbell</td><td>Doorbell or ding-dong scores ≥ 0.4 while speech and music both score under 0.5; then this rule rests for 5 s</td><td class="num">~1–1.5 s</td></tr>
+          </tbody>
+        </table></div>
+        <ul>
+          <li><strong>Direction.</strong> Compare the left and right sensor levels only during the moments the tone is on. A side that's 3 dB or more louder wins; otherwise both LEDs flash.</li>
+          <li><strong>Output.</strong> A red "Smoke alarm · left" banner (amber for the doorbell), the matching light and buzz pattern, and a line in the history.</li>
+          <li><strong>Ending.</strong> A tap acknowledges the alert: lights and buzz stop, and the banner reads "Acknowledged". If the sound is still going after 30 s, it alerts again. It clears after 15 s of quiet. Any window in which Attune's own motor was running is ignored, so the buzz can't keep an alarm alive.</li>
+          <li><strong>Supplemental only.</strong> This is a demo, not a certified smoke alarm. Never trigger a real alarm at the venue; play recordings.</li>
+        </ul>
+
+        <h3>The two pages</h3>
+        <div class="cards">
+          <div class="card"><h4>Lens view</h4>
+            <ul>
+              <li>Full screen in Chrome on the laptop. Judges watch it, and OBS records it.</li>
+              <li>Each frame is drawn with face tags, speech bubbles with tails to the speaker's mouth, off-screen bubbles docked at the edge with an arrow, the "You" bar, and alert banners.</li>
+              <li>Uses the films' HUD look (colors, type and bubble shapes), so the demo matches them.</li>
+              <li>Bubbles push apart instead of overlapping, and glide rather than jump. Faces under 40 px get a dot instead of a tag.</li>
+              <li>H hides the status strip (fps, mic level, Arduino link, caption delay) for the demo.</li>
+            </ul></div>
+          <div class="card"><h4>Operator console</h4>
+            <ul>
+              <li>A second Chrome window on the laptop, or panels that slide over the lens view (C console, S speak, Y history). With an external monitor it gets its own screen.</li>
+              <li>Enroll, rename, delete and forget session. Switches for translation, alerts and debug, and a test button for each light and buzz pattern.</li>
+              <li>Calibration wizard, live levels, GPU memory, fps, caption delay, and whether Ollama is warm.</li>
+              <li>An event log with a Mark button for noting problems during rehearsals.</li>
+              <li>Keyboard fallback on the laptop: E enroll, F forget, P pause, H hide status, 1–9 replies.</li>
+            </ul></div>
+        </div>
+
+        <h3>Speak for me (ElevenLabs)</h3>
+        <ul>
+          <li><strong>The Speak panel</strong> sits on the laptop: a text box, plus preset replies on keys 1–5 ("Nice to meet you", "Can you repeat that?", "One moment", "Thank you", "I read captions, go ahead").</li>
+          <li><strong>Suggested replies.</strong> Qwen offers three short replies based on the last few lines, on keys 7–9, so the wearer can answer with one key press.</li>
+          <li><strong>The voice.</strong> The engine sends the text to ElevenLabs' low-latency voice and plays it from the laptop's speakers. Pick one preset voice; cloning the wearer's own voice needs their consent and isn't needed for the demo.</li>
+          <li><strong>No double captions.</strong> The glasses mic hears the laptop speak. The engine shows the reply as "You (typed)" and ignores mic captions while it plays, plus 0.5 s.</li>
+          <li><strong>Offline fallback.</strong> If no audio arrives within 1.5 s (Wi-Fi down, credits used up), Kokoro speaks the reply locally instead.</li>
+          <li><strong>Only the typed text</strong> goes to ElevenLabs. Nothing anyone else says leaves the laptop.</li>
+        </ul>
+
+        <h3>Conversation history (Tiger Data)</h3>
+        <ul>
+          <li><strong>Storage.</strong> Tiger Data's TimescaleDB runs on the laptop, on top of PostgreSQL. Every final caption, translation, typed reply, alert and confirmed name becomes a timestamped row.</li>
+          <li><strong>The history panel</strong> (press Y) lists sessions by time. Each one is a scrolling timeline with a color per speaker, and translations and alerts in line. It has a search box, a filter by person, and a "Sounds you missed" list.</li>
+          <li><strong>Tiger Data features to show judges:</strong> time-ordered hypertables, a continuous aggregate for talk time per person per minute (a small chart), a retention policy that deletes history after 7 days, and full-text search.</li>
+          <li><strong>Never stored:</strong> audio, video and face prints.</li>
+          <li><strong>Consent.</strong> Names are saved only for people who agreed. Strangers are saved under their clothing label, and "Forget this session" deletes their rows too. ShellHacks is in Florida, which generally requires everyone's consent to record a conversation, and a saved transcript may count. This isn't legal advice.</li>
+          <li><strong>Ask the MLH coach</strong> whether a locally run TimescaleDB counts for the prize. If they require Tiger Cloud, use its free tier for the same rows.</li>
+          <li><strong>If the database stops,</strong> captions keep running; rows wait in memory and are written when it's back.</li>
+        </ul>
+
+        <h3>Recording the demo</h3>
+        <ul>
+          <li>OBS Studio records a Window Capture of the lens view, plus the webcam mic as an Audio Input Capture. Windows lets OBS and the engine read the mic at the same time.</li>
+          <li>Settings: the GPU's NVENC encoder, H.264, 1080p30, quality level (CQP) about 20. Record to MKV with automatic remux to MP4 turned on, so a crash never ruins the file.</li>
+          <li>The engine also writes a session log of every event with timestamps. Replay mode can re-run a whole recorded session (<a href="#tests">section 7</a>).</li>
+          <li>After the feature freeze, record a clean backup demo video.</li>
+        </ul>
+
+        <h3>Privacy by design</h3>
+        <ul>
+          <li><strong>Consent first.</strong> Only people who tick consent themselves are enrolled, and each consent is saved with the time.</li>
+          <li><strong>Strangers are temporary.</strong> They exist only in memory for the session. "Forget this session" wipes their face prints, voice prints, descriptions, name proposals, transcripts and the session log.</li>
+          <li><strong>No sensitive guesses.</strong> Descriptions come from fixed clothing and accessory lists. No model that guesses age, gender, emotion or ethnicity is loaded.</li>
+          <li><strong>Local by default.</strong> Captions, faces, voices and history stay on the laptop. The only thing that goes online is a reply the wearer types, sent to ElevenLabs. To prove it, turn the laptop's Wi-Fi off mid-demo: everything keeps working, and replies switch to the offline voice.</li>
+          <li><strong>Pause.</strong> A double tap pauses all recognition. The HUD and the LED matrix show "Paused".</li>
+          <li><strong>Why it matters.</strong> Face prints are biometric data under laws such as Illinois' BIPA, the CCPA and GDPR Article 9, and the EU AI Act restricts biometric identification. Consent, local processing, deletion and no sensitive traits are the right defaults to pitch. This is not legal advice.</li>
+        </ul>
+
+        <h3>Live messages</h3>
+        <p>The engine talks to the pages over WebSockets. Every message carries a sequence number. Captions and alerts are never dropped; video frames are, so a slow page skips frames instead of falling behind.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Message</th><th>Goes to</th><th>How often</th><th>Carries</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Frame</td><td>Lens view</td><td>30/s</td><td>A 1280×720 JPEG with its frame number and capture time</td></tr>
+            <tr><td class="k">Scene</td><td>Lens view, console</td><td>With every frame</td><td>For each face: box, track number, name or description, status (unknown, proposed, named, enrolled), lip score and speaker flag. Also off-screen speakers with their side, and whether you are speaking.</td></tr>
+            <tr><td class="k">Caption</td><td>All pages</td><td>Each draft and final</td><td>Utterance number, speaker, text, draft or final, language, translation, word times</td></tr>
+            <tr><td class="k">Name proposal</td><td>All pages</td><td>Proposed, confirmed, rejected or expired</td><td>Face, proposed name, expiry time</td></tr>
+            <tr><td class="k">Alert</td><td>All pages</td><td>Start, update, acknowledge, clear</td><td>Kind, side, confidence, state</td></tr>
+            <tr><td class="k">Status</td><td>Console</td><td>1/s</td><td>fps, caption delay, GPU memory, Arduino link, Ollama warm or cold</td></tr>
+            <tr><td class="k">Command</td><td>Engine, from the console</td><td>On a button press</td><td>Enroll, rename, delete, forget, pause, switches, test patterns, calibration steps, speak a reply, open history</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>GPU memory (12 GB)</h3>
+        <div class="tbl mid"><table>
+          <thead><tr><th>What's loaded</th><th class="num">Estimate</th></tr></thead>
+          <tbody>
+            <tr><td>Windows, Chrome, and OBS's encoder</td><td class="num">~1.0 GB</td></tr>
+            <tr><td>PyTorch and ONNX Runtime start-up overhead</td><td class="num">~1.0 GB</td></tr>
+            <tr><td>Nemotron ASR (INT8) with its streaming cache</td><td class="num">~1–1.5 GB</td></tr>
+            <tr><td>SCRFD and ArcFace</td><td class="num">~0.3 GB</td></tr>
+            <tr><td>EfficientAT, CAM++ and Kokoro</td><td class="num">~0.3 GB</td></tr>
+            <tr><td>qwen3.5:4b in Ollama, 4k context</td><td class="num">~4–5 GB</td></tr>
+            <tr><td class="k">Total</td><td class="num">~8–10 GB</td></tr>
+          </tbody>
+        </table></div>
+        <ul>
+          <li><strong>Ollama:</strong> one model loaded, one request at a time (<code>OLLAMA_MAX_LOADED_MODELS=1</code>, <code>OLLAMA_NUM_PARALLEL=1</code>). Turn on flash attention with an 8-bit context cache (<code>OLLAMA_FLASH_ATTENTION=1</code>, <code>OLLAMA_KV_CACHE_TYPE=q8_0</code>). Keep qwen3.5:4b loaded for good (keep_alive -1), with a 4096-token context, and turn thinking off on every call; with thinking on, replies take several seconds. It is the one model that fits the budget and covers all four jobs: names, translation, clothing descriptions and suggested replies.</li>
+          <li><strong>NVIDIA Control Panel:</strong> set "CUDA - Sysmem Fallback Policy" to "Prefer No Sysmem Fallback" for python.exe and ollama.exe. Running out of memory then shows as an error instead of a mystery slowdown.</li>
+          <li><strong>One CUDA family:</strong> PyTorch, ONNX Runtime and CTranslate2 must all be CUDA 12 builds sharing one cuDNN 9. Never install the CPU-only onnxruntime next to onnxruntime-gpu.</li>
+          <li><strong>If language jobs slow the captions:</strong> move them to the CPU with qwen3.5:2b. It's slower, but the GPU stays free for the real-time work.</li>
+        </ul>
+
+        <h3>Calibration, 10 minutes at the venue</h3>
+        <ol class="seq">
+          <li><div><strong>Level.</strong> Look at a door frame and rotate the webcam until its edges are vertical in the lens view.</div></li>
+          <li><div><strong>Mic level.</strong> Read a sentence, and set the input so peaks land around −6 dBFS.</div></li>
+          <li><div><strong>Your voice.</strong> Read a sentence, then have a teammate read one from 1.5 m. The "You" threshold is set halfway between the two, in decibels.</div></li>
+          <li><div><strong>Left/right balance.</strong> Play steady noise from the JBL straight ahead at 1.5 m, and trim until both sensors match.</div></li>
+          <li><div><strong>Lip-to-sound offset.</strong> Clap three times in view. The engine lines up each clap's sound with the hands meeting, and saves the offset.</div></li>
+          <li><div><strong>Room noise.</strong> 30 s of normal hall noise sets the speech and alert baselines.</div></li>
+          <li><div><strong>Face check.</strong> Each enrolled teammate stands at 1, 2 and 3 m while the console shows their match scores. If any score is under 0.5, re-enroll under the venue's lighting.</div></li>
+        </ol>
+        <p>Everything is saved as a venue profile, so a restart doesn't need recalibrating.</p>
+      </section>
+
+      <section id="dryrun">
+        <div class="sec-num">Section 06</div>
+        <h2>Dry runs</h2>
+        <p class="intro">Each demo beat is walked through the design on paper, step by step, before anything is built. The timings are expected values from the tools' published numbers and our three tests. Every "what if" either already has an answer in the plan, or it changed the plan; the changes are listed at the end of this section.</p>
+
+        <h3>A · Enrolling Maya</h3>
+        <div class="timeline">
+          <div><span class="t">0 s</span><span class="d">The operator presses Enroll. The console shows thumbnails of the two faces in view, and the operator picks Maya.</span></div>
+          <div><span class="t">5 s</span><span class="d">Maya reads the notice, ticks the consent box and types the name "Maya".</span></div>
+          <div><span class="t">10–15 s</span><span class="d">Head-turn capture: about 150 frames, of which around 40 pass the quality check; the 8 most varied are kept.</span></div>
+          <div><span class="t">15–20 s</span><span class="d">Voice memo; CAM++ stores Maya's voice print.</span></div>
+          <div><span class="t">20 s</span><span class="d">The tag locks to "Maya", and the console shows "Maya saved".</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>Leo leans into the shot.</strong> Capture only uses the selected track, and stops if that track is lost.</li>
+            <li><strong>A bright window behind Maya.</strong> Fewer than 5 good crops, so the console asks Maya to turn toward the light.</li>
+            <li><strong>Maya enrolls wearing glasses and takes them off later.</strong> ArcFace copes fairly well. The 1/2/3 m face check at calibration catches problems; if a score falls under 0.5, enroll both ways.</li>
+          </ul>
+        </div>
+
+        <h3>B · Conversation, including off-screen</h3>
+        <div class="timeline">
+          <div><span class="t">0.0 s</span><span class="d">Maya: "So what are we building?" The bubble appears on Maya at about 0.7 s, and the final text at about 2.0 s.</span></div>
+          <div><span class="t">2.5 s</span><span class="d">Leo answers while in view. After the 0.5 s hold, the bubble moves to Leo, and Leo's voice is added to the session voice print.</span></div>
+          <div><span class="t">8 s</span><span class="d">Leo steps out on the left. Leo's track coasts for 1 s, then is marked "left the frame on the left".</span></div>
+          <div><span class="t">10 s</span><span class="d">Leo keeps talking off-screen. No visible lips are moving, so a "Someone ←" bubble appears at the left edge about 0.7 s later.</span></div>
+          <div><span class="t">11 s</span><span class="d">After about 1 s of speech, the voice-print scores are Leo 0.72 and Maya 0.31. The bubble becomes "Leo ←". The exit side and the sensors (left 4 dB louder) agree.</span></div>
+          <div><span class="t">14 s</span><span class="d">You reply. Both sensors jump about 20 dB, evenly, so the caption goes to the "You" bar.</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>Maya smiles and nods while Leo talks off-screen.</strong> Maya's lip score could pass 0.03 and steal the bubble. This led to the in-time check, which compares lip rhythm with sound rhythm (change 2).</li>
+            <li><strong>The first words arrive before a speaker is known.</strong> Hold them up to 300 ms, then show a neutral bubble that re-attaches once the speaker is known (change 1).</li>
+            <li><strong>Leo's print is weak,</strong> with only 5 s from enrollment. Harvesting while Leo is visible strengthens it. If the score stays under 0.5, the bubble honestly says "Someone ←".</li>
+            <li><strong>You laugh while Maya talks.</strong> The sensors say "You", but the ASR produces no words, so no caption appears.</li>
+          </ul>
+        </div>
+
+        <h3>C · A stranger introduces themselves</h3>
+        <div class="timeline">
+          <div><span class="t">0 s</span><span class="d">Sam walks in. A new track starts; the best face match is 0.18, so Sam is unknown.</span></div>
+          <div><span class="t">1.0 s</span><span class="d">Steady for 1 s. Color clustering gives "Person in blue".</span></div>
+          <div><span class="t">2.5 s</span><span class="d">The vision model, already warm, refines it to "Person in blue jacket".</span></div>
+          <div><span class="t">4.0 s</span><span class="d">Sam: "Hi, I'm Sam."</span></div>
+          <div><span class="t">5.3 s</span><span class="d">Final text. The lips say Sam is the speaker, and the word filter spots "I'm", so the language model is called.</span></div>
+          <div><span class="t">6.2 s</span><span class="d">Answer: an introduction, name "Sam", the speaker's own, confidence 0.93. The tag shows "Sam?" and the right LED glows.</span></div>
+          <div><span class="t">7.0 s</span><span class="d">You tap. After the 0.4 s double-tap wait, the Arduino sends the tap. The tag becomes "Sam", with an OK blink and tick.</span></div>
+          <div><span class="t">8 s</span><span class="d">The console offers "Enroll Sam permanently? Needs Sam's consent."</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>The ASR hears "I'm some".</strong> The model says it isn't a name, so nothing is proposed. Sam repeats it, or the operator types the name.</li>
+            <li><strong>"I'm starving."</strong> It passes the word filter, but the model says no and the stop-list agrees.</li>
+            <li><strong>The model is busy describing someone.</strong> The priority queue puts names ahead of descriptions (change 6).</li>
+            <li><strong>The model is cold.</strong> A first call can take 16–24 s, so the model is warmed at start-up and kept loaded (change 7).</li>
+            <li><strong>Two strangers in view.</strong> The name goes to whoever was speaking, not to the face in the middle.</li>
+            <li><strong>A tap with nothing pending</strong> is ignored.</li>
+          </ul>
+        </div>
+
+        <h3>D · Maya speaks Spanish</h3>
+        <div class="timeline">
+          <div><span class="t">0 s</span><span class="d">Maya: "¿Quieres ir por un café después?" (about 2 s)</span></div>
+          <div><span class="t">0.7 s</span><span class="d">Spanish drafts appear in italics. The language ID says Spanish, and the "ES" tag appears.</span></div>
+          <div><span class="t">2.4 s</span><span class="d">The final Spanish text arrives, and Lingua agrees it's Spanish.</span></div>
+          <div><span class="t">2.4–3.6 s</span><span class="d">Translation runs first in the queue: "Do you want to get coffee afterwards?"</span></div>
+          <div><span class="t">3.6 s</span><span class="d">The English replaces the draft, with the Spanish in small type underneath.</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>Nemotron doesn't handle Spanish.</strong> Utterances flagged as another language are re-run through Whisper (change 8).</li>
+            <li><strong>A short "Sí, claro" is labelled English.</strong> Lingua's re-check and the expected-languages setting catch most cases; at worst, the Spanish shows untranslated.</li>
+            <li><strong>Translation takes 2 s or more under load.</strong> The Spanish draft stays visible meanwhile, so nothing is lost.</li>
+          </ul>
+        </div>
+
+        <h3>E · Doorbell from the right</h3>
+        <div class="timeline">
+          <div><span class="t">0 s</span><span class="d">A teammate presses play; the JBL, 2 m to the right, plays a 1.5 s "ding-dong".</span></div>
+          <div><span class="t">1.0 s</span><span class="d">In the window ending at 1.0 s, doorbell scores 0.62, speech 0.05 and music 0.12, so it's a doorbell. The right sensor is 5 dB louder.</span></div>
+          <div><span class="t">1.05 s</span><span class="d">An amber "Doorbell · right →" appears on the lens view. The right LED plays BELL, and the motor gives two buzzes.</span></div>
+          <div><span class="t">1–6 s</span><span class="d">The rule rests for 5 s, so the "dong" doesn't fire it again.</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>Someone says "ding dong".</strong> The speech score is 0.5 or more, which blocks it.</li>
+            <li><strong>The hall's music has bells in it.</strong> The music score blocks most cases, and <span class="id">T-E4</span> logs any slips.</li>
+            <li><strong>The JBL's Bluetooth delay</strong> (about 0.2 s) doesn't matter; timing starts when the sound comes out.</li>
+          </ul>
+        </div>
+
+        <h3>F · Smoke alarm from the left</h3>
+        <div class="timeline">
+          <div><span class="t">0.0 s</span><span class="d">A T3 recording at 3.1 kHz starts, 2 m to the left.</span></div>
+          <div><span class="t">0.0–0.5 s</span><span class="d">Beep 1: the rhythm detector sees the tone switch on.</span></div>
+          <div><span class="t">1.0–1.5 s</span><span class="d">Beep 2 arrives with the right spacing.</span></div>
+          <div><span class="t">~2.0 s</span><span class="d">The model scores smoke detector ≥ 0.5 in the windows ending at 1.5 and 2.0 s, so the alert fires.</span></div>
+          <div><span class="t">2.0 s</span><span class="d">The left sensor is 4.8 dB louder while the tone is on. A red "Smoke alarm · left ←" banner appears, the left LED plays T3, and the motor buzzes T3.</span></div>
+          <div><span class="t">~5 s</span><span class="d">You tap. Everything stops, and the banner reads "Acknowledged".</span></div>
+          <div><span class="t">later</span><span class="d">If it's still sounding after 30 s, it re-alerts. When the recording ends, it clears after 15 s of quiet.</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>The model doesn't recognize this alarm's sound.</strong> The rhythm-only rule fires at about 7 s.</li>
+            <li><strong>The mic and sensors hear Attune's own motor.</strong> Windows and sensor readings taken while the motor runs are ignored (change 4).</li>
+            <li><strong>The JBL is too quiet at 3 m in a loud hall.</strong> Play from 1.5–2 m, at the volume set during calibration.</li>
+            <li><strong>A real alarm goes off in the venue.</strong> Attune would alert too. Follow the venue's evacuation; never test with real alarms.</li>
+          </ul>
+        </div>
+
+        <h3>G · Forget this session</h3>
+        <div class="timeline">
+          <div><span class="t">0 s</span><span class="d">The operator presses Forget.</span></div>
+          <div><span class="t">0.1 s</span><span class="d">Sam's face print, voice print, description, name, the transcripts and the session log file are deleted. Maya and Leo stay, because they consented.</span></div>
+          <div><span class="t">0.2 s</span><span class="d">Sam's face restarts as unknown and becomes "Person in blue" in front of the judges. A toast confirms: "Forgot 1 person and 38 captions".</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>The session log on disk still holds Sam's name.</strong> Forget deletes the log file too (change 9).</li>
+            <li><strong>OBS is recording.</strong> A video can't be "forgotten". Ask judges before recording them (change 14).</li>
+          </ul>
+        </div>
+
+        <h3>H · Start-up and faults</h3>
+        <div class="timeline">
+          <div><span class="t">Start</span><span class="d">The engine opens the devices, loads the models (about 20–40 s), connects to the history database and sends Ollama a warm-up request. Then the status strip shows "Ready".</span></div>
+          <div><span class="t">Fault</span><span class="d">The Arduino cable is pulled mid-demo. The HUD says "Glasses link lost" and captions carry on. It reconnects within 3 s of replugging.</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>Someone unplugs the charger.</strong> The GPU slows down and fps drops, so the status strip warns "On battery" (change 12).</li>
+            <li><strong>The history database stops.</strong> Captions carry on; rows wait in memory and are written when it's back.</li>
+          </ul>
+        </div>
+
+        <h3>I · Speaking a reply</h3>
+        <div class="timeline">
+          <div><span class="t">0 s</span><span class="d">Sam's name is confirmed.</span></div>
+          <div><span class="t">0.5–1.5 s</span><span class="d">Qwen's three suggested replies appear on keys 7–9, including "Nice to meet you, Sam!"</span></div>
+          <div><span class="t">2 s</span><span class="d">The wearer presses 7. The text goes to ElevenLabs, and the transcript shows "You (typed): Nice to meet you, Sam!"</span></div>
+          <div><span class="t">~2.5–3 s</span><span class="d">The voice starts from the laptop's speakers. Mic captions are ignored until it ends, plus 0.5 s.</span></div>
+          <div><span class="t">~4.5 s</span><span class="d">Done. The reply is saved to the history.</span></div>
+        </div>
+        <div class="box dry"><span class="lbl">What if</span>
+          <ul>
+            <li><strong>The glasses mic hears the laptop.</strong> Those captions are ignored, and the reply shows once, as typed (change 15).</li>
+            <li><strong>The venue Wi-Fi is slow or down.</strong> After 1.5 s with no audio, Kokoro speaks the reply locally (change 11).</li>
+            <li><strong>The wearer is away from the keyboard.</strong> The webcam cable already keeps them within reach, and a reply is one key press.</li>
+          </ul>
+        </div>
+
+        <h3>What the dry runs changed</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th class="num">#</th><th>Found</th><th>Change made</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>Words can arrive before the speaker is known</td><td>Hold them up to 300 ms, then a neutral bubble that re-attaches</td><td>Section 3 timeline</td></tr>
+            <tr><td class="num">2</td><td>A smiling, nodding listener can look like the speaker</td><td>In-time check of lip rhythm against sound rhythm</td><td>Who's talking</td></tr>
+            <tr><td class="num">3</td><td>Naming an off-screen voice needs about 1 s of speech</td><td>Show "Someone" with the side first, then the name</td><td>Who's talking, case 4</td></tr>
+            <tr><td class="num">4</td><td>Motor noise can keep an alarm alive or skew sensor levels</td><td>Ignore audio windows and sensor readings taken while the motor runs</td><td>Sound alerts; USB messages</td></tr>
+            <tr><td class="num">5</td><td>One tap could mean two things</td><td>Priority: alert first, then a pending name</td><td>Learning names</td></tr>
+            <tr><td class="num">6</td><td>Ollama runs one job at a time</td><td>Priority queue: translation, names, descriptions</td><td>Translation</td></tr>
+            <tr><td class="num">7</td><td>The first model call takes 16–24 s</td><td>Warm-up at start-up; keep the model loaded for 30 min</td><td>Start-up; day-of checklist</td></tr>
+            <tr><td class="num">8</td><td>Nemotron's Spanish support is unconfirmed</td><td>Re-run other-language utterances through Whisper</td><td>Captions; <span class="id">T-S2</span></td></tr>
+            <tr><td class="num">9</td><td>The session log would keep forgotten data</td><td>Forget deletes the log too</td><td>Privacy by design</td></tr>
+            <tr><td class="num">10</td><td>Your voice is about 20 dB louder than others in the glasses mic</td><td>Level-match each utterance before the ASR</td><td>Captions</td></tr>
+            <tr><td class="num">11</td><td>Typed replies need the internet</td><td>Kokoro speaks them if ElevenLabs is slow or unreachable</td><td>Speak for me</td></tr>
+            <tr><td class="num">12</td><td>Battery power throttles the GPU</td><td>Stay plugged in; "On battery" warning</td><td>Plugging into the laptop</td></tr>
+            <tr><td class="num">13</td><td>The webcam, and maybe the Arduino, need USB-A</td><td>A second adapter or a USB-C to C cable</td><td>Plugging into the laptop</td></tr>
+            <tr><td class="num">14</td><td>A recording can't be forgotten</td><td>Ask before recording judges</td><td>Day-of checklists</td></tr>
+            <tr><td class="num">15</td><td>The glasses mic hears the laptop speak a reply</td><td>Show it as "You (typed)" and ignore mic captions while it plays</td><td>Speak for me</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="tests">
+        <div class="sec-num">Section 07</div>
+        <h2>Test plan</h2>
+        <p class="intro">Only the three feasibility tests below have been run. The rest are saved for later: the stack tests need the downloads at the end of this section, and nothing gets downloaded without your go-ahead. Each test has a pass line, so "it works" means the same thing to everyone.</p>
+
+        <h3>Already done</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Test</th><th>What we found</th><th>What it changed</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Face-finding range<span class="sub">MediaPipe, 150 reference faces from 9 of the film's clips</span></td><td>The short-range finder caught 90% or more only when faces were at least ~190 px wide, about 1 m on a 720p camera. The full-range finder reached 92% at 90–110 px, about 2.1–2.3 m. The Face Landmarker, which uses the short-range finder inside, behaved the same way.</td><td>Faces are found by SCRFD at 1080p, and MediaPipe only reads lips on face crops</td></tr>
+            <tr><td class="k">Lip-motion signal<span class="sub">the film's clips</span></td><td>Talking faces averaged 0.021–0.062 in the 1 s variation of mouth opening, and 0.04–0.10 at their busiest. Still faces sat at 0.005–0.015. Laughing looked like talking.</td><td>Thresholds of 0.03 and 0.015, a per-face baseline, fusion with voice activity, and the in-time check</td></tr>
+            <tr><td class="k">Browser capabilities<span class="sub">Chrome and Edge 153 on this laptop</span></td><td>Chrome has Web Serial, on-device speech recognition and the Translator API (both after a one-time download), MP4 recording and WebGPU. Edge lacks on-device speech and translation.</td><td>A Chrome-only fallback is possible, but it's kept as a last resort</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Stack tests, before the event</h3>
+        <p>Use throwaway scripts kept outside the project, so the hackathon build still starts from zero. Run them in this order, since later ones depend on T-S1.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>ID</th><th>Test</th><th>How</th><th>Pass when</th></tr></thead>
+          <tbody>
+            <tr><td class="id">T-S1</td><td class="k">GPU stack and memory</td><td>Install into a fresh uv environment. Check that PyTorch, ONNX Runtime and CTranslate2 each see the RTX 3500 Ada. Then load every model at once, with OBS recording and qwen3.5:4b warm in Ollama.</td><td>All three use CUDA with no CPU fallback. Peak GPU memory ≤ 10.5 GB, with no sysmem fallback.</td></tr>
+            <tr><td class="id">T-S2</td><td class="k">Captions</td><td>Run Nemotron through sherpa-onnx (INT8, 560 ms, then 1120 ms) on the GPU. Feed 5 min of the team reading plus Kokoro voice clips in English and Spanish, with auto-detect and with the language locked. Repeat with faster-whisper turbo.</td><td>Nemotron: median first-word delay ≤ 0.8 s; ≤ 12% word errors on clean English; Spanish transcribed and labelled Spanish. Whisper: delay ≤ 1.8 s.</td></tr>
+            <tr><td class="id">T-S3</td><td class="k">Faces at distance</td><td>Film each teammate with the webcam at 1, 2, 3 and 4 m, facing it and turned 30°. Run SCRFD at 640, 960 and 1280. Compare face-print scores for the same person and for different people.</td><td>≥ 95% detected up to 3 m. Same person ≥ 0.45 in ≥ 95% of frames up to 3 m; different people &lt; 0.35. Detection ≤ 15 ms per frame.</td></tr>
+            <tr><td class="id">T-S4</td><td class="k">Who's talking</td><td>Record 3 minutes of three people taking turns, with laughing, nodding and one person off-screen. Hand-label who speaks each second.</td><td>≥ 90% of speech-seconds attributed right, with the in-time check fixing the nodding cases. Decide here whether Light-ASD is needed.</td></tr>
+            <tr><td class="id">T-S5</td><td class="k">Alerts</td><td>Through the JBL at 1–3 m, play 20 synthetic T3 alarms, 20 T4, 20 real smoke-alarm recordings and 20 doorbells. Then play 10 min of music, speech and café noise.</td><td>Smoke ≥ 95% within 4 s. Doorbell ≥ 90% within 2 s. 0 false alerts in the noise.</td></tr>
+            <tr><td class="id">T-S6</td><td class="k">Language jobs</td><td>Prepare 50 introductions (half of them traps), 30 Spanish sentences and 20 upper-body crops. Run them on qwen3.5 2b, 4b and 9b and on gemma4:12b.</td><td>Names: ≥ 90% found, ≤ 1 false name in 50, warm replies ≤ 1.2 s. Translations rated fine by a Spanish speaker ≥ 90%. Descriptor color right ≥ 85%. Pick the smallest model that passes.</td></tr>
+            <tr><td class="id">T-S7</td><td class="k">Capture</td><td>Run the webcam at 1080p30 MJPG through Media Foundation (then DirectShow), and the mic through WASAPI, for 10 min.</td><td>A steady 30 fps; frames ≤ 80 ms old; no audio dropouts; the audio/video offset is measured.</td></tr>
+            <tr><td class="id">T-S8</td><td class="k">Replies and history</td><td>Claim the ElevenLabs code and send 20 replies; repeat with Wi-Fi off. Load 30 minutes of captions into TimescaleDB, search them, and run the 7-day retention policy on old test rows.</td><td>First sound ≤ 1.5 s median online; Kokoro takes over offline; no reply captioned twice; searches return in under 0.5 s; old rows are deleted.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Hardware bench tests, at the lab</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>ID</th><th>Test</th><th>How</th><th>Pass when</th></tr></thead>
+          <tbody>
+            <tr><td class="id">T-H1</td><td class="k">Driver found</td><td>The I²C check at power-up</td><td><code>READY</code> reports 0x14 (or 0x0F, then follow the V1.3 column)</td></tr>
+            <tr><td class="id">T-H2</td><td class="k">Connections</td><td>Multimeter continuity on every pins-in-plug joint, then wiggle each cable while watching the readings</td><td>No dropouts or jumps while wiggling</td></tr>
+            <tr><td class="id">T-H3</td><td class="k">Sound sensors</td><td>Quiet room, speech at 1 m, a clap, then the JBL at 90° left and right, 20 plays</td><td>The louder side is correct in ≥ 18 of 20 plays, by ≥ 3 dB. The left sensor really is on A0.</td></tr>
+            <tr><td class="id">T-H4</td><td class="k">Touch</td><td>20 taps, 10 holds and 10 double taps through the tape; then 10 min untouched with the motor buzzing</td><td>≥ 95% classified right; no phantom touches</td></tr>
+            <tr><td class="id">T-H5</td><td class="k">LEDs</td><td>Every pattern, worn, in a bright room</td><td>Noticeable at the edge of vision without dazzling; brightness knob set</td></tr>
+            <tr><td class="id">T-H6</td><td class="k">Motor and power</td><td>50 T3 cycles; measure the current with the multimeter in series if the workbench allows</td><td>Clearly felt; no Arduino resets; current within budget; stops within 2 s when the laptop link is cut</td></tr>
+            <tr><td class="id">T-H7</td><td class="k">Motor noise</td><td>Sensor levels with the motor off, then on</td><td>With the capacitor, the jump is small, and flagged readings are ignored</td></tr>
+            <tr><td class="id">T-H8</td><td class="k">Wear test</td><td>15 minutes worn: walking, turning your head, sitting</td><td>Nothing pulls loose; the camera stays level; comfortable enough for three demos</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>End-to-end tests, during the event</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>ID</th><th>Test</th><th>How</th><th>Pass when</th></tr></thead>
+          <tbody>
+            <tr><td class="id">T-E1</td><td class="k">Caption delay</td><td>Say a word, then clap, 20 times. Record the screen and mic with OBS, and step through the frames.</td><td>From the end of a word to its text: median ≤ 1.0 s, 90th percentile ≤ 1.5 s</td></tr>
+            <tr><td class="id">T-E2</td><td class="k">Right speaker</td><td>The 5-minute demo conversation, hand-labelled</td><td>≥ 90% correct; 0 wrong names</td></tr>
+            <tr><td class="id">T-E3</td><td class="k">Alerts, live</td><td>20 plays from each side at the demo spot</td><td>The targets in section 2</td></tr>
+            <tr><td class="id">T-E4</td><td class="k">False alarms</td><td>10 min of hall noise, music and conversation</td><td>0 alerts; ≤ 1 false name proposal</td></tr>
+            <tr><td class="id">T-E5</td><td class="k">Soak</td><td>30 minutes running with OBS recording</td><td>No crash; memory growth &lt; 200 MB; GPU memory flat; ≥ 24 fps; steady caption delay</td></tr>
+            <tr><td class="id">T-E6</td><td class="k">Rehearsal</td><td>The full 3-minute demo, three times, each beat scored</td><td>Every beat works in all three runs, in under 3:00</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Failure drills</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Do this</th><th>Expected</th><th>Pass when</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Pull the Arduino cable</td><td>"Glasses link lost" on the HUD and "?" on the matrix; captions and faces continue</td><td>Reconnects ≤ 3 s after replugging</td></tr>
+            <tr><td class="k">Stop Ollama</td><td>"Language model offline"; names, translation and descriptions pause, and everything else runs</td><td>Recovers ≤ 30 s after a restart, including warm-up</td></tr>
+            <tr><td class="k">Pull the webcam</td><td>"Camera lost"; captions continue from the laptop mic</td><td>Recovers ≤ 5 s after replugging</td></tr>
+            <tr><td class="k">Stop the history database</td><td>"History paused"; captions keep running</td><td>No rows lost after it restarts</td></tr>
+            <tr><td class="k">Turn the laptop's Wi-Fi off</td><td>The lens view carries on, and replies switch to Kokoro</td><td>A reply is still spoken within 1.5 s</td></tr>
+            <tr><td class="k">Kill the engine</td><td>A restart script brings it back, and the pages reconnect by themselves</td><td>Back within 15 s</td></tr>
+            <tr><td class="k">Unplug the charger</td><td>"On battery" warning in the status strip</td><td>Warning within 5 s</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Replay mode and the rehearsal reel</h3>
+        <p>As soon as the rig works (gate M1), record a 5–10 minute reel: raw webcam video, raw audio and the Arduino's sensor log, all on one clock. Give the engine a replay mode that reads the reel instead of live devices. Every change can then be checked against the same reel in minutes, and teammates can work on who's-talking or the HUD without wearing the glasses. Hand-label the reel once (who speaks when, and when alerts start), and <span class="id">T-S4</span>, <span class="id">T-E1</span> and <span class="id">T-E2</span> become repeatable scores.</p>
+
+        <h3>Downloads needed</h3>
+        <p>None of this is downloaded yet. The list is saved so it can be fetched in one go when you say so, into an isolated environment rather than system-wide.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Item</th><th>From</th><th class="num">Size</th><th>Essential</th></tr></thead>
+          <tbody>
+            <tr><td>PyTorch and torchaudio, CUDA 12.8 build</td><td>PyPI</td><td class="num">~3.2 GB</td><td>Yes</td></tr>
+            <tr><td>NVIDIA cuDNN 9 and cuBLAS for CUDA 12</td><td>PyPI</td><td class="num">~1.2 GB</td><td>Yes</td></tr>
+            <tr><td>sherpa-onnx (GPU build)</td><td>PyPI</td><td class="num">~0.1 GB</td><td>Yes</td></tr>
+            <tr><td>ONNX Runtime GPU</td><td>PyPI</td><td class="num">~0.25 GB</td><td>Yes</td></tr>
+            <tr><td>faster-whisper and CTranslate2</td><td>PyPI</td><td class="num">~0.05 GB</td><td>Yes</td></tr>
+            <tr><td>Silero VAD, sounddevice, soxr, SciPy</td><td>PyPI</td><td class="num">~0.1 GB</td><td>Yes</td></tr>
+            <tr><td>MediaPipe, Lingua, FastAPI, uvicorn, pyserial, ElevenLabs SDK</td><td>PyPI</td><td class="num">~0.3 GB</td><td>Yes</td></tr>
+            <tr><td>Nemotron 3.5 streaming, sherpa-onnx INT8 export</td><td>k2-fsa (GitHub / Hugging Face)</td><td class="num">~0.65 GB</td><td>Yes</td></tr>
+            <tr><td>faster-whisper large-v3-turbo</td><td>Hugging Face</td><td class="num">~1.6 GB</td><td>Yes</td></tr>
+            <tr><td>CAM++ voice-print model</td><td>sherpa-onnx releases</td><td class="num">~0.03 GB</td><td>Yes</td></tr>
+            <tr><td>YuNet and SFace</td><td>OpenCV Zoo</td><td class="num">~0.04 GB</td><td>Yes</td></tr>
+            <tr><td>InsightFace buffalo_l</td><td>GitHub</td><td class="num">~0.28 GB</td><td>Yes</td></tr>
+            <tr><td>EfficientAT with mn10_as weights</td><td>GitHub</td><td class="num">~0.02 GB</td><td>Yes</td></tr>
+            <tr><td>Kokoro-82M multilingual (offline replies and test speech)</td><td>sherpa-onnx releases</td><td class="num">~0.35 GB</td><td>Yes</td></tr>
+            <tr><td>TranslateGemma 4B</td><td>Ollama</td><td class="num">~3.3 GB</td><td>No</td></tr>
+            <tr><td>PostgreSQL with TimescaleDB</td><td>Official sites</td><td class="num">~0.4 GB</td><td>Yes</td></tr>
+            <tr><td>OBS Studio, Arduino IDE 2, uv</td><td>Official sites</td><td class="num">~0.4 GB</td><td>Yes</td></tr>
+            <tr><td class="k">Everything</td><td></td><td class="num">~12 GB</td><td></td></tr>
+            <tr><td class="k">Essentials only</td><td></td><td class="num">~8.5 GB</td><td></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Test sounds:</strong> record your home smoke alarm's test beep on your phone, generate T3 and T4 tone files, and take two or three doorbell clips from Freesound's CC0 section.</p>
+      </section>
+
+      <section id="schedule">
+        <div class="sec-num">Section 08</div>
+        <h2>Build schedule</h2>
+        <p class="intro">Setup happens before the event and building happens during it, against five gates. Each gate is a working demo you could fall back to.</p>
+
+        <h3>Before the event</h3>
+        <ul class="checks">
+          <li><label><input type="checkbox"><span>Install uv, Python 3.12, OBS Studio and Arduino IDE 2, with the UNO R4 board package and both driver libraries.</span></label></li>
+          <li><label><input type="checkbox"><span>Fetch the downloads in section 7, once you've said go.</span></label></li>
+          <li><label><input type="checkbox"><span>Run stack tests <span class="id">T-S1</span> to <span class="id">T-S8</span>, and record the numbers.</span></label></li>
+          <li><label><input type="checkbox"><span>Windows: power mode "Best performance", audio enhancements off for the webcam mic, and NVIDIA's sysmem fallback off.</span></label></li>
+          <li><label><input type="checkbox"><span>Ollama: apply the settings from section 5, and confirm every model loads with the internet off.</span></label></li>
+          <li><label><input type="checkbox"><span>Claim the ElevenLabs credit code on the MLH page, and install PostgreSQL with TimescaleDB.</span></label></li>
+          <li><label><input type="checkbox"><span>Test sounds: your smoke alarm's test beep, T3 and T4 tones, and CC0 doorbell clips, in a playlist on the phone that pairs with the JBL.</span></label></li>
+          <li><label><input type="checkbox"><span>Pack: laptop and charger, USB-C to USB-A adapter (two if you have them), a USB-C to C cable, glasses, clear tape and electrical tape, and a marker for labels.</span></label></li>
+          <li><label><input type="checkbox"><span>Agree on roles, and read this plan together.</span></label></li>
+        </ul>
+        <div class="box warn"><span class="lbl">Hackathon rules</span>
+          <p>MLH's standard rules expect project work to happen during the event. Installing tools, downloading models and planning beforehand are normally fine. Write the engine, the firmware and the pages at the event, and keep pre-event test scripts out of the project. Check your own event's rules.</p>
+        </div>
+
+        <h3>Roles</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Role</th><th>Owns</th><th>Also</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Vision</td><td>Capture, faces, tracking, lip motion, enrollment</td><td>Builds who's-talking with Audio</td></tr>
+            <tr><td class="k">Audio and language</td><td>Voice activity, captions, voice prints, alerts, Ollama jobs</td><td>Runs calibration</td></tr>
+            <tr><td class="k">Hardware</td><td>The rig, the firmware, the serial link, bench tests</td><td>Fits and adjusts the rig on the wearer</td></tr>
+            <tr><td class="k">Pages and demo</td><td>Lens view, console, speak and history panels, OBS, pitch, the project write-up</td><td>Runs the console during the demo</td></tr>
+          </tbody>
+        </table></div>
+        <p>With three people, merge Hardware with Pages. With two, one person takes Vision and Pages, and the other takes Audio and Hardware.</p>
+
+        <h3>24-hour plan</h3>
+        <div class="timeline">
+          <div><span class="t">H0–1</span><span class="d">Kickoff. Pick up the hardware with the checklist, create the repo, and agree on the message format from section 5.</span></div>
+          <div><span class="t">H1–3</span><span class="d">First slices. Hardware bench-tests each module (<span class="id">T-H1</span>–<span class="id">T-H5</span>). Vision gets frames into a bare lens view. Audio gets captions into the console. Pages builds the lens view shell.</span></div>
+          <div><span class="t">H3</span><span class="d"><strong>Gate M0.</strong> Every device streams into the engine.</span></div>
+          <div><span class="t">H3–8</span><span class="d">Named faces and enrollment, captions in bubbles, firmware patterns and the serial link, and the history panel.</span></div>
+          <div><span class="t">H8</span><span class="d"><strong>Gate M1.</strong> Captions on named faces. Record the first rehearsal reel.</span></div>
+          <div><span class="t">H8–14</span><span class="d">Lip attribution and the in-time check, alerts, name learning with touch, translation and descriptions. Assemble the rig (<span class="id">T-H6</span>–<span class="id">T-H8</span>).</span></div>
+          <div><span class="t">H14</span><span class="d"><strong>Gate M2.</strong> Every feature works on its own. From here, sleep in shifts: two people at a time, 3–4 hours each.</span></div>
+          <div><span class="t">H14–18</span><span class="d">Integration, calibration, off-screen speakers, and the fix list from <span class="id">T-E1</span>–<span class="id">T-E4</span>.</span></div>
+          <div><span class="t">H18</span><span class="d"><strong>Gate M3, feature freeze.</strong> The full demo runs end to end. Start the 30-minute soak (<span class="id">T-E5</span>) and record the backup video.</span></div>
+          <div><span class="t">H18–22</span><span class="d">Three scored rehearsals (<span class="id">T-E6</span>), the write-up and one or two slides.</span></div>
+          <div><span class="t">H22–24</span><span class="d">Buffer, final checks, submit.</span></div>
+        </div>
+
+        <h3>Gates</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Gate</th><th>By</th><th>Must work</th><th>Checked by</th></tr></thead>
+          <tbody>
+            <tr><td class="k">M0</td><td>H3</td><td>Camera, mic and Arduino all feed the engine, and the lens view shows video</td><td>The console shows fps, mic level and sensor levels</td></tr>
+            <tr><td class="k">M1</td><td>H8</td><td>Enrolled faces are named, and captions land in the right bubble when one person talks</td><td>The first rehearsal reel</td></tr>
+            <tr><td class="k">M2</td><td>H14</td><td>Each feature works alone: alerts, names by touch, translation, descriptions, spoken replies, history</td><td>Each stack test's pass line, on the reel</td></tr>
+            <tr><td class="k">M3</td><td>H18</td><td>The full demo, end to end</td><td><span class="id">T-E1</span>–<span class="id">T-E4</span> pass, and the soak is running</td></tr>
+            <tr><td class="k">M4</td><td>H22</td><td>Three clean rehearsals</td><td><span class="id">T-E6</span> passes</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>If you fall behind, cut in this order</h3>
+        <ol class="seq">
+          <li><div><strong>Garment descriptions.</strong> Keep the color only: "Person in blue".</div></li>
+          <li><div><strong>Off-screen voice prints.</strong> Keep "Someone ←" with the side.</div></li>
+          <li><div><strong>T4 and carbon monoxide.</strong> Keep smoke and doorbell.</div></li>
+          <li><div><strong>History extras.</strong> Keep the timeline; drop search and the talk-time chart.</div></li>
+          <li><div><strong>Translation.</strong> Show the Spanish with an "ES" tag.</div></li>
+        </ol>
+        <p><strong>Never cut:</strong> spoken replies (the ElevenLabs prize), named faces, captions in the right bubble, the smoke alarm with light and buzz, tap to confirm, and consent with forget.</p>
+
+        <h3>With 36 hours instead</h3>
+        <ul>
+          <li>Light-ASD for the harder who's-talking cases.</li>
+          <li>Streaming Sortformer to separate people who talk over each other.</li>
+          <li>TranslateGemma for better translation, and a second language.</li>
+          <li>A fully animated HUD closer to the films.</li>
+          <li>Voice prints for enrolled people that improve over time, with their consent.</li>
+        </ul>
+      </section>
+
+      <section id="risks">
+        <div class="sec-num">Section 09</div>
+        <h2>Risks and fallbacks</h2>
+        <p class="intro">The risks most likely to hurt the demo, what warns you early, and what to do.</p>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Risk</th><th>Chance</th><th>Impact</th><th>Early sign</th><th>Prevention</th><th>Fallback</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Grove plugs won't hold jumper pins</td><td><span class="badge b-risk">High</span></td><td>High</td><td>Readings jump when a cable moves</td><td>Ask for a Base Shield or Grove-to-jumper cables; tape the joints; continuity check</td><td>Keyboard confirms; alerts on screen only</td></tr>
+            <tr><td class="k">The driver is the L298 V1.3</td><td><span class="badge b-check">Medium</span></td><td>Medium</td><td>The I²C check finds 0x0F; the motor is weak</td><td>Read the board at pickup</td><td>Servo tapper on D9, or LEDs only</td></tr>
+            <tr><td class="k">The sherpa-onnx Nemotron build misbehaves</td><td><span class="badge b-ok">Low</span></td><td>High</td><td>Garbled text, or no language setting</td><td>Test before the event (<span class="id">T-S2</span>); update sherpa-onnx</td><td>faster-whisper turbo, with a 1–2 s delay</td></tr>
+            <tr><td class="k">GPU memory runs out</td><td><span class="badge b-check">Medium</span></td><td>High</td><td>Console shows over 11 GB; sudden slowdowns</td><td>One shared model and the section 5 settings</td><td>Language jobs on the CPU; Opus-MT for translation</td></tr>
+            <tr><td class="k">A noisy hall</td><td><span class="badge b-risk">High</span></td><td>Medium</td><td>Speech detected all the time; more caption errors</td><td>Calibrate the noise; find a quieter corner; speakers within 1.5 m</td><td>Play the backup video</td></tr>
+            <tr><td class="k">Wrong or missing names</td><td><span class="badge b-check">Medium</span></td><td>High</td><td>Match scores hovering near 0.45</td><td>Enroll at the venue, facing the light; strict match rules</td><td>The operator renames in the console</td></tr>
+            <tr><td class="k">Wrong speaker</td><td><span class="badge b-check">Medium</span></td><td>Medium</td><td>Bubbles flicker between faces</td><td>In-time check and hold times; no overlaps in the script</td><td>Light-ASD</td></tr>
+            <tr><td class="k">Venue Wi-Fi is down or slow</td><td><span class="badge b-check">Medium</span></td><td>Low</td><td>Replies take over 1.5 s</td><td>Test the venue Wi-Fi early</td><td>Kokoro speaks replies offline</td></tr>
+            <tr><td class="k">Not enough USB-A</td><td><span class="badge b-check">Medium</span></td><td>High</td><td>Only one adapter in hand</td><td>Pickup checklist; a USB-C to C cable</td><td>Seated demo with the laptop's own camera</td></tr>
+            <tr><td class="k">GPU throttling</td><td><span class="badge b-check">Medium</span></td><td>Medium</td><td>fps drops; loud fans</td><td>Charger in, "Best performance", laptop raised for airflow</td><td>Detection size 640</td></tr>
+            <tr><td class="k">Slow first model call</td><td><span class="badge b-risk">High</span></td><td>Medium</td><td>The first name takes 20 s</td><td>Warm-up at start-up; keep loaded 30 min</td><td>—</td></tr>
+            <tr><td class="k">Arduino resets during a buzz</td><td><span class="badge b-ok">Low</span></td><td>Medium</td><td>Serial reconnects in the log during alerts</td><td>Soft start, capacitor, short buzzes</td><td>LEDs only</td></tr>
+            <tr><td class="k">Rules on pre-written code</td><td><span class="badge b-ok">Low</span></td><td>High</td><td>—</td><td>Build at the event; only setup beforehand</td><td>—</td></tr>
+            <tr><td class="k">Judges worry about privacy</td><td><span class="badge b-check">Medium</span></td><td>Medium</td><td>Questions about surveillance</td><td>Consent flow, session-only strangers, clothing-only labels, forget, local-only</td><td>—</td></tr>
+            <tr><td class="k">Confusion with a real alarm</td><td><span class="badge b-ok">Low</span></td><td>High</td><td>—</td><td>Recordings only, at moderate volume; tell nearby teams first</td><td>—</td></tr>
+            <tr><td class="k">The rig falls apart</td><td><span class="badge b-check">Medium</span></td><td>High</td><td>Loose tape; the camera tilting</td><td>Strain-relief loops, spare cables and tape; take it off between demos</td><td>Seated demo</td></tr>
+            <tr><td class="k">The webcam is a C270 (720p)</td><td><span class="badge b-check">Medium</span></td><td>Medium</td><td>Faces only named up close</td><td>Keep the demo within 2.5 m</td><td>—</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Fallback ladder</h3>
+        <p>If something breaks on the day, step down one rung at a time and keep demoing.</p>
+        <ol class="seq">
+          <li><div><strong>Full system.</strong></div></li>
+          <li><div><strong>No language model.</strong> Names come from the console only; no translation or garment descriptions.</div></li>
+          <li><div><strong>No rig sensors.</strong> The keyboard confirms, and alerts show on screen only.</div></li>
+          <li><div><strong>Seated demo.</strong> The webcam on a stand, or the laptop's own camera, running the same software.</div></li>
+          <li><div><strong>The backup video</strong> recorded at the feature freeze.</div></li>
+        </ol>
+        <p>A Chrome-only version, using its on-device speech and translation, could caption without the engine, but building it would cost hours. It stays an idea, not part of the plan.</p>
+      </section>
+
+      <section id="dayof">
+        <div class="sec-num">Section 10</div>
+        <h2>Day-of checklists</h2>
+        <p class="intro">Ticks are saved in this browser, so you can work through them on the day.</p>
+
+        <h3>Before the first demo</h3>
+        <ul class="checks">
+          <li><label><input type="checkbox"><span>Laptop on its charger, power mode "Best performance", notifications off (Focus).</span></label></li>
+          <li><label><input type="checkbox"><span>Calibration done at the demo spot, and saved as the venue profile.</span></label></li>
+          <li><label><input type="checkbox"><span>Teammates enrolled under the venue's lighting, and their 1/2/3 m face check passed.</span></label></li>
+          <li><label><input type="checkbox"><span>JBL charged and paired; the playlist's volume checked at 1.5–2 m.</span></label></li>
+          <li><label><input type="checkbox"><span>Nearby teams warned that you'll play a short alarm recording.</span></label></li>
+          <li><label><input type="checkbox"><span>Spare tape, spare Grove cables and the backup video on the desktop.</span></label></li>
+        </ul>
+
+        <h3>Five minutes before each demo</h3>
+        <ul class="checks">
+          <li><label><input type="checkbox"><span>Engine running for at least 2 minutes, with the status strip showing "Ready" and Ollama warm.</span></label></li>
+          <li><label><input type="checkbox"><span>Rig on, camera level, Arduino linked (heartbeat on the matrix).</span></label></li>
+          <li><label><input type="checkbox"><span>A clap test shows captions arriving in about 1 s.</span></label></li>
+          <li><label><input type="checkbox"><span>One preset reply plays from the laptop speakers, volume up.</span></label></li>
+          <li><label><input type="checkbox"><span>Previous session forgotten; the status strip hidden (H); lens view full screen.</span></label></li>
+          <li><label><input type="checkbox"><span>OBS recording, after asking the judges if they're OK being recorded.</span></label></li>
+        </ul>
+
+        <h3>During the demo</h3>
+        <ul>
+          <li>Speakers stay within 1–2.5 m, facing the light, and take turns.</li>
+          <li>The wearer keeps their head fairly still and faces whoever is speaking.</li>
+          <li>The operator watches the console, and quietly fixes a name if needed.</li>
+          <li>If a beat fails, say what should have happened, move on, and come back to it if there's time.</li>
+        </ul>
+
+        <h3>Judge questions</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Does it need the internet?</td><td>No. Everything runs on this laptop. Only ElevenLabs speaking typed replies is online, and with Wi-Fi off a local voice takes over.</td></tr>
+            <tr><td class="k">Where is the conversation history kept?</td><td>In Tiger Data's database on this laptop. It deletes itself after 7 days, and Forget removes strangers straight away.</td></tr>
+            <tr><td class="k">What about privacy?</td><td>Only people who consent are enrolled. Strangers are remembered for this session only, and described by their clothing. One button forgets the session, and nothing leaves the laptop.</td></tr>
+            <tr><td class="k">How does it know who's talking?</td><td>It matches lip movement to the sound, recognizes your own voice by how loud it is at the glasses, and uses voice prints for people off-screen.</td></tr>
+            <tr><td class="k">How accurate is it?</td><td>Quote the <span class="id">T-E1</span> to <span class="id">T-E4</span> numbers measured at the event.</td></tr>
+            <tr><td class="k">Is it a smoke alarm?</td><td>No. It's a supplemental alert for people who can't hear their alarm. It adds light and touch; it doesn't replace strobe alarms.</td></tr>
+            <tr><td class="k">Why tape a webcam to glasses?</td><td>The product is the software. The rig stands in for smart glasses' camera, mics, lights and haptics, so the engine can move to real glasses later.</td></tr>
+            <tr><td class="k">What runs it?</td><td>Free, open models on the laptop's GPU: NVIDIA's streaming speech model, InsightFace, EfficientAT, and Qwen through Ollama.</td></tr>
+            <tr><td class="k">What's next?</td><td>Move the engine to a phone or a small wearable computer, and show the lens view in real AR glasses.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="appendix">
+        <div class="sec-num">Section 11</div>
+        <h2>Settings and sources</h2>
+        <p class="intro">Every starting value in one place. "To tune" values get set by the named test; "Verified" values came from our tests.</p>
+
+        <h3>Starting values</h3>
+        <div class="tbl wide"><table>
+          <thead><tr><th>Setting</th><th>Start at</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Face detection size</td><td>960 px</td><td>To tune (<span class="id">T-S3</span>)</td></tr>
+            <tr><td>Smallest face considered</td><td>36 px wide</td><td>Estimate</td></tr>
+            <tr><td>Name match</td><td>≥ 0.45, ahead of the runner-up by ≥ 0.08, 3 times within 1 s</td><td>To tune (<span class="id">T-S3</span>)</td></tr>
+            <tr><td>Name recheck</td><td>Every 2 s; drop after 3 failures</td><td>Design</td></tr>
+            <tr><td>Lost-face memory</td><td>Coast 1 s; re-identify for 10 s</td><td>Design</td></tr>
+            <tr><td>Lip motion, talking</td><td>≥ 0.03 over a 1 s window</td><td><span class="badge b-ok">Verified</span></td></tr>
+            <tr><td>Lip motion, uncertain</td><td>0.015–0.03</td><td><span class="badge b-ok">Verified</span></td></tr>
+            <tr><td>Speaker hold and switch</td><td>Hold 0.5 s; switch at 1.5× higher</td><td><span class="badge b-ok">Verified</span></td></tr>
+            <tr><td>Speech on and off</td><td>0.5 and 0.35 probability</td><td>Silero defaults</td></tr>
+            <tr><td>Shortest speech; end-of-speech silence</td><td>250 ms; 400 ms</td><td>Common practice</td></tr>
+            <tr><td>Caption chunk</td><td>560 ms</td><td>To tune (<span class="id">T-S2</span>)</td></tr>
+            <tr><td>First words wait for a speaker</td><td>300 ms</td><td>Dry run</td></tr>
+            <tr><td>"You" rule</td><td>Both sensors above your calibrated level, within 3 dB</td><td>Calibration</td></tr>
+            <tr><td>Side from sensors</td><td>≥ 3 dB difference</td><td>To tune (<span class="id">T-H3</span>)</td></tr>
+            <tr><td>Voice-print match</td><td>≥ 0.5</td><td>To tune (<span class="id">T-S4</span>)</td></tr>
+            <tr><td>Name proposal expiry</td><td>10 s</td><td>Design</td></tr>
+            <tr><td>Smoke or fire</td><td>≥ 0.5 in 2 of 3 windows plus 2 spaced beeps; or 2 full T3 cycles</td><td>Research</td></tr>
+            <tr><td>Watch mode</td><td>0.3–0.5, for 10 s</td><td>Research</td></tr>
+            <tr><td>Doorbell</td><td>≥ 0.4, with speech and music &lt; 0.5; rest 5 s</td><td>Research</td></tr>
+            <tr><td>Alarm tone bands</td><td>2.8–3.4 kHz and 470–570 Hz</td><td>Alarm standards (≈3.1 kHz, and 520 Hz for sleeping areas)</td></tr>
+            <tr><td>Rhythm tolerance</td><td>±20%</td><td>Design</td></tr>
+            <tr><td>Re-alert; clear</td><td>After 30 s; after 15 s of quiet</td><td>Design</td></tr>
+            <tr><td>Touch</td><td>Tap &lt; 0.4 s; hold ≥ 0.8 s; double tap within 0.4 s</td><td>Design</td></tr>
+            <tr><td>Sensor reports</td><td>Every 50 ms</td><td>Design</td></tr>
+            <tr><td>Safety stop</td><td>2 s without the laptop</td><td>Design</td></tr>
+            <tr><td>Longest buzz; motor share</td><td>0.6 s; at most 60% of any 2 s</td><td>Design</td></tr>
+            <tr><td>Bubble text</td><td>2 lines of about 42 characters; fade after 4 s</td><td>Captioning practice</td></tr>
+            <tr><td>History retention</td><td>7 days</td><td>Design</td></tr>
+            <tr><td>Reply fallback</td><td>Kokoro if no ElevenLabs audio within 1.5 s</td><td>Design</td></tr>
+            <tr><td>Mic ignored during a spoken reply</td><td>While it plays, plus 0.5 s</td><td>Dry run</td></tr>
+            <tr><td>Ollama</td><td>Temperature 0, 4096-token context, keep loaded 30 min</td><td>Design</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Sources</h3>
+        <div class="cards">
+          <div class="card"><h4>Speech</h4>
+            <ul>
+              <li><a href="https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b">Nemotron-3.5-ASR-Streaming-0.6B</a> and its <a href="https://k2-fsa.github.io/sherpa/onnx/nemo/index.html">sherpa-onnx build</a></li>
+              <li><a href="https://github.com/SYSTRAN/faster-whisper">faster-whisper</a>, <a href="https://github.com/ufal/whisper_streaming">whisper_streaming</a></li>
+              <li><a href="https://github.com/snakers4/silero-vad">Silero VAD</a></li>
+              <li><a href="https://github.com/k2-fsa/sherpa-onnx">sherpa-onnx</a> (CAM++ voice prints, Kokoro voice), <a href="https://github.com/wenet-e2e/wespeaker">WeSpeaker</a></li>
+              <li><a href="https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2">Streaming Sortformer</a></li>
+            </ul></div>
+          <div class="card"><h4>Vision</h4>
+            <ul>
+              <li><a href="https://github.com/deepinsight/insightface">InsightFace</a> (SCRFD, ArcFace, buffalo_l)</li>
+              <li><a href="https://github.com/opencv/opencv_zoo">OpenCV Zoo</a> (YuNet, SFace)</li>
+              <li><a href="https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker">MediaPipe Face Landmarker</a></li>
+              <li><a href="https://github.com/Junhua-Liao/Light-ASD">Light-ASD</a></li>
+              <li><a href="https://github.com/ifzhang/ByteTrack">ByteTrack</a></li>
+            </ul></div>
+          <div class="card"><h4>Sound and language</h4>
+            <ul>
+              <li><a href="https://github.com/fschmid56/EfficientAT">EfficientAT</a></li>
+              <li><a href="https://github.com/ollama/ollama">Ollama</a> and its <a href="https://ollama.com/blog/structured-outputs">structured outputs</a></li>
+              <li><a href="https://ollama.com/library/translategemma">TranslateGemma</a>, <a href="https://github.com/Helsinki-NLP/Opus-MT">Opus-MT</a>, <a href="https://github.com/OpenNMT/CTranslate2">CTranslate2</a></li>
+              <li><a href="https://github.com/pemistahl/lingua-py">Lingua</a></li>
+              <li><a href="https://elevenlabs.io/docs">ElevenLabs</a>, <a href="https://github.com/timescale/timescaledb">TimescaleDB</a> (<a href="https://www.tigerdata.com/">Tiger Data</a>)</li>
+            </ul></div>
+          <div class="card"><h4>Hardware</h4>
+            <ul>
+              <li><a href="https://docs.arduino.cc/hardware/uno-r4-wifi/">Arduino UNO R4 WiFi</a></li>
+              <li><a href="https://wiki.seeedstudio.com/Grove-I2C_Motor_Driver-TB6612FNG/">Grove I2C Motor Driver (TB6612FNG)</a>, <a href="https://wiki.seeedstudio.com/Grove-I2C_Motor_Driver_V1.3/">V1.3</a></li>
+              <li><a href="https://wiki.seeedstudio.com/Grove-Sound_Sensor/">Sound Sensor</a>, <a href="https://wiki.seeedstudio.com/Grove-Touch_Sensor/">Touch Sensor</a>, <a href="https://wiki.seeedstudio.com/Grove-LED_Socket_Kit/">LED Socket Kit</a></li>
+              <li><a href="https://wiki.seeedstudio.com/Base_Shield_V2/">Grove Base Shield</a></li>
+            </ul></div>
+          <div class="card"><h4>Tools</h4>
+            <ul>
+              <li><a href="https://docs.astral.sh/uv/">uv</a>, <a href="https://python-sounddevice.readthedocs.io/">sounddevice</a></li>
+              <li><a href="https://obsproject.com/">OBS Studio</a></li>
+              <li><a href="https://huggingface.co/hexgrad/Kokoro-82M">Kokoro-82M</a>, offline voice and test speech</li>
+              <li><a href="https://claude.ai/artifact/B6nYohjjWpL2ovXTKWQxja">Attune CAD page</a>, the rig this plan builds</li>
+            </ul></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="foot">
+    <div><strong>Attune build plan v3</strong> · 2026-09-25 · Nothing here is built yet. Three feasibility tests have been run; the stack, hardware and end-to-end tests are saved for later.</div>
+    <div>Timings marked as expected come from published numbers and the dry runs. Replace them with measured numbers as the tests run.</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const links = [...document.querySelectorAll('.toc a')];
+  const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const secs = [...document.querySelectorAll('main > section')];
+  const setCurrent = id => links.forEach(a => a.classList.toggle('is-current', a === byId.get(id)));
+  if ('IntersectionObserver' in window) {
+    const seen = new Map();
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => seen.set(e.target.id, e.isIntersecting ? e.boundingClientRect.top : null));
+      const vis = secs.filter(s => seen.get(s.id) != null);
+      if (vis.length) setCurrent(vis[0].id);
+    }, { rootMargin: '-15% 0px -60% 0px' });
+    secs.forEach(s => io.observe(s));
+  }
+
+  const boxes = [...document.querySelectorAll('ul.checks input[type=checkbox]')];
+  const KEY = 'attune-plan-checks-v1';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  boxes.forEach((b, i) => {
+    if (saved[i]) b.checked = true;
+    b.addEventListener('change', () => {
+      saved[i] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+    });
+  });
+})();
+</script>
