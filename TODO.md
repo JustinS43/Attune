@@ -39,6 +39,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
 - [x] V-22 Light-ASD active speaker model decides who is talking (#58)
 - [x] V-23 Enrollment station: save a face at the laptop camera (OV02E10) with a live phone preview, the glasses' quality gate and 8-most-varied rule, an identity check against the glasses face, and frame sharing when the main camera holds the laptop camera (#60)
+- [ ] V-25 Automatic contact memory: persist engaged faces, deduplicate and rank up to 150, replace weak automatic profiles — code and unit tests done; live camera check left
 
 ## Section 2 – Audio & Language
 
@@ -63,6 +64,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-19 Hot-plug recovery: re-initialise PortAudio after a mic loss, fall back, return to `[audio] device_name` between utterances; camera returns to `[vision] camera_name` after replug (Vision file) · M2 — unit-tested with fake devices; a real unplug/replug is still to check on the rig (#52)
 - [x] A-20 Make Windows capture simulation tests portable across macOS and Linux (#55)
 - [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
+- [ ] A-24 Automatic voice association and contextual names: persist harvested voice prints, offer repeated name evidence — code and unit tests done; live two-mic check left
 
 ## Section 3 – Hardware & Services
 
@@ -120,6 +122,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 - [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
+- [ ] P-41 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
 
 ## Gates and end-to-end checks (whole team)
 

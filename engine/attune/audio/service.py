@@ -34,6 +34,7 @@ class AudioService:
         self.bus, self.config = bus, config
         self.vad, self.asr, self.voices, self.language, self.mic = vad, asr, voices, language, mic
         self.worker = Worker(bus, "audio", self._handle)
+        self.auto_voice_tracks: dict[str, str] = {}
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(config["audio"])
         self.ring = AudioRing()
@@ -157,6 +158,7 @@ class AudioService:
 
     def _handle(self, topic: str, e: dict, generation: int) -> None:
         if topic == "session.forget":
+            self.auto_voice_tracks.clear()
             self._reset()
             self.ring.clear()
             self.speech_intervals.clear()
@@ -183,7 +185,25 @@ class AudioService:
         elif topic == "voice.harvest" and not self.paused and self.clock() >= self.muted_until:
             audio = self._speech_span(e["t0"], e["t1"])
             if generation == self.worker.generation:
-                self.voices.harvest(e["person_id"], audio, e.get("talkers", 1))
+                key = e["person_id"]
+                result = self.voices.harvest(key, audio, e.get("talkers", 1))
+                target = self.auto_voice_tracks.get(
+                    key, key if str(key).startswith("auto-") else None
+                )
+                if target and result == "session" and self.voices.remember_auto(target, key):
+                    self.auto_voice_tracks.pop(key, None)
+                    self.worker.publish(
+                        "enroll.result",
+                        {
+                            "person_id": target,
+                            "part": "voice",
+                            "ok": True,
+                            "reason": "",
+                            "source": "auto",
+                            "track_id": None,
+                        },
+                        generation,
+                    )
         elif topic == "command":
             name, args = e["name"], e.get("args", {})
             if name == "enroll.start":
@@ -211,6 +231,26 @@ class AudioService:
                     return
                 self._reset()
                 self.language, self.asr, self.languages = language, asr, langs
+        elif topic == "enroll.result" and e["part"] == "face" and e.get("source") == "auto":
+            track_id = e.get("track_id")
+            person_id = e.get("person_id")
+            if e.get("ok") and track_id is not None and person_id:
+                key = f"track-{track_id}"
+                self.auto_voice_tracks[key] = person_id
+                if self.voices.remember_auto(person_id, key):
+                    self.auto_voice_tracks.pop(key, None)
+                    self.worker.publish(
+                        "enroll.result",
+                        {
+                            "person_id": person_id,
+                            "part": "voice",
+                            "ok": True,
+                            "reason": "",
+                            "source": "auto",
+                            "track_id": None,
+                        },
+                        generation,
+                    )
         elif topic == "enroll.result" and e["part"] == "voice" and e.get("source") == "station":
             # A-21: the enrollment station saved this print from the laptop mic; load it
             if e.get("ok") and e.get("person_id"):
@@ -402,9 +442,7 @@ class AudioService:
                 raise
             logger.warning("Nemotron decoding failed; retrying utterance with local Whisper")
             try:
-                fallback = WhisperASR(
-                    self.config["whisper"] | {"languages": self.languages}
-                )
+                fallback = WhisperASR(self.config["whisper"] | {"languages": self.languages})
                 result = fallback.feed(np.concatenate(self.normalized), final)
             except Exception:
                 self._reset()

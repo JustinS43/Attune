@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections import deque
 
-from attune.audio.runtime import Worker, engine_clock
+from attune.audio.runtime import Worker, engine_clock, fields
 
 from . import describe, replies, translate
 from .client import OllamaClient
@@ -32,6 +32,8 @@ class LLMService:
         self.track_generations = {}
         self._state_generation = self.worker.generation
         self._error = ""
+        self._visible: list[dict] = []
+        self._tracks_unsub = None
 
     def _health(self) -> dict:
         warm = getattr(self.client, "warm", False)
@@ -46,6 +48,7 @@ class LLMService:
 
     def start(self) -> None:
         self.clock = engine_clock(self.config)
+        self._tracks_unsub = self.bus.subscribe("vision.tracks", self._on_tracks)
         for topic in (
             "caption",
             "vision.appearance",
@@ -59,6 +62,18 @@ class LLMService:
             self.worker.subscribe(topic)
         self.client.start()
         self.worker.start()
+
+    def _on_tracks(self, event) -> None:
+        """Keep only the visible unnamed face for contextual names spoken by the wearer."""
+        visible = []
+        for raw in fields(event).get("tracks", []):
+            track = fields(raw)
+            pid = track.get("person_id")
+            if pid is None or str(pid).startswith("auto-"):
+                visible.append(
+                    {"kind": "face", "track_id": track.get("track_id"), "person_id": pid}
+                )
+        self._visible = visible
 
     def _queue(
         self, kind: str, messages: list, schema: dict, source: dict, generation: int
@@ -85,12 +100,15 @@ class LLMService:
         self.descriptions.labels.clear()
         self.lost.clear()
         self.track_generations.clear()
+        self._visible = []
         self._state_generation = self.worker.generation
         self._error = ""
 
     def _handle(self, topic: str, e: dict, generation: int) -> None:
         if generation != self.worker.generation and topic not in {
-            "session.forget", "paused", "person.changed"
+            "session.forget",
+            "paused",
+            "person.changed",
         }:
             return
         if self._state_generation != self.worker.generation:
@@ -125,6 +143,13 @@ class LLMService:
         ):
             self.seen.append(e["utt_id"])
             self.context.append(e["text"])
+            target = self._visible[0] if len(self._visible) == 1 else None
+            evidence = self.names.evidence(e, target)
+            if evidence:
+                self.worker.publish("name.evidence", evidence, generation)
+            suggestion = self.names.contextual(e, self.clock(), target)
+            if suggestion:
+                self.worker.publish("name.proposal", suggestion, generation)
             if self.translation and e["lang"] not in {"en", "und", ""}:
                 self._queue("translation", translate.messages(e), translate.SCHEMA, e, generation)
             if self.names.eligible(e):
@@ -183,6 +208,18 @@ class LLMService:
                 if kind == "translation" and self.translation:
                     topic, event = "caption.translation", translate.result(source, answer)
                 elif kind == "names" and self._current_track(source, source["speaker"]["track_id"]):
+                    grounded = self.names.grounded(source, answer)
+                    if grounded:
+                        self.worker.publish(
+                            "name.evidence",
+                            {
+                                "track_id": source["speaker"]["track_id"],
+                                "person_id": source["speaker"].get("person_id"),
+                                "name": grounded,
+                                "utt_id": source["utt_id"],
+                            },
+                            generation,
+                        )
                     topic, event = "name.proposal", self.names.propose(source, answer, self.clock())
                     if event:
                         self.worker.publish("hw.pattern", {"name": "NAME", "side": "R"}, generation)
@@ -207,6 +244,9 @@ class LLMService:
         )
 
     def stop(self) -> None:
+        if callable(self._tracks_unsub):
+            self._tracks_unsub()
+            self._tracks_unsub = None
         self.client.stop()
         self.worker.stop()
         if not self.worker.thread or not self.worker.thread.is_alive():
