@@ -55,6 +55,7 @@ class Options:
     host: str | None = None
     port: int | None = None
     no_browser: bool = False
+    simulate_hardware: bool = False
     seconds: float | None = None
 
 
@@ -86,6 +87,11 @@ def parse_args(argv: list[str] | None = None) -> Options:
     ap.add_argument("--host", help="web server address (default: [engine] host, 127.0.0.1)")
     ap.add_argument("--port", type=int, help="web server port (default: [engine] port, 8000)")
     ap.add_argument("--no-browser", action="store_true", help="don't open the lens page")
+    ap.add_argument(
+        "--simulate-hardware",
+        action="store_true",
+        help="run Section 3's simulated Arduino instead of the USB one",
+    )
     ap.add_argument("--seconds", type=float, help=argparse.SUPPRESS)  # quit by itself (tests)
     a = ap.parse_args(argv)
     source: str | int | None = a.source
@@ -101,6 +107,7 @@ def parse_args(argv: list[str] | None = None) -> Options:
         host=a.host,
         port=a.port,
         no_browser=a.no_browser,
+        simulate_hardware=a.simulate_hardware,
         seconds=a.seconds,
     )
 
@@ -134,6 +141,8 @@ class Engine:
     def __init__(self, opts: Options, config: dict[str, Any] | None = None) -> None:
         self.opts = opts
         self.config = config if config is not None else load_config(opts.config)
+        if opts.simulate_hardware:
+            self.config["hardware"] = {**section(self.config, "hardware"), "simulate": True}
         engine_cfg = section(self.config, "engine")
         self.host = opts.host or engine_cfg.get("host", "127.0.0.1")
         self.port = int(opts.port or engine_cfg.get("port", 8000))

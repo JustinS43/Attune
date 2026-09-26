@@ -318,10 +318,14 @@ def test_pause_toggle_publishes_and_broadcasts(hub_env):
             assert wait_for(lambda: hub_env.rec[C.PAUSED][-1] == {"paused": False})
 
 
-def test_touch_pause_toggles_too(hub_env):
+def test_bus_pause_command_toggles_once(hub_env):
+    """Section 3's touch router publishes touch.action AND command pause.toggle: one flip."""
     with page(hub_env.client, "lens") as (lens, _):
         hub_env.bus.publish(C.TOUCH_ACTION, {"target": "pause", "id": None, "accept": True})
+        hub_env.bus.publish(C.COMMAND, {"name": "pause.toggle", "args": {}})
         assert recv_type(lens, "paused")["paused"] is True
+        assert hub_env.rec[C.PAUSED] == [{"paused": True}]
+        assert hub_env.router.paused is True
 
 
 def test_commands_routed_to_bus(hub_env):

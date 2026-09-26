@@ -15,7 +15,11 @@ def test_parse_args():
     assert o.source == 2 and o.no_mic is True and o.port == 8001 and o.no_browser
     o = M.parse_args(["--source", "data/reels/film/cafe_friends.mp4", "--repeat-audio", "4"])
     assert o.source == "data/reels/film/cafe_friends.mp4" and o.repeat_audio == 4.0
-    assert o.no_mic is False
+    assert o.no_mic is False and o.simulate_hardware is False
+    o = M.parse_args(["--simulate-hardware", "--no-mic"])
+    assert o.simulate_hardware and o.no_mic
+    engine = M.Engine(o, {"engine": {"data_dir": "data"}, "hardware": {"baud": 115200}})
+    assert engine.config["hardware"] == {"baud": 115200, "simulate": True}
 
 
 class Good:

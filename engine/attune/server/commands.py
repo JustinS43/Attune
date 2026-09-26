@@ -3,15 +3,18 @@
 Section 4 - Pages, Engine & Demo. TODO: P-04. Contracts: docs/contracts.md (4).
 
 Every valid `{"type": "command", name, args}` from a page is published as the bus
-event `command` = {name, args}; the owning section picks it up. The engine itself
-also handles three of them:
+event `command` = {name, args}; the owning section picks it up there. Unknown
+command names are logged and ignored.
+
+The engine owns three commands and handles them from the bus `command` topic, so
+they work the same whoever sends them (a page, or Section 3's touch router, which
+publishes `command` pause.toggle on a double tap):
 
 - `pause.toggle`: flips the pause state and publishes `paused` {paused}.
-  A touch-sensor `touch.action` with target `pause` does the same.
 - `session.forget`: publishes `session.forget` {} so every section wipes session data.
 - `mark`: writes the note to the session log.
 
-Unknown command names are logged and ignored.
+Handling never publishes `command` again, so there is no loop.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from ..core.contracts import COMMAND, COMMAND_NAMES, PAUSED, SESSION_FORGET, TOUCH_ACTION, get
+from ..core.contracts import COMMAND, COMMAND_NAMES, PAUSED, SESSION_FORGET, get
 
 log = logging.getLogger(__name__)
 
@@ -39,10 +42,12 @@ class CommandRouter:
         self._unsubs: list[Callable[[], None]] = []
 
     def connect(self) -> None:
-        """Follow `paused` from any publisher and handle the touch sensor's pause."""
+        """Handle engine-owned commands from the bus and follow `paused` from anyone."""
+        if self._unsubs:
+            return
         self._unsubs = [
+            self.bus.subscribe(COMMAND, self._on_command),
             self.bus.subscribe(PAUSED, self._on_paused),
-            self.bus.subscribe(TOUCH_ACTION, self._on_touch),
         ]
 
     def close(self) -> None:
@@ -50,28 +55,9 @@ class CommandRouter:
             unsub()
         self._unsubs = []
 
-    def _on_paused(self, ev: Any) -> None:
-        with self._lock:
-            self.paused = bool(get(ev, "paused", False))
-
-    def _on_touch(self, ev: Any) -> None:
-        if get(ev, "target") == "pause":
-            self.toggle_pause()
-
-    def toggle_pause(self) -> bool:
-        with self._lock:
-            paused = not self.paused
-        self.set_paused(paused)
-        return paused
-
-    def set_paused(self, paused: bool) -> None:
-        with self._lock:
-            self.paused = bool(paused)
-        log.info("Recognition %s", "paused" if paused else "resumed")
-        self.bus.publish(PAUSED, {"paused": bool(paused)})
-
+    # ---- from the pages ----
     def handle(self, name: Any, args: Any = None) -> bool:
-        """Handle one page command; returns False (and logs) when it is not in the contract."""
+        """Publish one page command; returns False (and logs) when it is not in the contract."""
         if not isinstance(name, str) or name not in COMMAND_NAMES:
             self.ignored += 1
             log.info("Ignoring unknown command %r", name)
@@ -79,14 +65,30 @@ class CommandRouter:
         if not isinstance(args, dict):
             args = {}
         self.handled += 1
+        self.bus.publish(COMMAND, {"name": name, "args": args})
+        return True
+
+    # ---- from the bus ----
+    def _on_command(self, ev: Any) -> None:
+        name = get(ev, "name")
+        args = get(ev, "args") or {}
         if name == "pause.toggle":
             self.toggle_pause()
         elif name == "session.forget":
             log.info("Forgetting the session")
             self.bus.publish(SESSION_FORGET, {})
-        elif name == "mark":
-            note = args.get("note", "")
-            if self.session_log is not None:
-                self.session_log.mark(note if isinstance(note, str) else str(note))
-        self.bus.publish(COMMAND, {"name": name, "args": args})
-        return True
+        elif name == "mark" and self.session_log is not None:
+            note = args.get("note", "") if isinstance(args, dict) else ""
+            self.session_log.mark(note if isinstance(note, str) else str(note))
+
+    def _on_paused(self, ev: Any) -> None:
+        with self._lock:
+            self.paused = bool(get(ev, "paused", False))
+
+    def toggle_pause(self) -> bool:
+        with self._lock:
+            paused = not self.paused
+            self.paused = paused
+        log.info("Recognition %s", "paused" if paused else "resumed")
+        self.bus.publish(PAUSED, {"paused": paused})
+        return paused
