@@ -272,6 +272,37 @@ def test_audio_final_follows_silence_with_shared_timestamps(config, bus):
         service.stop()
 
 
+def test_utterance_keeps_the_soft_onset_before_vad_fires(config, bus):
+    """Frames just before speech is detected (soft onsets) are prepended to the utterance."""
+    heard = []
+
+    class RecordingASR(FakeASR):
+        def feed(self, samples, final=False):
+            heard.append(len(samples))
+            return super().feed(samples, final)
+
+    service = AudioService(
+        bus,
+        config | {"audio": config["audio"] | {"pre_roll_ms": 320}},
+        vad=lambda x: 0.9 if x.mean() > 0.1 else 0.1,
+        asr=RecordingASR(),
+        voices=FakeVoices(),
+        language=SimpleNamespace(detect=lambda text, lang: lang),
+        mic=False,
+    )
+    service.start()
+    try:
+        onset = np.full(8192, 0.05, np.float32)  # 16 frames the VAD doesn't count as speech
+        service._audio({"t": 10.0, "samples": onset}, 0)
+        service._audio({"t": 10.512, "samples": np.ones(16384, np.float32)}, 0)
+        service._audio({"t": 11.536, "samples": np.zeros(8192, np.float32)}, 0)
+        final = [e for t, e in bus.events if t == "audio.transcript" and e["final"]][-1]
+        assert final["t_start"] == pytest.approx(10.512 - 0.32)
+        assert sum(heard) >= 16384 + 10 * 512
+    finally:
+        service.stop()
+
+
 def test_utterance_level_does_not_raise_trailing_noise():
     from attune.audio.asr import UtteranceLevel
 
