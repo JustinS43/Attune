@@ -6,8 +6,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from attune.audio.asr import NemotronASR, Recognition
+from attune.audio.asr import NemotronASR, Recognition, hold_back
 from attune.audio.service import AudioService, _is_16k
+from attune.audio.vad import Segmenter
 
 SPEECH, QUIET = 0.5, 0.0  # sample values: the fake VAD hears speech above 0.1
 
@@ -233,3 +234,82 @@ def test_only_16k_blocks_take_room_in_the_audio_inbox(config, bus):
     )
     assert s.worker.inbox.qsize() == 1
     s.worker.stop()
+
+
+def test_a_cut_never_splits_a_word():
+    t = ["▁Last", "▁sum", "mer", "▁in", "▁North", "▁Ca"]
+    assert hold_back(t, 0) == 5  # "Ca" may be the start of "Carolina": it waits
+    assert hold_back(t + ["ro", "li", "na", "."], 0) == 10  # a sentence end is whole
+    assert (
+        hold_back(t + ["ro", "li", "na", ".", "▁"], 0) == 10
+    )  # a lone word mark waits
+    assert hold_back(["▁Hi"], 0) == 1  # the only word is kept
+    assert hold_back(t, 5) == 6
+    assert hold_back(t, 6) == 6
+    # heard long after it: the word is whole (its next piece would have come by now)
+    assert hold_back(t, 0, [0.0, 0.4, 0.6, 0.9, 1.2, 1.6], heard_s=2.0) == 5
+    assert hold_back(t, 0, [0.0, 0.4, 0.6, 0.9, 1.2, 1.6], heard_s=3.2) == 6
+
+
+class StreamRecognizer:
+    """A fake sherpa recogniser: one word per 0.5 s of loud audio, 0.5 s apart."""
+
+    class Stream:
+        def __init__(self):
+            self.loud, self.tokens, self.times = 0, [], []
+
+        def accept_waveform(self, rate, samples):
+            self.loud += int(np.count_nonzero(samples > 0.01))  # after the level match
+            while self.loud >= 8000 * (len(self.tokens) + 1):
+                self.times.append(0.5 * len(self.tokens))
+                self.tokens.append(f"▁w{len(self.tokens)}")
+
+        def input_finished(self):
+            pass
+
+    def __init__(self):
+        self.streams = 0
+
+    def create_stream(self):
+        self.streams += 1
+        return self.Stream()
+
+    def is_ready(self, stream):
+        return False
+
+    def get_result_all(self, stream):
+        text = "".join(stream.tokens).replace("▁", " ")
+        return SimpleNamespace(text=text, tokens=stream.tokens, timestamps=stream.times)
+
+
+def test_a_split_in_talk_carries_on_the_stream_and_loses_no_word(config, bus):
+    recognizer = StreamRecognizer()
+    asr = NemotronASR({"flush_s": 0.4, "languages": ["en"]}, recognizer)
+    s = service(config, bus, asr, soft_split_s=2.0)
+    audio(s, 10.0, 2.5, SPEECH)  # w0..w4
+    audio(s, 12.5, 0.15, QUIET)  # a breath: split here
+    finals = transcripts(bus, final=True)
+    assert [f["text"] for f in finals] == ["w0 w1 w2 w3"]  # w4 might still be growing
+    audio(s, 12.65, 1.0, SPEECH)  # w5, w6
+    audio(s, 13.65, 0.6, QUIET)  # the end
+    finals = transcripts(bus, final=True)
+    assert [f["text"] for f in finals] == ["w0 w1 w2 w3", "w4 w5 w6"]
+    # one stream for both: the split did not start a fresh one
+    assert recognizer.streams == 2  # the first, and the next one made after the end
+    # word times go on from the first utterance's audio, never before its own start
+    assert all(a >= finals[1]["t_start"] for _, a, _ in finals[1]["words"])
+
+
+def test_after_a_split_the_next_frame_starts_speech_and_the_pause_counts():
+    seg = Segmenter(
+        {"vad_start": 0.5, "vad_end": 0.35, "min_speech_ms": 250, "end_silence_ms": 400}
+    )
+    seg.resume(0.2)
+    active, _began, ended = seg.feed(1.0, 0.1)
+    assert seg.start == 1.0 and seg.confirmed and not active and not ended
+    for i in range(6):
+        active, _began, ended = seg.feed(1.032 + 0.032 * i, 0.1)
+    assert ended  # 0.2 s before the split and ~0.2 s after it: the utterance ends
+    seg.resume(0.1)
+    active, _, ended = seg.feed(2.0, 0.9)
+    assert active and not ended and seg.silence_s == 0

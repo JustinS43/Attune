@@ -85,7 +85,9 @@ languages = ["en", "es"]        # empty = auto-detect
 mute_after_reply_s = 0.5
 soft_split_s = 5                # a longer utterance ends at its next pause, so finals (history,
                                 # translation) keep coming during a monologue (10 s: ~12 s late)
-soft_split_gap_s = 0.1           # ...a pause is this much silence (the VAD dips inside words too)
+soft_split_gap_s = 0.1          # ...a pause is this much silence (the VAD dips inside words too)
+split_context_s = 120           # a split carries on the recogniser's stream (a fresh one drops the
+                                # first words of quiet speech) until it has heard this much
 max_utterance_s = 30
 target_rms = 0.1
 rescue_max_s = 2.5              # a short utterance heard as nothing is decoded again on the side
@@ -176,6 +178,8 @@ joiner = "models/nemotron/joiner.int8.onnx"
 provider = "cpu"
 num_threads = 2
 flush_s = 0.4                   # silence after a final: 0.4 decodes every last word, 0.8 cost ~0.2 s
+word_settle_s = 1.5             # a split mid-talk keeps the last word for the next utterance
+                                # (it may be half decoded) unless this much audio came after it
 
 [whisper]
 model_path = "models/faster-whisper-large-v3-turbo"

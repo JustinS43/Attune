@@ -36,6 +36,19 @@ class Segmenter:
         self.speech_s = 0.0
         self.silence_s = 0.0
         self.confirmed = False
+        self.resumed = False
+
+    def resume(self, silence_s: float) -> None:
+        """Carry on after a split: the next frame starts a confirmed utterance at once, and
+        the pause so far still counts towards its end (A-22). The hysteresis state stays:
+        a split at max_utterance_s can come in the middle of a word."""
+        active = self.active
+        self.reset()
+        self.active = active
+        self.speech_s = self.config["min_speech_ms"] / 1000
+        self.silence_s = silence_s
+        self.confirmed = True
+        self.resumed = True
 
     def feed(self, t: float, prob: float, duration: float = 0.032) -> tuple[bool, bool, bool]:
         """Return speech state, first confirmed frame, and utterance ending."""
@@ -43,6 +56,8 @@ class Segmenter:
             self.active = True
         elif self.active and prob < self.config["vad_end"]:
             self.active = False
+        if self.resumed:
+            self.start, self.resumed = t, False
         if self.active:
             if self.start is None:
                 self.start = t

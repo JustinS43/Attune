@@ -65,7 +65,9 @@ class AudioService:
             maxlen=max(0, round(cfg.get("pre_roll_ms", 320) / 32))
         )
         self.utt_t0 = 0.0
-        self.lead = 0  # silent samples put before this utterance's audio for the recogniser
+        self.lead = 0  # samples the recogniser heard before this utterance (its word times)
+        self.pad = 0  # silence put before this utterance's audio for the recogniser
+        self.continued = False  # this utterance carries on the last one's recogniser stream
         self.speech_audio: list[np.ndarray] = []
         self.sent = 0
         self.level = UtteranceLevel(cfg["target_rms"])
@@ -151,24 +153,30 @@ class AudioService:
         if self.vad and hasattr(self.vad, "reset"):
             self.vad.reset()
 
-    def _end_utterance(self, keep_tail: int = 0) -> None:
+    def _end_utterance(self, keep_tail: int = 0, keep_stream: bool = False) -> None:
         """Forget the current utterance. `keep_tail`: this many of its last frames (the
         silence that ended it) become the pre-roll of the next one, so speech that starts
-        again right away still has audio before its first word."""
+        again right away still has audio before its first word. `keep_stream`: the next
+        utterance carries on the recogniser's stream (a split in the middle of talk)."""
         keep = min(keep_tail, self.pre_roll.maxlen or 0)
         tail = self.utterance[-keep:] if keep else []
         self.utterance.clear()
         self.speech_audio.clear()
         self.sent = 0
-        self.lead = 0
         self.shown = None
         self.voice_at = 0
-        self.level.reset()
         self.normalized.clear()
         self.segmenter.reset()
-        if self.asr:
-            with self._asr_lock:
-                self.asr.reset()
+        self.continued = keep_stream
+        self.pad = 0
+        if keep_stream:
+            self.lead = getattr(self.asr, "samples", 0)  # its word times go on from there
+        else:
+            self.lead = 0
+            self.level.reset()
+            if self.asr:
+                with self._asr_lock:
+                    self.asr.reset()
         self.pre_roll.clear()
         self.pre_roll.extend(tail)
 
@@ -405,8 +413,9 @@ class AudioService:
                 self.utt_id = str(uuid4())
                 self.utterance.extend(self.pre_roll)
                 self.utt_t0 = t - 0.032 * len(self.pre_roll)
-                # too little audio before the first word: the recogniser gets silence first
-                self.lead = (self.pre_roll.maxlen - len(self.pre_roll)) * 512
+                if not self.continued:
+                    # too little audio before the first word: the recogniser gets silence first
+                    self.pad = self.lead = (self.pre_roll.maxlen - len(self.pre_roll)) * 512
                 self.pre_roll.clear()
             self.utterance.append(frame.copy())
         else:
@@ -426,19 +435,39 @@ class AudioService:
             and count >= soft * 16000
         )
         final = ended or split or count >= cfg["max_utterance_s"] * 16000
+        # A split in the middle of talk cuts the recogniser's stream instead of starting a
+        # new one: a fresh stream drops the first words of quiet speech (A-22).
+        cut = (
+            final
+            and not ended
+            and isinstance(self.asr, NemotronASR)
+            and getattr(self.asr, "samples", 0) < cfg.get("split_context_s", 120) * 16000
+        )
         if self.segmenter.confirmed and (final or count - self.sent >= cfg["asr_chunk_ms"] * 16):
             fresh = self.utterance[self.sent // 512 :]
             audio = np.concatenate(fresh) if fresh else np.empty(0, np.float32)
-            result = self._recognize(audio, final)
+            result = self._recognize(audio, final and not cut)
+            if cut:
+                with self._asr_lock:
+                    result = self.asr.cut()
             self.sent = count
             if generation != self.worker.generation:
                 return
-            self._publish(result, final, t + 0.032, generation)
+            self._publish(result, final, t + 0.032, generation, rescue=not cut)
         if final:
             # the silent frames that ended it become the next utterance's pre-roll (none
-            # after a split at max_utterance_s: those frames are speech already captioned)
-            silent = self.pre_roll.maxlen if ended else round(quiet / 0.032) if split else 0
-            self._end_utterance(keep_tail=silent)
+            # after a cut: the stream heard them; none after a split at max_utterance_s:
+            # those frames are speech already captioned)
+            if ended:
+                silent = self.pre_roll.maxlen
+            else:
+                silent = round(quiet / 0.032) if split and not cut else 0
+            self._end_utterance(keep_tail=silent, keep_stream=cut)
+            if not ended:
+                # A split, not an end: the talk goes on. The next utterance starts at once,
+                # as speech, so quiet speech the VAD holds only by its hysteresis (between
+                # vad_end and vad_start, a distant talker) is not lost after the split.
+                self.segmenter.resume(quiet)
 
     def _finish(self, generation: int) -> None:
         """Caption the utterance in progress now (a pause, a reply starting, a capture gap)."""
@@ -453,14 +482,16 @@ class AudioService:
             return
         self._publish(result, True, self.utt_t0 + len(self.utterance) * 0.032, generation)
 
-    def _publish(self, result: Recognition, final: bool, t_end: float, generation: int) -> None:
+    def _publish(
+        self, result: Recognition, final: bool, t_end: float, generation: int, rescue: bool = True
+    ) -> None:
         """Publish a draft (only when its text changed) or the final, and match the voice."""
         cfg = self.config["audio"]
         if final and not result.text:
             if self.shown is not None:
                 # the words were on screen as a draft: keep them
                 result = self.shown
-            else:
+            elif rescue:
                 self._try_rescue(t_end, generation)
         if result.text and (final or self.shown is None or result.text != self.shown.text):
             self._transcript(self.utt_id, result, final, self.utt_t0, t_end, self.lead, generation)
@@ -521,10 +552,12 @@ class AudioService:
         limit = self.config["audio"].get("rescue_max_s", 2.5)
         if not limit or seconds > limit or not self.normalized:
             return
-        if not isinstance(self.asr, NemotronASR):
-            return
-        audio = np.concatenate([np.zeros(self.lead, np.float32), *self.normalized])
-        job = (self.asr, self.utt_id, audio, self.utt_t0, t_end, self.lead, generation)
+        if len(self.speech_audio) * 512 < self.config["audio"]["min_speech_ms"] * 16:
+            return  # no speech in it (the pause after a split): nothing to hear again
+        if not isinstance(self.asr, NemotronASR) or self.continued:
+            return  # a continued stream heard it with its context already
+        audio = np.concatenate([np.zeros(self.pad, np.float32), *self.normalized])
+        job = (self.asr, self.utt_id, audio, self.utt_t0, t_end, self.pad, generation)
         try:
             self._rescues.submit(self._rescue, *job)
         except RuntimeError:  # shutting down
@@ -543,9 +576,9 @@ class AudioService:
     def _recognize(self, samples: np.ndarray, final: bool) -> Recognition:
         normalized = self.level.feed(samples)
         self.normalized.append(normalized)
-        if self.lead and not self.sent:
-            # first audio of the utterance: silence before it (see self.lead)
-            normalized = np.concatenate((np.zeros(self.lead, np.float32), normalized))
+        if self.pad and not self.sent:
+            # first audio of the utterance: silence before it (see self.pad)
+            normalized = np.concatenate((np.zeros(self.pad, np.float32), normalized))
         try:
             with self._asr_lock:
                 return self.asr.feed(normalized, final)
@@ -561,5 +594,7 @@ class AudioService:
                 self._reset()
                 raise
             self.asr = fallback
-            self.lead = 0  # Whisper heard the utterance without the silence before it
+            # Whisper heard the utterance alone, without the silence or stream before it
+            self.lead = self.pad = 0
+            self.continued = False
             return result
