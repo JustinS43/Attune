@@ -1,0 +1,140 @@
+/*
+ * Demo page, "Glasses POV" view: the wearer's own view through the glasses (pov.js).
+ *
+ * Section 4 - Pages, Engine & Demo. TODO: P-20.
+ */
+
+.views svg .fill { fill: currentColor; stroke: none; }
+
+body[data-view="pov"] .stage {
+  opacity: 0;
+  visibility: hidden; /* the frames stay loaded; they just aren't shown */
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease), visibility 0s linear var(--dur);
+}
+
+.pov {
+  position: fixed;
+  inset: var(--bar-h) 0 0 0;
+  overflow: hidden;
+  background: #000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur) var(--ease), visibility 0s linear var(--dur);
+  outline: none;
+}
+body[data-view="pov"] .pov {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur) var(--ease), visibility 0s;
+}
+
+/* the lens, enlarged and cropped (pov.js sets the size and the transform) */
+.pov-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  transition: transform var(--dur) var(--ease);
+}
+.pov-lens { display: block; border: 0; width: 1920px; height: 1080px; background: #000; }
+
+/* the glasses frame in front: soft, dark, out of focus */
+.pov-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* ------------------------------------------------------------------ controls */
+.pov-tools {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(10, 12, 16, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(12px);
+  opacity: 0.72;
+  transition: opacity 200ms;
+}
+.pov-tools:hover, .pov-tools:focus-within { opacity: 1; }
+
+.pov-seg { display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); }
+.pov-seg button, .pov-info-btn {
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--attune-text-2, rgba(255, 255, 255, 0.68));
+  font: 600 12px/1 var(--attune-font-text, inherit);
+  cursor: pointer;
+  transition: background 160ms, color 160ms;
+}
+.pov-seg button:hover, .pov-info-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.pov-seg button[aria-pressed="true"] { color: #06201b; background: var(--attune-brand, linear-gradient(135deg, #7cf5d6, #6ab8ff)); }
+.pov-seg button:focus-visible, .pov-info-btn:focus-visible { outline: 2px solid var(--attune-mint, #7cf5d6); outline-offset: 1px; }
+
+.pov-info-btn {
+  width: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font: italic 700 13px/1 Georgia, "Times New Roman", serif;
+}
+.pov-info-btn[aria-expanded="true"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
+
+.pov-info {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(380px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(12, 14, 19, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  color: var(--attune-text-2, rgba(255, 255, 255, 0.72));
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.pov-info[hidden] { display: none; }
+.pov-info p { margin: 0 0 7px; }
+.pov-info p:last-child { margin: 0; color: var(--attune-text-3, rgba(255, 255, 255, 0.5)); }
+.pov-info b { color: #fff; font-weight: 650; }
+.pov-info code { font: 11.5px var(--attune-font-mono, monospace); color: #fff; }
+
+.pov-tag {
+  position: absolute;
+  left: 18px;
+  bottom: 14px;
+  z-index: 3;
+  margin: 0;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(8, 10, 14, 0.55);
+  color: rgba(255, 255, 255, 0.72);
+  font: 600 11.5px/1 var(--attune-font-text, inherit);
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.pov .cam-off-card { z-index: 5; }
+
+@media (max-width: 700px) {
+  .pov-tools { top: 10px; right: 10px; left: 10px; justify-content: center; flex-wrap: wrap; border-radius: 18px; }
+  .pov-seg button { padding: 0 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pov, .pov-world { transition: none; }
+}

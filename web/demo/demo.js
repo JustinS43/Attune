@@ -2,22 +2,25 @@
  * Demo page: the glasses view (left) and the phone app (right) running at the same time,
  * or either one full size.
  *
- * Section 4 - Pages, Engine & Demo. TODO: P-17, P-18 (glasses guide).
+ * Section 4 - Pages, Engine & Demo. TODO: P-17, P-18 (glasses guide), P-20 (glasses POV).
  *
  *   /demo/                       glasses + phone
  *   /demo/?view=lens|phone       start with one of them full size
  *   /demo/?view=guide            the glasses guide (the frames stay loaded, just hidden)
+ *   /demo/?view=pov              Glasses POV: what the wearer sees, at about true size (pov.js)
  *   /demo/?source=film&mode=mono passed on to the glasses view (source, mode, engine)
  *   /demo/?palette=apricot       passed on to the phone app
  *
  * Keys work wherever the focus is (the two pages are same-origin frames):
- *   `  next view      Alt+1 both · Alt+2 glasses · Alt+3 phone · Alt+4 glasses guide
+ *   `  next view      Alt+1 both · Alt+2 glasses · Alt+3 phone · Alt+4 glasses guide · Alt+5 POV
+ *   Z  (Glasses POV) true size / whole view
  */
 
 import { mountGuide } from './guide.js';
+import { mountPov } from './pov.js';
 import { connect } from '../shared/ws.js';
 
-const VIEWS = ['split', 'lens', 'phone', 'guide'];
+const VIEWS = ['split', 'lens', 'phone', 'guide', 'pov'];
 const STORE = 'attune.demo.view';
 const params = new URLSearchParams(location.search);
 
@@ -26,6 +29,7 @@ const phone = document.querySelector('#phone');
 const stage = document.querySelector('.stage');
 const buttons = [...document.querySelectorAll('.views button')];
 const guide = document.querySelector('#guide');
+const povRoot = document.querySelector('#pov');
 
 // ------------------------------------------------------------------ frames
 function pass(keys) {
@@ -64,7 +68,9 @@ function setView(next) {
   history.replaceState(null, '', `${location.pathname}?${p}`);
   // hidden views leave the tab order and the accessibility tree (the frames stay loaded)
   guide.inert = view !== 'guide';
-  stage.inert = view === 'guide';
+  povRoot.inert = view !== 'pov';
+  stage.inert = view === 'guide' || view === 'pov';
+  pov.setVisible(view === 'pov');
   fit();
 }
 
@@ -99,7 +105,7 @@ new ResizeObserver(fit).observe(stage);
 function onKeydown(e) {
   const t = e.target;
   const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
-  if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1234]$/.test(e.code)) {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1-5]$/.test(e.code)) {
     e.preventDefault();
     e.stopImmediatePropagation();
     setView(VIEWS[Number(e.code.slice(-1)) - 1]);
@@ -112,6 +118,12 @@ function onKeydown(e) {
     return;
   }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (view === 'pov' && e.code === 'KeyZ') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    pov.toggleZoom();
+    return;
+  }
   if (e.key === '`') {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -120,21 +132,21 @@ function onKeydown(e) {
 }
 
 window.addEventListener('keydown', onKeydown, true);
-for (const frame of [lens, phone]) {
-  frame.addEventListener('load', () => {
-    try {
-      frame.contentWindow.addEventListener('keydown', onKeydown, true);
-    } catch {
-      /* a frame from another origin (e.g. ?engine=) keeps its own keys */
-    }
-  });
+function wireKeys(frame) {
+  try {
+    frame.contentWindow.addEventListener('keydown', onKeydown, true);
+  } catch {
+    /* a frame from another origin (e.g. ?engine=) keeps its own keys */
+  }
 }
+for (const frame of [lens, phone]) frame.addEventListener('load', () => wireKeys(frame));
 
 // when the glasses view is full size, give it the keyboard so M, V, H... work straight away
 function focusFor() {
   if (view === 'lens') lens.focus();
   else if (view === 'phone') phone.focus();
   else if (view === 'guide') guide.focus({ preventScroll: true });
+  else if (view === 'pov') pov.focus();
 }
 for (const b of buttons) b.addEventListener('click', () => setTimeout(focusFor, 50));
 
@@ -178,6 +190,14 @@ function tryLook(mode, variant = 'rayban') {
 
 mountGuide(guide, { onTry: tryLook });
 
+// ------------------------------------------------------------------ glasses POV
+// Its own lens (?chrome=0), loaded on first open, kept in step with the main one, unloaded 30 s
+// after leaving the view.
+const pov = mountPov(povRoot, { mainLens: lens, params, onFrameLoad: wireKeys });
+
+// scripted demos and tests: attuneDemo.setView('pov'), attuneDemo.pov.check()
+window.attuneDemo = { setView: (v) => setView(v), pov };
+
 setView(view);
 
 // ------------------------------------------------------------------ camera on / off
@@ -185,7 +205,7 @@ setView(view);
 // running from the microphone. Every page hears the new state (message `camera`).
 const camBtn = document.querySelector('#cam-toggle');
 const camLabel = camBtn.querySelector('.cam-label');
-const camCard = document.querySelector('#cam-off-card');
+const camCards = [...document.querySelectorAll('.cam-off-card')]; // the Glasses view's and the POV's
 let cameraOn = true;
 
 function showCamera(on) {
@@ -193,7 +213,7 @@ function showCamera(on) {
   camBtn.setAttribute('aria-pressed', String(on));
   camLabel.textContent = on ? 'Camera on' : 'Camera off';
   camBtn.title = `${on ? 'Turn the camera off' : 'Turn the camera on'} (Alt+C)`;
-  camCard.hidden = on;
+  for (const c of camCards) c.hidden = on;
 }
 
 const link = connect({
@@ -213,4 +233,4 @@ function setCamera(on) {
 }
 
 camBtn.addEventListener('click', () => setCamera(!cameraOn));
-document.querySelector('#cam-on-btn').addEventListener('click', () => setCamera(true));
+for (const b of document.querySelectorAll('.cam-on-btn')) b.addEventListener('click', () => setCamera(true));
