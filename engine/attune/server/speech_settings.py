@@ -71,7 +71,7 @@ def _save(path: Path, changes: dict[str, str]) -> dict:
             os.replace(temp, path)
         finally:
             temp.unlink(missing_ok=True)
-        return {**_summary(path), "restart_required": True}
+        return {**_summary(path), "restart_required": False}
 
 
 def create_router(root: Path) -> APIRouter:
