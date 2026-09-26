@@ -21,7 +21,12 @@ class FakeDevices:
         self.opened: list[str] = []
 
     def list_cameras(self):
-        return [CameraInfo(i, 0, name) for i, name in enumerate(self.plugged)]
+        return [
+            CameraInfo(i, 0, name, 1133, 2381)
+            if name == BRIO
+            else CameraInfo(i, 0, name)
+            for i, name in enumerate(self.plugged)
+        ]
 
     def capture(self, devices_at_open):
         fake = self
@@ -63,7 +68,9 @@ def wait_for(predicate, timeout=3.0):
 def devices(monkeypatch):
     fake = FakeDevices([BRIO, LAPTOP])
     monkeypatch.setattr(camera_mod, "list_cameras", fake.list_cameras)
-    monkeypatch.setattr(camera_mod.cv2, "VideoCapture", fake.capture(lambda: fake.plugged))
+    monkeypatch.setattr(
+        camera_mod.cv2, "VideoCapture", fake.capture(lambda: fake.plugged)
+    )
     monkeypatch.setattr(Camera, "PREFERRED_RECHECK_S", 0.05)
     return fake
 
@@ -106,3 +113,66 @@ def test_named_camera_is_not_rechecked(devices, monkeypatch):
     finally:
         cam.stop()
     assert len(calls) == 1  # only the open; no enumeration while on the named camera
+
+
+def test_macos_prefers_any_usb_camera_without_matching_a_model_name(monkeypatch):
+    monkeypatch.setattr(camera_mod.sys, "platform", "darwin")
+    cameras = [
+        CameraInfo(0, 0, "FaceTime HD Camera"),
+        CameraInfo(1, 0, BRIO, 1133, 2381),
+        CameraInfo(2, 0, "C922 Pro Stream Webcam", 1133, 2097),
+    ]
+    monkeypatch.setattr(camera_mod, "list_cameras", lambda: cameras)
+    assert camera_mod.pick_camera("Logitech") == cameras[1]
+    assert camera_mod.pick_camera("unmatched") == cameras[1]
+    cameras[:] = cameras[:1]
+    assert camera_mod.pick_camera("Logitech", fallback_any=False) is None
+    assert camera_mod.pick_camera("Logitech", fallback_any=True) == cameras[0]
+
+
+def test_open_without_frames_retries_a_smaller_mode_before_reporting_connected(
+    monkeypatch,
+):
+    opened = []
+    statuses = []
+
+    class ModeSensitiveCapture:
+        def __init__(self, index, backend):
+            self.props = {}
+            opened.append(self)
+
+        def isOpened(self):
+            return True
+
+        def set(self, prop, value):
+            self.props[prop] = value
+            return True
+
+        def get(self, prop):
+            return self.props.get(prop, 30)
+
+        def read(self):
+            time.sleep(0.01)
+            if camera_mod.cv2.CAP_PROP_FOURCC in self.props:
+                return False, None
+            return True, np.zeros((4, 4, 3), np.uint8)
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(camera_mod, "list_cameras", lambda: [CameraInfo(0, 0, BRIO)])
+    monkeypatch.setattr(camera_mod.cv2, "VideoCapture", ModeSensitiveCapture)
+    cam = Camera(
+        name="Brio 101", on_status=lambda ok, detail: statuses.append((ok, detail))
+    )
+    cam.start()
+    try:
+        wait_for(lambda: cam.frame_no >= 3)
+    finally:
+        cam.stop()
+    assert len(opened) == 2
+    assert camera_mod.cv2.CAP_PROP_FOURCC in opened[0].props
+    assert camera_mod.cv2.CAP_PROP_FOURCC not in opened[1].props
+    assert opened[1].props[camera_mod.cv2.CAP_PROP_FRAME_WIDTH] == 1280
+    assert opened[1].props[camera_mod.cv2.CAP_PROP_FRAME_HEIGHT] == 720
+    assert statuses == [(True, f"{BRIO} 1280x720")]

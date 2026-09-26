@@ -64,7 +64,8 @@ def test_file_source_plays_at_its_own_rate_and_loops(tmp_path):
     assert all(b > a for a, b in itertools.pairwise(ts))
 
 
-def test_missing_camera_reports_lost_and_keeps_retrying():
+def test_missing_camera_reports_lost_and_keeps_retrying(monkeypatch):
+    monkeypatch.setattr("attune.vision.camera.list_cameras", list)
     statuses = []
     cam = Camera(
         name="No Such Camera",

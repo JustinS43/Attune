@@ -2,7 +2,7 @@
 
 Section 1 - Vision. TODO: V-01. Plan: section 05 "Capture".
 
-- Opens the webcam by name (the built-in camera is usually index 0), asks
+- On macOS, prefers any USB webcam; elsewhere opens the webcam by name. Asks
   for MJPG 1920x1080 at 30 fps through Media Foundation, with a one-frame
   buffer so frames never queue up.
 - Stamps every frame with the engine clock on arrival and keeps only the
@@ -39,17 +39,22 @@ class CameraInfo:
     index: int
     backend: int
     name: str
+    vid: int | None = None
+    pid: int | None = None
 
 
 def list_cameras() -> list[CameraInfo]:
-    """Cameras with their names (Windows: Media Foundation order)."""
+    """Cameras with names and USB IDs (Windows: Media Foundation order)."""
     try:
         from cv2_enumerate_cameras import enumerate_cameras
     except ImportError:
         return []
     backend = cv2.CAP_MSMF if sys.platform == "win32" else cv2.CAP_ANY
     try:
-        return [CameraInfo(c.index, c.backend, c.name) for c in enumerate_cameras(backend)]
+        return [
+            CameraInfo(c.index, c.backend, c.name, getattr(c, "vid", None), getattr(c, "pid", None))
+            for c in enumerate_cameras(backend)
+        ]
     except Exception as exc:  # noqa: BLE001 - a driver error must not stop the engine
         log.warning("Could not list cameras: %s", exc)
         return []
@@ -57,6 +62,12 @@ def list_cameras() -> list[CameraInfo]:
 
 def pick_camera(name: str, fallback_any: bool = True) -> CameraInfo | None:
     cams = list_cameras()
+    if sys.platform == "darwin":
+        # USB VID/PID identifies external webcams without depending on their brand.
+        external = [cam for cam in cams if _is_external(cam)]
+        if external:
+            return external[0]
+        return cams[0] if fallback_any and cams else None
     for cam in cams:
         if name and name.lower() in cam.name.lower():
             return cam
@@ -67,6 +78,14 @@ def pick_camera(name: str, fallback_any: bool = True) -> CameraInfo | None:
 
 def _matches(name: str, cam_name: str) -> bool:
     return bool(name) and name.lower() in cam_name.lower()
+
+
+def _is_external(cam: CameraInfo) -> bool:
+    return cam.vid is not None and cam.pid is not None
+
+
+def _is_preferred(cam: CameraInfo, name: str) -> bool:
+    return _is_external(cam) if sys.platform == "darwin" else not name or _matches(name, cam.name)
 
 
 class Camera:
@@ -101,6 +120,7 @@ class Camera:
         self._detail = ""
         self.frame_no = 0
         self.measured_fps = 0.0
+        self._reduced_mode = False
         self._latest: tuple[int, float, np.ndarray] | None = None
         self._cond = threading.Condition()
         self._stop = threading.Event()
@@ -153,12 +173,17 @@ class Camera:
                 return None
             cap = cv2.VideoCapture(info.index, info.backend)
             self.device_name = info.name
-            self.on_fallback = bool(self.name) and not _matches(self.name, info.name)
+            self.on_fallback = not _is_preferred(info, self.name)
         if not cap.isOpened():
             return None
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        if not self._reduced_mode:
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(
+            cv2.CAP_PROP_FRAME_WIDTH, min(self.width, 1280) if self._reduced_mode else self.width
+        )
+        cap.set(
+            cv2.CAP_PROP_FRAME_HEIGHT, min(self.height, 720) if self._reduced_mode else self.height
+        )
         cap.set(cv2.CAP_PROP_FPS, self.fps)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
@@ -172,7 +197,7 @@ class Camera:
                 self.on_status(ok, detail)
 
     def _preferred_is_back(self) -> bool:
-        return any(_matches(self.name, cam.name) for cam in list_cameras())
+        return any(_is_preferred(cam, self.name) for cam in list_cameras())
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -183,11 +208,10 @@ class Camera:
                 continue
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self._set_status(True, f"{self.device_name} {w}x{h}")
-            self._read_loop(cap)
+            self._read_loop(cap, f"{self.device_name} {w}x{h}")
             cap.release()
 
-    def _read_loop(self, cap: cv2.VideoCapture) -> None:
+    def _read_loop(self, cap: cv2.VideoCapture, detail: str) -> None:
         file_period = 1.0 / (cap.get(cv2.CAP_PROP_FPS) or 30.0) if self.is_file else 0.0
         next_due = time.perf_counter()
         fails_since = None
@@ -211,10 +235,16 @@ class Camera:
                 fails_since = fails_since or time.perf_counter()
                 if time.perf_counter() - fails_since > 0.5:
                     self._set_status(False, "camera lost")
+                    if not self._reduced_mode:
+                        self._reduced_mode = True
+                        log.warning(
+                            "Camera opened without usable frames; retrying at up to 1280x720"
+                        )
                     return
                 self._stop.wait(0.01)
                 continue
             fails_since = None
+            self._set_status(True, detail)
             if file_period:
                 next_due += file_period
                 delay = next_due - time.perf_counter()
