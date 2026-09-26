@@ -9,13 +9,16 @@
  * the right eye only, so nothing is drawn anywhere else and there is no second eye to fake. It is
  * a translucent, additive image (about 80% opacity, no dark panels). Captions sit at the bottom of
  * the square: a small "Live captions" label, the speaker's name and a direction arrow, then two
- * lines of white text. Alerts take over the square. The Google Glass variant is a 285x160 display
+ * lines of white text that roll up one line at a time (modes/common.js caption log: a new
+ * speaker starts a new line, earlier lines dim, drafts firm up in place without reflowing). The
+ * speaker row only changes when the speaker does, and its arrow turns smoothly with hysteresis.
+ * Alerts take over the square. The Google Glass variant is a 285x160 display
  * above the right eye's line of sight (x 1000-1285, y 204-364).
  */
 
-import { FD, FT, MINT, ACCENT, PX, font, clamp, hexA, rrect, icon, eqBars, dot, keycap, arrow, logoMark, wrapPx, textW, follow } from '../hud.js';
+import { FD, FT, MINT, ACCENT, PX, font, clamp, lerp, hexA, rrect, icon, eqBars, dot, keycap, arrow, logoMark, textW, springStep, REDUCED_MOTION } from '../hud.js';
 import { t3Flash } from '../alerts.js';
-import { dirAngle, sideAngle, inView, primaryCaption } from './common.js';
+import { dirAngle, sideAngle, inView, createCaptionLog } from './common.js';
 
 export const MONOCULAR = {
   rayban: {
@@ -85,9 +88,14 @@ function arrowBadge(ctx, cx, cy, r, ang, color, a = 1) {
 
 export function createCornerMode() {
   let angle = -Math.PI / 2; // smoothed arrow angle
+  let angleV = 0;
   let lastKey = null;
+  const log = createCaptionLog();
+  let last = null;
   const mode = {
     id: 'corner',
+    /** What the square shows (for tests and measurements). */
+    debug: () => last,
     variant: 'rayban',
     get name() {
       return MONOCULAR[mode.variant].name;
@@ -133,7 +141,7 @@ export function createCornerMode() {
       const stLabel = { listening: 'Listening', paused: 'Paused', alert: 'Sound alert', connecting: 'Connecting…' }[view.status];
       const stColor = view.status === 'alert' ? alertColor : view.status === 'listening' ? MINT : 'rgba(255,255,255,0.7)';
       ctx.save();
-      ctx.globalAlpha *= view.status === 'paused' ? 1 : 0.6 + 0.4 * Math.sin(anim * 4);
+      ctx.globalAlpha *= view.status === 'paused' || REDUCED_MOTION ? 1 : 0.6 + 0.4 * Math.sin(anim * 4);
       dot(ctx, DX + PAD + 22 * k, ty, 3.5 * k, stColor);
       ctx.restore();
       lit(ctx, stLabel, DX + PAD + 30 * k, ty + 1, F.status, WHITE, 0.75);
@@ -178,7 +186,7 @@ export function createCornerMode() {
         if (!al.acked) {
           const ay = B - PAD - 14 * k;
           if (ang != null) {
-            const nud = Math.sin(anim * 6) * 2.5;
+            const nud = REDUCED_MOTION ? 0 : Math.sin(anim * 6) * 2.5;
             arrowBadge(ctx, DX + PAD + 14 * k + Math.cos(ang) * nud, ay + Math.sin(ang) * nud, 14 * k, ang, alertColor);
             lit(ctx, { left: 'Left', right: 'Right', behind: 'Behind you' }[al.side] ?? '', DX + PAD + 36 * k, ay + 1, F.small, alertColor);
           }
@@ -188,7 +196,6 @@ export function createCornerMode() {
         }
       } else {
         // captions at the very bottom: label, speaker + arrow, two lines
-        const cap = primaryCaption(view);
         const prop = view.pendingProposal;
         const toast = view.toasts.find((t) => t.kind === 'learned' && t.age < 3);
         const LH = 27 * k;
@@ -196,6 +203,11 @@ export function createCornerMode() {
         const l1 = l2 - LH;
         const rowY = l1 - 30 * k;
         const labelY = rowY - 24 * k;
+        const ROWS = 2;
+        const st = log.update(ctx, view, DW - PAD * 2, F.body, ROWS, anim, view.dt, true);
+        const cap = st?.current ?? null;
+        const tgt = cap ? dirAngle(cap.dir) : null;
+        last = { key: st?.currentKey ?? null, name: cap?.name ?? null, lines: log.shown(st, ROWS), side: tgt == null ? null : Math.round(tgt / (Math.PI / 4)) };
         if (cap || prop || toast) headroom(ctx, DX + 4, labelY - 16 * k, DW - 8, B - labelY + 12 * k, 0.3);
         // label row: "Live captions", or a name proposal / a saved toast in its place
         if (prop) {
@@ -221,7 +233,7 @@ export function createCornerMode() {
           lit(ctx, 'Live captions', DX + PAD + 24 * k, labelY + 1, F.label, WHITE, 0.62);
         }
         if (cap) {
-          const a = cap.alpha;
+          const a = st.currentAlpha;
           ctx.save();
           ctx.globalAlpha *= a;
           dot(ctx, DX + PAD + 5 * k, rowY, 5 * k, cap.color);
@@ -233,24 +245,38 @@ export function createCornerMode() {
             lit(ctx, sub, hx, rowY + 1, F.sub, cap.translated ? ACCENT : WHITE, cap.translated ? 1 : 0.65);
             hx += textW(ctx, sub, F.sub) + 9 * k;
           }
-          eqBars(ctx, hx + 2, rowY, cap.color, anim, cap.speaking ? 1 : 0.15, 12 * k);
-          // direction arrow toward the speaker
+          eqBars(ctx, hx + 2, rowY, cap.color, REDUCED_MOTION ? 0.6 : anim, cap.speaking ? 1 : 0.15, 12 * k);
+          // direction arrow toward the speaker: turns smoothly, never flickers (store.js hysteresis)
           const target = dirAngle(cap.dir);
           if (target != null) {
-            if (lastKey !== cap.key) angle = target;
+            if (lastKey !== cap.key || REDUCED_MOTION) {
+              angle = target;
+              angleV = 0;
+            }
             let d = target - angle;
             while (d > Math.PI) d -= Math.PI * 2;
             while (d < -Math.PI) d += Math.PI * 2;
-            angle += d * follow(view.dt, 10);
+            [angle, angleV] = springStep(angle, angleV, angle + d, view.dt, 14);
             arrowBadge(ctx, DX + DW - PAD - 13 * k, rowY, 12 * k, angle, cap.color);
           }
           lastKey = cap.key;
-          const lines = wrapPx(ctx, cap.text, DW - PAD * 2, F.body);
-          const shown = lines.slice(-2);
-          ctx.textBaseline = 'alphabetic';
-          shown.forEach((ln, i) => lit(ctx, (i === 0 && lines.length > 2 ? '… ' : '') + ln, DX + PAD, (shown.length === 1 ? l2 : i === 0 ? l1 : l2) + 7 * k, F.body, WHITE, cap.final ? 1 : 0.72));
-          ctx.textBaseline = 'middle';
           ctx.restore();
+          // two caption lines at the bottom, rolling up one line at a time
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(DX, rowY + 14 * k, DW, B - rowY - 14 * k);
+          ctx.clip();
+          ctx.textBaseline = 'alphabetic';
+          log.eachVisible(st, ROWS, (t, m, x, row, lineA, e) => {
+            const p = clamp((anim - m.born) / 0.2);
+            if (p <= 0) return;
+            const firm = t.final ? (m.firm == null ? 1 : clamp((anim - m.firm) / 0.25)) : 0;
+            const earlier = e.key === st.currentKey ? 1 : 0.55;
+            const rise = REDUCED_MOTION ? 0 : (1 - p) * 3 * k;
+            lit(ctx, t.text, DX + PAD + x, l1 + row * LH + 7 * k + rise, F.body, WHITE, e.alpha * lineA * p * lerp(0.66, 1, firm) * earlier);
+          });
+          ctx.restore();
+          ctx.textBaseline = 'middle';
         } else {
           const names = inView(view);
           lit(ctx, names.length ? `In view: ${names.join(', ')}` : 'Listening…', DX + PAD, rowY + 1, F.mid, WHITE, 0.6);

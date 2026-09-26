@@ -3,21 +3,30 @@
  *
  * Section 4 - Pages, Engine & Demo. TODO: P-07 (and the face tags of P-06).
  *
- * - Every visible face gets a name tag above the head (a dot for faces under 40 px). When the
- *   person talks, the tag grows into a speech bubble with a tail to the face: solid for the
- *   detected speaker, dashed for a probable one.
- * - Drafts are drawn softer and firm up when final; each bubble shows the latest
- *   bubble_chars x bubble_lines of text and fades bubble_fade_s after its last word.
- * - Bubbles are pushed apart when they overlap (and away from the status pill and alerts) and
- *   glide to their new place; faces and bubbles are smoothed, so nothing jitters.
- * - Off-screen speakers dock to the screen edge with a glowing chevron; the wearer's own words
- *   and typed replies sit in the "You" bar at the bottom; translations show the original line
- *   plus a language tag.
+ * Built to be read all day, so nothing moves unless it has to:
+ * - One card per person. While they are quiet it is a small name tag above the head; when they
+ *   talk it grows into a speech bubble whose header is that same name (no second pill), with a
+ *   tail to the face: solid for the detected speaker, dashed for a probable one.
+ * - One slot per bubble, chosen once: centred above the head, or beside the face when there is
+ *   no room above. Slots never cover a face (anyone's, with a margin), the status pill or an
+ *   alert. A slot that stops fitting is kept for SLOT_HOLD_S before the bubble glides (about
+ *   0.25 s, critically damped, no bounce) to a new one; an alert that needs the space moves it
+ *   at once.
+ * - Faces are filtered in store.js; a dead zone here keeps small head movements from moving the
+ *   bubble at all, and the tail stretches toward the face instead.
+ * - A bubble's width is fixed when it appears (room for about bubble_chars characters) and its
+ *   height is reserved for bubble_lines lines, so words fill in without reflowing earlier lines;
+ *   a third line rolls the text up by one line. Drafts are dimmer and firm up in place.
+ * - The current speaker is fully opaque, earlier speakers dim, and each bubble stays at least
+ *   long enough to be read (store.js); at most three at a time.
+ * - Off-screen speakers dock to fixed edge slots in the order they arrived; the wearer's own
+ *   words sit in the "You" bar; translations show the original line plus a language tag.
  */
 
 import {
-  FD, FT, MINT, ACCENT, font, clamp, lerp, easeOut, easeBack, follow, hexA, rrect, textW, glass, icon,
+  FD, FT, MINT, ACCENT, font, clamp, lerp, easeOut, hexA, rrect, textW, glass, icon,
   eqBars, dot, keycap, chevrons, faceBrackets, edgeGlow, REGION, tailFill,
+  springStep, createLineWrap, scrollTo, REDUCED_MOTION,
 } from './hud.js';
 
 const F = {
@@ -33,20 +42,44 @@ const F = {
 const LH = 41;
 const PADX = 22;
 const PADT = 15;
-const PADB = 18;
+const PADB = 16;
 const HEADH = 30;
+const BODY_GAP = 8;
+const ORIG_H = 30;
 const RAD = 22;
 const TAG_H = 50;
 // Layout bounds follow the mode's display region (hud.js REGION): nothing is drawn outside it.
-const MARGIN = 28;
-const TOP_GAP = 30;
+const MARGIN = 24; // from the display's edges
+const TOP_GAP = 24;
+const GAP = 26; // between a bubble above the head and the head
+const SIDE_GAP = 30; // between a bubble beside the face and the face
+const FACE_PAD = 14; // keep-out margin around every face
+const SLOT_HOLD_S = 0.7; // an unfit slot is tolerated this long before the bubble moves
+const MOVE_W = 16; // spring stiffness (rad/s): a move settles in about 0.25 s
+const WIDTHS = [1, 0.82, 0.68]; // share of the full reserved width tried when space is tight
+const SAMPLE = 'Did you hear the doorbell a minute ago? The meeting starts at three.';
 const R = () => REGION;
+/** The status pill (alerts.js drawStatus) is always there: slots slide around it. */
+const pillRect = () => ({ x: R().x + 14, y: R().y + 12, w: 440, h: 78 });
+const TOLERANCE = 150; // px²: a rounded corner grazing a face or a panel is not an overlap
 const minY = () => R().y + TOP_GAP;
 const bottomY = () => R().y + R().h - 150; // keep clear of the You bar
 const midX = () => R().x + R().w / 2;
 
+const overlap = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+/** Where a face must not be covered: the face box (forehead to chin), with a margin. */
+const keepOut = (f, pad = FACE_PAD) => ({ x: f.cx - f.w * 0.55 - pad, y: f.cy - f.h * 0.62 - pad, w: f.w * 1.1 + pad * 2, h: f.h * 1.22 + pad * 2 });
+/** Rope-style dead zone: the anchor only moves once the face has moved more than dz. */
+const dead = (d, dz) => (d > dz ? d - dz : d < -dz ? d + dz : 0);
+
 export function createBubbleLayer() {
-  const cards = new Map(); // key -> render state
+  const cards = new Map(); // face key -> card (tag or bubble)
+  let ghosts = []; // what a card showed before it re-formed elsewhere, fading out in place
+  const docks = new Map(); // off-screen key -> docked card
+  const dockSlots = { left: [], right: [] }; // slot index -> key, in arrival order
+  let lowerCard = null;
+  const youCard = { a: 0, wrap: createLineWrap(), scroll: {}, b: null };
+  let avgChar = 0;
 
   // ------------------------------------------------------------ content -> header description
   function header(face, b) {
@@ -78,7 +111,7 @@ export function createBubbleLayer() {
         h.sub = 'New';
       } else {
         h.name = face.label;
-        h.sub = face.relation || (face.status === 'enrolled' ? null : null);
+        h.sub = face.relation || null;
         if (confirmedAt && confirmedAt.age < 2.2) {
           h.sub = 'Added';
           h.subColor = MINT;
@@ -98,123 +131,124 @@ export function createBubbleLayer() {
     return w;
   }
 
-  // ------------------------------------------------------------ measure one card
-  function measure(ctx, item, cfg) {
-    const { face, b } = item;
-    const hd = header(face, b);
-    item.hd = hd;
-    if (item.type === 'tag') {
-      const w = PADX * 2 - 4 + headerWidth(ctx, hd, false, false);
-      return { w, h: TAG_H };
-    }
-    const withLang = b.lang && b.lang !== 'en';
-    let bodyW = 0;
-    const words = [];
-    const lines = b.pending ? b.lines : b.lines;
-    lines.forEach((ln, i) => {
-      const txt = i === 0 && b.cut ? `… ${ln}` : ln;
-      bodyW = Math.max(bodyW, textW(ctx, txt, F.body));
-    });
-    for (let i = 0; i < lines.length; i++) {
-      const parts = lines[i].split(' ');
-      if (i === 0 && b.cut) parts.unshift('…');
-      for (const p of parts) words.push({ text: p, line: i });
-    }
-    let orig = null;
-    if (b.orig) {
-      const max = cfg.bubble_chars + 6;
-      orig = b.orig.length > max ? `…${b.orig.slice(-max)}` : b.orig;
-      bodyW = Math.max(bodyW, textW(ctx, orig, F.orig));
-    }
-    item.words = words;
-    item.orig = orig;
-    const headW = headerWidth(ctx, hd, true, withLang);
-    const w = Math.max(220, PADX * 2 + Math.max(headW, bodyW));
-    const h = PADT + HEADH + 8 + lines.length * LH + (orig ? 30 : 0) + PADB - 4;
-    return { w, h };
+  /** Full reserved body width: about bubble_chars characters of body text (24-42). */
+  function reserveW(ctx, cfg) {
+    if (!avgChar) avgChar = textW(ctx, SAMPLE, F.body) / SAMPLE.length;
+    return Math.round(avgChar * clamp(cfg.bubble_chars, 24, 42));
   }
+  const rowsOf = (cfg) => clamp(Math.round(cfg.bubble_lines), 1, 3);
+  const bubbleH = (rows, orig) => PADT + HEADH + BODY_GAP + (orig ? ORIG_H : 0) + rows * LH + PADB;
 
-  // ------------------------------------------------------------ targets + push apart
-  function target(item, m) {
-    const f = item.face;
-    const gap = item.type === 'bubble' ? 30 : 12;
-    let x = f.cx - m.w / 2;
-    let y = f.top - gap - m.h;
-    let place = 'above';
-    if (y < minY()) y = minY();
-    // beside the face only when a bubble squeezed against the top would cover the eyes
-    if (item.type === 'bubble' && y + m.h > f.top + f.h * 0.22) {
-      place = f.cx > midX() ? 'left' : 'right';
-      y = f.cy - f.h * 0.25 - m.h / 2;
-      x = place === 'left' ? f.cx - f.w * 0.7 - 34 - m.w : f.cx + f.w * 0.7 + 34;
-    }
-    return { x, y, w: m.w, h: m.h, place, mass: item.type === 'bubble' ? (item.b.speaking ? 4 : 2.5) : 1, ax: f.cx };
-  }
-
-  function relax(rects, obstacles) {
-    const m = 14;
-    for (let it = 0; it < 14; it++) {
-      for (let i = 0; i < rects.length; i++) {
-        for (let j = i + 1; j < rects.length; j++) push(rects[i], rects[j], m);
-        for (const o of obstacles) if (o.owner !== rects[i].key) push(rects[i], o, m, true);
-      }
-      for (const r of rects) clampRect(r);
-    }
-  }
-  function push(a, b, m, fixed = false) {
-    const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) + m;
-    const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) + m;
-    if (ox <= m * 0.5 || oy <= m * 0.5) return;
-    const sa = fixed ? 1 : b.mass / (a.mass + b.mass);
-    const sb = fixed ? 0 : 1 - sa;
-    if (oy < ox) {
-      const acy = a.y + a.h / 2;
-      const bcy = b.y + b.h / 2;
-      const d = acy === bcy ? (a.ax <= (b.ax ?? 0) ? -1 : 1) : acy < bcy ? -1 : 1;
-      a.y += d * oy * sa;
-      b.y -= d * oy * sb;
-    } else {
-      const acx = a.x + a.w / 2;
-      const bcx = b.x + b.w / 2;
-      const d = acx === bcx ? ((a.ax ?? 0) <= (b.ax ?? 0) ? -1 : 1) : acx < bcx ? -1 : 1;
-      a.x += d * ox * sa;
-      b.x -= d * ox * sb;
-    }
-  }
-  function clampRect(r) {
+  // ------------------------------------------------------------ slots
+  /** The rect a card of size w x h takes in `slot` next to anchor A (a dead-zoned face). */
+  function slotRect(slot, A, w, h) {
     const g = R();
-    r.x = clamp(r.x, g.x + MARGIN, g.x + g.w - MARGIN - r.w);
-    r.y = clamp(r.y, minY(), Math.max(minY(), bottomY() - r.h));
+    const eye = A.cy - A.h * 0.15;
+    let x;
+    let y;
+    if (slot === 'above' || slot === 'below') {
+      x = clamp(A.cx - w / 2, g.x + MARGIN, g.x + g.w - MARGIN - w);
+      // above the hair when there is room, else as high as the display allows (clear of the face)
+      y = slot === 'above' ? Math.max(minY(), A.top - GAP - h) : A.cy + A.h * 0.62 + GAP;
+    } else {
+      // beside the face at eye level, slid inside the display if needed (fit() rejects it if
+      // that would cover the face)
+      x = slot === 'right' ? A.cx + A.w * 0.55 + SIDE_GAP : A.cx - A.w * 0.55 - SIDE_GAP - w;
+      x = clamp(x, g.x + MARGIN, Math.max(g.x + MARGIN, g.x + g.w - MARGIN - w));
+      y = clamp(eye - h / 2, minY(), Math.max(minY(), bottomY() - h));
+    }
+    // slide past the status pill rather than give up the slot (beside: down; above/below: right)
+    const P = pillRect();
+    if (overlap({ x, y, w, h }, P) > TOLERANCE) {
+      if (slot === 'left' || slot === 'right') y = Math.min(P.y + P.h + 10, Math.max(minY(), bottomY() - h));
+      else x = Math.min(P.x + P.w + 10, g.x + g.w - MARGIN - w);
+    }
+    return { x, y, w, h, slot };
+  }
+
+  /**
+   * How well a rect fits: out of the display, over a face, over a placed bubble, or over an
+   * obstacle (status pill, alerts). Returns { ok, hard, cost }; `hard` means an obstacle wants
+   * the space now.
+   */
+  function fit(r, selfKey, A, faces, placed, obstacles) {
+    const g = R();
+    let cost = 0;
+    let hard = false;
+    const out = Math.max(0, g.x + MARGIN - r.x) + Math.max(0, r.x + r.w - (g.x + g.w - MARGIN)) + Math.max(0, minY() - r.y) + Math.max(0, r.y + r.h - bottomY());
+    cost += out * 400;
+    const over = (a, b) => {
+      const v = overlap(a, b);
+      return v > TOLERANCE ? v : 0;
+    };
+    if (A) cost += over(r, keepOut(A)) * 2;
+    for (const f of faces) {
+      if (f.key === selfKey || f.tiny) continue;
+      cost += over(r, keepOut(f)) * 2;
+    }
+    for (const p of placed) cost += over(r, p) * 0.5; // an older bubble can step back instead
+    cost += over(r, pillRect()) * 3;
+    for (const o of obstacles) {
+      const v = over(r, o);
+      if (v > 0) {
+        cost += v * 3;
+        hard = true; // an alert or a toast needs the space now
+      }
+    }
+    return { ok: cost < 1, hard, cost };
+  }
+
+  function slotOrder(A, first) {
+    const toward = A.cx > midX() ? 'left' : 'right';
+    const away = toward === 'left' ? 'right' : 'left';
+    const order = ['above', toward, away, 'below'];
+    if (first) order.unshift(first);
+    return [...new Set(order)];
+  }
+
+  /** Pick a slot (and, for a new bubble, a width): the first that fits, else the least bad. */
+  function chooseSlot(card, A, faces, placed, obstacles, sizes, first) {
+    let best = null;
+    for (const size of sizes) {
+      for (const slot of slotOrder(A, first)) {
+        const r = slotRect(slot, A, size.w, size.h);
+        const q = fit(r, card.key, A, faces, placed, obstacles);
+        if (q.ok) return { slot, size, r };
+        if (!best || q.cost < best.cost) best = { slot, size, r, cost: q.cost };
+      }
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ drawing helpers
-  function drawTail(ctx, rect, face, dashed, a) {
+  function drawTail(ctx, rect, slot, face, dashed, a) {
     let base;
     let tip;
     let nx;
     let ny;
     const r = rect;
-    if (r.y + r.h <= face.cy - face.h * 0.2) {
+    const eye = face.cy - face.h * 0.15;
+    if (slot === 'above') {
       const bx = clamp(face.cx, r.x + RAD + 14, r.x + r.w - RAD - 14);
       base = [bx, r.y + r.h - 1];
-      tip = [face.cx, Math.max(face.top - 6, r.y + r.h + 16)];
+      tip = [face.cx, Math.max(face.top - 4, r.y + r.h + 10)];
       nx = 1; ny = 0;
-    } else if (r.x + r.w <= face.cx - face.w * 0.25) {
-      const by = clamp(face.cy - face.h * 0.2, r.y + RAD + 10, r.y + r.h - RAD - 10);
-      base = [r.x + r.w - 1, by];
-      tip = [face.cx - face.w * 0.62, face.cy - face.h * 0.2];
-      nx = 0; ny = 1;
-    } else if (r.x >= face.cx + face.w * 0.25) {
-      const by = clamp(face.cy - face.h * 0.2, r.y + RAD + 10, r.y + r.h - RAD - 10);
-      base = [r.x + 1, by];
-      tip = [face.cx + face.w * 0.62, face.cy - face.h * 0.2];
-      nx = 0; ny = 1;
-    } else if (r.y >= face.cy) {
+    } else if (slot === 'below') {
       const bx = clamp(face.cx, r.x + RAD + 14, r.x + r.w - RAD - 14);
       base = [bx, r.y + 1];
-      tip = [face.cx, face.cy + face.h * 0.72];
+      tip = [face.cx, Math.min(face.cy + face.h * 0.62, r.y - 10)];
       nx = 1; ny = 0;
-    } else return;
+    } else if (slot === 'left') {
+      const by = clamp(eye, r.y + RAD + 10, r.y + r.h - RAD - 10);
+      base = [r.x + r.w - 1, by];
+      tip = [Math.max(face.cx - face.w * 0.52, r.x + r.w + 10), eye];
+      nx = 0; ny = 1;
+    } else {
+      const by = clamp(eye, r.y + RAD + 10, r.y + r.h - RAD - 10);
+      base = [r.x + 1, by];
+      tip = [Math.min(face.cx + face.w * 0.52, r.x - 10), eye];
+      nx = 0; ny = 1;
+    }
     const dx = tip[0] - base[0];
     const dy = tip[1] - base[1];
     const len = Math.hypot(dx, dy);
@@ -253,13 +287,13 @@ export function createBubbleLayer() {
     ctx.restore();
   }
 
-  function drawHeader(ctx, hd, x, cy, anim, o = {}) {
+  function drawHeader(ctx, hd, x, cy, anim) {
     let hx = x;
     if (hd.lead === 'userplus') {
       icon(ctx, 'userplus', hx - 2, cy - 11, 22, 'rgba(255,255,255,0.85)', 2);
       hx += 30;
     } else if (hd.lead === 'ring') {
-      const p = 0.5 + 0.5 * Math.sin(anim * 4);
+      const p = REDUCED_MOTION ? 1 : 0.5 + 0.5 * Math.sin(anim * 4);
       ctx.save();
       ctx.strokeStyle = hd.color;
       ctx.lineWidth = 2;
@@ -317,76 +351,64 @@ export function createBubbleLayer() {
     return w;
   }
 
-  /** Update the per-word birth times so new words ease in like the film. */
-  function syncWords(cs, item, anim) {
-    const b = item.b;
-    const full = b.text.split(/\s+/).filter(Boolean);
-    if (cs.utt !== b.utt_id) {
-      cs.births = [];
-      cs.full = [];
-    }
-    let fresh = 0;
-    const firstShow = cs.births.length === 0;
-    for (let i = 0; i < full.length; i++) {
-      if (cs.births[i] === undefined || cs.full[i] !== full[i]) cs.births[i] = anim + (firstShow ? fresh++ * 0.035 : 0);
-    }
-    cs.full = full;
-    // displayed words are the tail of the utterance: map each to its index in the full text
-    const shown = item.words.filter((w) => w.text !== '…').length;
-    let k = full.length - shown;
-    cs.words = item.words.map((w) => (w.text === '…' ? { ...w, born: -1e9 } : { ...w, born: cs.births[k++] ?? anim }));
-    cs.utt = b.utt_id;
+  /** The tail of a one-line string that fits in maxW, with a leading ellipsis when cut. */
+  function fitTail(ctx, text, maxW, f) {
+    if (textW(ctx, text, f) <= maxW) return text;
+    const words = text.split(/\s+/);
+    while (words.length > 1 && textW(ctx, `… ${words.join(' ')}`, f) > maxW) words.shift();
+    return `… ${words.join(' ')}`;
   }
 
-  function drawBody(ctx, cs, item, x, y, anim) {
-    const b = item.b;
-    let by = y + PADT + HEADH + 8;
-    if (item.orig) {
-      ctx.font = F.orig;
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(item.orig, x + PADX, by + 21);
-      by += 30;
-    }
-    ctx.font = F.body;
+  /**
+   * Caption text in a fixed window of `rows` lines: words fade in where they will stay (drafts
+   * dimmer, firming up in place), and the window rolls up one line at a time.
+   */
+  function drawText(ctx, wrap, top, x, y, rows, anim, o = {}) {
+    const lines = wrap.lines;
+    if (!lines.length) return;
+    const lh = o.lh ?? LH;
+    const base = o.base ?? 31;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x - 6, y - 2, o.w + 12, rows * lh + 6);
+    ctx.clip();
+    ctx.font = o.font ?? F.body;
     ctx.textBaseline = 'alphabetic';
-    const space = textW(ctx, ' ', F.body);
-    const firm = cs.firm;
-    let line = -1;
-    let wx = 0;
-    for (const w of cs.words) {
-      if (w.line !== line) {
-        line = w.line;
-        wx = x + PADX;
-      }
-      const p = clamp((anim - w.born) / 0.22);
-      if (p > 0) {
-        const ly = by + 31 + line * LH + (1 - easeOut(p)) * 7;
-        const dim = w.text === '…' ? 0.5 : lerp(b.pending ? 0.66 : 0.7, 1, firm);
-        ctx.globalAlpha = p * dim;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(w.text, wx, ly);
-      }
-      wx += textW(ctx, w.text, F.body) + space;
+    ctx.fillStyle = o.color ?? '#FFFFFF';
+    const alpha0 = ctx.globalAlpha;
+    for (let i = Math.max(0, Math.floor(top)); i < lines.length; i++) {
+      const row = i - top;
+      if (row > rows) break;
+      const lineA = row < 0 ? clamp(1 + row * 1.6) : 1; // a line leaving at the top fades as it goes
+      const ly = y + base + row * lh;
+      wrap.eachWord(i, (t, m, wx) => {
+        const p = clamp((anim - m.born) / 0.2);
+        if (p <= 0) return;
+        const firm = t.final ? (m.firm == null ? 1 : clamp((anim - m.firm) / 0.25)) : 0;
+        ctx.globalAlpha = alpha0 * lineA * p * lerp(o.draft ?? 0.64, 1, firm);
+        const rise = REDUCED_MOTION ? 0 : (1 - easeOut(p)) * 4;
+        ctx.fillText(t.text, x + wx, ly + rise);
+      });
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
-  function drawCard(ctx, blur, cs, item, anim) {
-    const { x, y, w, h } = cs;
-    const a = cs.a * (item.dim ?? 1);
+  function drawCard(ctx, card, anim) {
+    const { x, y, w, h } = card;
+    const a = card.a;
     if (a <= 0.004) return;
+    const item = card.item;
     const hd = item.hd;
-    const pop = lerp(0.9, 1, easeBack(clamp(cs.a), 1.3));
+    const s = REDUCED_MOTION ? 1 : lerp(0.96, 1, easeOut(clamp(card.appear)));
     const ox = x + w / 2;
-    const oy = y + h;
+    const oy = card.slot === 'above' ? y + h : y + h / 2;
     ctx.save();
     ctx.translate(ox, oy);
-    ctx.scale(pop, pop);
+    ctx.scale(s, s);
     ctx.translate(-ox, -oy);
-    if (item.type === 'bubble' && item.face && cs.tailA > 0.01) drawTail(ctx, cs, item.face, item.b.dashed, a * cs.tailA);
+    if (card.tailA > 0.01 && card.face) drawTail(ctx, card, card.slot, card.face, item.b?.dashed, a * card.tailA);
     const r = Math.min(RAD, h / 2);
-    glass(ctx, item.blur, x, y, w, h, r, {
+    glass(ctx, card.blur, x, y, w, h, r, {
       alpha: a,
       glow: hd.unknown ? null : hd.color,
       border: hd.unknown ? null : hd.lead === 'ring' ? hexA(ACCENT, 0.55) : 'rgba(255,255,255,0.20)',
@@ -396,116 +418,364 @@ export function createBubbleLayer() {
     if (hd.unknown) {
       rrect(ctx, x + 1, y + 1, w - 2, h - 2, r - 1);
       ctx.setLineDash([7, 6]);
-      ctx.lineDashOffset = -anim * 18;
+      ctx.lineDashOffset = REDUCED_MOTION ? 0 : -anim * 18;
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
       ctx.lineWidth = 1.6;
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    const cy = item.type === 'tag' ? y + h / 2 : y + PADT + HEADH / 2;
-    drawHeader(ctx, hd, x + PADX - (item.type === 'tag' ? 2 : 0), cy, anim);
-    if (item.type === 'bubble') {
-      const b = item.b;
-      let rx = x + w - PADX;
-      rx -= 26;
-      eqBars(ctx, rx, cy, hd.unknown ? '#FFFFFF' : hd.color, anim, b.speaking ? Math.max(0.55, item.face?.lip ?? 1) : 0.18, 18);
-      if (b.lang && b.lang !== 'en') drawLangTag(ctx, b, rx - 104, cy, anim);
+    // the header row sits at the same place in a tag and in a bubble, so the name never jumps
+    const cy = y + lerp(TAG_H / 2, PADT + HEADH / 2, clamp((h - TAG_H) / 40));
+    ctx.save();
+    rrect(ctx, x, y, w, h, r);
+    ctx.clip();
+    drawHeader(ctx, hd, x + PADX - (card.kind === 'tag' ? 2 : 0), cy, anim);
+    if (card.textA > 0.01 && (card.b || card.lastB)) {
+      const b = card.b ?? card.lastB;
       ctx.save();
-      rrect(ctx, x, y, w, h, r);
-      ctx.clip();
-      drawBody(ctx, cs, item, x, y, anim);
+      ctx.globalAlpha *= card.textA;
+      const rx = x + w - PADX - 26;
+      eqBars(ctx, rx, cy, hd.unknown ? '#FFFFFF' : hd.color, REDUCED_MOTION ? 0.6 : anim, b.speaking ? Math.max(0.55, card.face?.lip ?? 1) : 0.18, 18);
+      if (b.lang && b.lang !== 'en') drawLangTag(ctx, b, rx - 104, cy, anim);
+      let by = y + PADT + HEADH + BODY_GAP;
+      if (card.orig) {
+        if (b.orig) {
+          ctx.font = F.orig;
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.fillText(fitTail(ctx, b.orig, card.bw - PADX * 2, F.orig), x + PADX, by + 21);
+        }
+        by += ORIG_H;
+      }
+      drawText(ctx, card.wrap, card.scroll.top ?? 0, x + PADX, by, card.rows, anim, { w: card.bw - PADX * 2 });
       ctx.restore();
     }
     ctx.restore();
     ctx.restore();
+    ctx.restore();
+  }
+
+  /**
+   * A card that changes form (tag <-> bubble) somewhere else does not fly there: what it showed
+   * fades out in place and the new form fades in at its new place.
+   */
+  function relocate(c, r, anim) {
+    if (c.fresh || !c.w) return;
+    const far = Math.hypot(r.x + r.w / 2 - (c.x + c.w / 2), r.y + r.h / 2 - (c.y + c.h / 2)) > Math.max(90, c.h);
+    if (!far) return;
+    if (c.a > 0.02) ghosts.push({ ...c, item: { ...c.item }, wrap: c.wrap, scroll: { ...c.scroll }, born: anim, a0: c.a });
+    c.fresh = true;
+    c.a = 0;
+    c.appear = 0;
+    c.tailA = 0;
+    c.textA = 0;
+  }
+
+  function springCard(card, t, dt) {
+    if (REDUCED_MOTION || card.fresh) {
+      Object.assign(card, { x: t.x, y: t.y, w: t.w, h: t.h, vx: 0, vy: 0, vw: 0, vh: 0 });
+      card.fresh = false;
+      return;
+    }
+    [card.x, card.vx] = springStep(card.x, card.vx, t.x, dt, MOVE_W);
+    [card.y, card.vy] = springStep(card.y, card.vy, t.y, dt, MOVE_W);
+    [card.w, card.vw] = springStep(card.w, card.vw, t.w, dt, MOVE_W);
+    [card.h, card.vh] = springStep(card.h, card.vh, t.h, dt, MOVE_W);
+  }
+  const ease = (cur, target, dt, rate) => cur + (target - cur) * (1 - Math.exp(-dt * rate));
+
+  // ------------------------------------------------------------ face cards (tags and bubbles)
+  function layoutFaces(ctx, view, env) {
+    const { anim, dt } = env;
+    const cfg = view.config;
+    const dim = view.paused ? 0.3 : 1;
+    const rows = rowsOf(cfg);
+    const full = reserveW(ctx, cfg);
+    const faces = view.faces;
+    const faceByKey = new Map(faces.map((f) => [f.key, f]));
+    const bubbleByKey = new Map(view.bubbles.map((b) => [b.face.key, b]));
+
+    // every person in view (or held for a moment after the tracker lost them) has a card
+    const live = new Set();
+    for (const f of faces) if (!f.tiny || bubbleByKey.has(f.key)) live.add(f.key);
+    for (const k of bubbleByKey.keys()) live.add(k);
+    for (const key of live) {
+      const b = bubbleByKey.get(key) ?? null;
+      const f = b?.face ?? faceByKey.get(key);
+      let card = cards.get(key);
+      if (!card) {
+        card = {
+          key, kind: 'tag', slot: null, badSince: null, anchor: { cx: f.cx, cy: f.cy, w: f.w, h: f.h, top: f.top },
+          x: 0, y: 0, w: 0, h: 0, vx: 0, vy: 0, vw: 0, vh: 0, fresh: true, a: 0, appear: 0, tailA: 0, textA: 0,
+          threadId: null, bw: 0, rows, orig: false, wrap: createLineWrap(), scroll: {}, born: anim, since: anim,
+        };
+        cards.set(key, card);
+      }
+      card.seen = anim;
+      card.face = f;
+      card.b = b;
+      if (b) card.lastB = b;
+      // dead zone: small head movements leave the anchor (and the bubble) where it is
+      if (!f.ghost) {
+        const A = card.anchor;
+        const dz = Math.max(16, A.w * 0.12);
+        A.cx += dead(f.cx - A.cx, dz);
+        A.cy += dead(f.cy - A.cy, dz * 0.8);
+        A.w += dead(f.w - A.w, A.w * 0.12);
+        A.h += dead(f.h - A.h, A.h * 0.12);
+        A.top = A.cy - A.h * 0.72;
+      }
+      const hd = header(f, b);
+      card.item = { hd, b };
+      if (b) {
+        if (card.threadId !== b.id) {
+          // a new bubble: fresh text, width fixed now, slot chosen now (keeping the tag's if it fits)
+          card.threadId = b.id;
+          card.kind = 'bubble';
+          card.wrap.reset();
+          card.scroll = {};
+          card.orig = !!b.lang && b.lang !== 'en';
+          card.bw = 0;
+          card.pendingSlot = true;
+          card.since = anim;
+        }
+        if (b.lang && b.lang !== 'en') card.orig = true;
+        card.rows = rows;
+        card.headW = headerWidth(ctx, hd, true, !!b.lang && b.lang !== 'en') + PADX * 2;
+      } else {
+        if (card.kind === 'bubble') {
+          card.kind = 'tag';
+          card.threadId = null;
+          card.pendingSlot = true;
+        }
+        card.headW = PADX * 2 - 4 + headerWidth(ctx, hd, false, false);
+      }
+    }
+
+    // place bubbles oldest first (an established bubble never makes way for a newer one), then tags
+    const obstacles = env.obstacles || [];
+    const placed = [];
+    const list = [...cards.values()].filter((c) => live.has(c.key));
+    const bubbles = list.filter((c) => c.kind === 'bubble').sort((a, b) => a.since - b.since);
+    const tags = list.filter((c) => c.kind === 'tag');
+    const sizes = (c) => WIDTHS.map((k) => ({ w: Math.max(c.headW, Math.round(full * k) + PADX * 2), h: bubbleH(c.rows, c.orig) }));
+    for (const c of bubbles) {
+      const A = c.anchor;
+      if (c.pendingSlot || !c.slot) {
+        const pick = chooseSlot(c, A, faces, placed, obstacles, sizes(c), c.slot);
+        relocate(c, pick.r, anim);
+        c.slot = pick.slot;
+        c.bw = pick.size.w;
+        c.pendingSlot = false;
+        c.badSince = null;
+      }
+      c.bw = Math.max(c.bw, c.headW); // a longer name may widen it, never the text
+      const th = bubbleH(c.rows, c.orig);
+      let r = slotRect(c.slot, A, c.bw, th);
+      // once placed, a bubble only moves for faces, the display edge or an alert: never because
+      // another bubble arrived (the older one steps back instead, below)
+      const q = fit(r, c.key, A, faces, [], obstacles);
+      if (q.ok) c.badSince = null;
+      else {
+        c.badSince ??= anim;
+        if (q.hard || anim - c.badSince > SLOT_HOLD_S) {
+          const pick = chooseSlot(c, A, faces, placed, obstacles, [{ w: c.bw, h: th }], null);
+          if (pick && pick.slot !== c.slot && fit(pick.r, c.key, A, faces, [], obstacles).ok) {
+            c.slot = pick.slot;
+            r = pick.r;
+            c.badSince = null;
+          }
+        }
+      }
+      c.target = r;
+      placed.push(r);
+    }
+    for (const c of tags) {
+      const A = c.anchor;
+      const size = [{ w: c.headW, h: TAG_H }];
+      if (c.pendingSlot || !c.slot) {
+        const pick = chooseSlot(c, A, faces, [], obstacles, size, c.slot);
+        relocate(c, pick.r, anim);
+        c.slot = pick.slot;
+        c.pendingSlot = false;
+        c.badSince = null;
+      }
+      let r = slotRect(c.slot, A, c.headW, TAG_H);
+      const q = fit(r, c.key, A, faces, [], obstacles);
+      if (q.ok) c.badSince = null;
+      else {
+        c.badSince ??= anim;
+        if (q.hard || anim - c.badSince > SLOT_HOLD_S) {
+          const pick = chooseSlot(c, A, faces, [], obstacles, size, null);
+          if (pick.slot !== c.slot && fit(pick.r, c.key, A, faces, [], obstacles).ok) {
+            c.slot = pick.slot;
+            r = pick.r;
+            c.badSince = null;
+          }
+        }
+      }
+      c.target = r;
+    }
+
+    // where two bubbles overlap, the one updated less recently steps back (never interleaved text)
+    for (const c of bubbles) c.yielded = false;
+    for (let i = 0; i < bubbles.length; i++) {
+      for (let j = i + 1; j < bubbles.length; j++) {
+        const p = bubbles[i];
+        const q = bubbles[j];
+        if (!p.b || !q.b) continue;
+        const v = overlap(p.target, q.target);
+        if (v <= 0.12 * Math.min(p.target.w * p.target.h, q.target.w * q.target.h)) continue;
+        (p.b.tUpdate < q.b.tUpdate ? p : q).yielded = true;
+      }
+    }
+    // motion and fades
+    for (const c of list) {
+      springCard(c, c.target, dt);
+      const b = c.b;
+      const ghost = !!c.face?.ghost;
+      let aT;
+      if (c.kind === 'bubble' && b) {
+        // the panel keeps its name while the words fade (b.alpha), then shrinks back to a tag
+        aT = (b.current ? 1 : 0.62) * (c.yielded ? 0.18 : 1);
+      } else {
+        aT = ghost ? 0.6 : 1;
+        if (placed.some((p) => overlap(p, c.target) > 0)) aT = 0; // a tag never sits under a bubble
+      }
+      c.a = REDUCED_MOTION ? aT * dim : ease(c.a, aT * dim, dt, 10);
+      c.appear = ease(c.appear, 1, dt, 9);
+      c.tailA = ease(c.tailA, c.kind === 'bubble' ? (ghost ? 0.4 : 1) : 0, dt, 10);
+      c.textA = REDUCED_MOTION && c.kind !== 'bubble' ? 0 : ease(c.textA, c.kind === 'bubble' && b ? b.alpha : 0, dt, 14);
+      if (c.kind === 'bubble' && b) {
+        c.wrap.update(ctx, b.tokens, c.bw - PADX * 2, F.body, anim);
+        scrollTo(c.scroll, c.wrap.lines.length, c.rows, dt);
+      }
+    }
+    // cards whose person left fade out where they are
+    for (const [key, c] of cards) {
+      if (live.has(key)) continue;
+      c.a = ease(c.a, 0, dt, 10);
+      c.tailA = ease(c.tailA, 0, dt, 10);
+      if (c.a < 0.01 || anim - c.seen > 3) cards.delete(key);
+    }
+    return placed;
   }
 
   // ------------------------------------------------------------ off-screen docking
-  function drawOffscreen(ctx, blur, list, view, anim, dim) {
-    const bySide = { left: [], right: [], behind: [] };
-    for (const o of list) (bySide[o.side === 'right' ? 'right' : o.side === 'left' ? 'left' : 'behind']).push(o);
-    for (const side of ['left', 'right']) {
-      let y = R().y + 240;
-      for (const o of bySide[side]) {
-        const b = o.bubble;
-        const a = (b ? b.alpha : 1) * dim;
-        const nameW = textW(ctx, o.name, F.name);
-        const where = `·  ${side}`;
-        const whereW = textW(ctx, where, F.sub);
-        let w;
-        let h;
-        let lines = [];
-        if (b) {
-          lines = b.lines.map((l, i) => (i === 0 && b.cut ? `… ${l}` : l));
-          const bodyW = Math.max(...lines.map((l) => textW(ctx, l, F.body)));
-          w = Math.max(bodyW, 26 + nameW + 12 + whereW + 60) + PADX * 2;
-          h = PADT + HEADH + 8 + lines.length * LH + PADB - 4;
-        } else {
-          w = PADX * 2 + 26 + nameW + 12 + whereW;
-          h = TAG_H;
-        }
-        const key = `off:${o.key}`;
-        let cs = cards.get(key);
-        if (!cs) {
-          cs = { a: 0, slide: 0, y, h, seen: anim };
-          cards.set(key, cs);
-        }
-        cs.seen = anim;
-        cs.present = true;
-        cs.a += (1 - cs.a) * follow(view.dt, 9);
-        cs.y += (y - cs.y) * follow(view.dt, 9);
-        cs.h += (h - cs.h) * follow(view.dt, 14);
-        const ea = easeOut(cs.a);
-        const slide = (1 - ea) * 60;
-        const x = side === 'left' ? R().x + 60 - slide : R().x + R().w - 60 - w + slide;
-        const pulse = 0.75 + 0.25 * Math.sin(anim * 5);
-        // edge light in the speaker's colour
-        ctx.save();
-        const ex = side === 'left' ? R().x : R().x + R().w;
-        const g = ctx.createRadialGradient(ex, cs.y + cs.h / 2, 0, ex, cs.y + cs.h / 2, 420);
-        g.addColorStop(0, hexA(o.color, (b ? 0.42 : 0.22) * a * ea * pulse));
-        g.addColorStop(1, hexA(o.color, 0));
-        ctx.fillStyle = g;
-        ctx.fillRect(side === 'left' ? ex : ex - 420, cs.y + cs.h / 2 - 420, 420, 840);
-        ctx.restore();
-        glass(ctx, blur, x, cs.y, w, cs.h, Math.min(RAD, cs.h / 2), { alpha: a * ea, glow: o.color });
-        ctx.save();
-        ctx.globalAlpha *= a * ea;
-        const d = side === 'left' ? -1 : 1;
-        chevrons(ctx, (side === 'left' ? x - 26 : x + w + 26) + Math.sin(anim * 6) * 4 * d, cs.y + cs.h / 2, d, o.color, 15, 4);
-        const hy = b ? cs.y + PADT + HEADH / 2 : cs.y + cs.h / 2;
-        dot(ctx, x + PADX + 7, hy, 7, o.color);
-        ctx.font = F.name;
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(o.name, x + PADX + 26, hy);
-        ctx.font = F.sub;
-        ctx.fillStyle = 'rgba(255,255,255,0.62)';
-        ctx.fillText(where, x + PADX + 26 + nameW + 12, hy + 1);
-        if (b) {
-          eqBars(ctx, x + w - PADX - 26, hy, o.color, anim, b.speaking ? 1 : 0.18, 18);
-          ctx.save();
-          rrect(ctx, x, cs.y, w, cs.h, RAD);
-          ctx.clip();
-          ctx.font = F.body;
-          ctx.textBaseline = 'alphabetic';
-          ctx.fillStyle = b.final ? '#FFFFFF' : 'rgba(255,255,255,0.74)';
-          lines.forEach((l, i) => ctx.fillText(l, x + PADX, cs.y + PADT + HEADH + 8 + 31 + i * LH));
-          ctx.restore();
-        }
-        ctx.restore();
-        y += h + 18;
+  function drawOffscreen(ctx, blur, view, env, dim) {
+    const { anim, dt } = env;
+    const cfg = view.config;
+    const rows = rowsOf(cfg);
+    const DW = Math.round(reserveW(ctx, cfg) * 0.8) + PADX * 2;
+    const DH = bubbleH(rows, false);
+    const present = new Set();
+    for (const o of view.offscreen) {
+      if (o.side !== 'left' && o.side !== 'right') continue;
+      present.add(o.key);
+      let d = docks.get(o.key);
+      if (!d) {
+        const slots = dockSlots[o.side];
+        let idx = slots.indexOf(undefined);
+        if (idx < 0) idx = slots.length;
+        slots[idx] = o.key;
+        d = { key: o.key, side: o.side, idx, a: 0, h: TAG_H, vh: 0, wrap: createLineWrap(), scroll: {}, threadId: null, cand: null, candSince: 0 };
+        docks.set(o.key, d);
       }
+      // a reported side must hold for a moment before the dock changes edge
+      if (o.side !== d.side) {
+        if (d.cand !== o.side) {
+          d.cand = o.side;
+          d.candSince = anim;
+        } else if (anim - d.candSince > SLOT_HOLD_S) {
+          dockSlots[d.side][d.idx] = undefined;
+          const slots = dockSlots[o.side];
+          let idx = slots.indexOf(undefined);
+          if (idx < 0) idx = slots.length;
+          slots[idx] = o.key;
+          d.side = o.side;
+          d.idx = idx;
+          d.a = 0;
+          d.cand = null;
+        }
+      } else d.cand = null;
+      d.o = o;
+      d.seen = anim;
     }
-    // someone behind you: glow along the bottom edge, docked above the You bar
+    for (const [key, d] of docks) {
+      const on = present.has(key);
+      const b = on ? d.o.bubble : null;
+      const aT = on ? (b ? b.alpha * (b.current ? 1 : 0.7) : 0.85) : 0;
+      d.a = REDUCED_MOTION ? aT : ease(d.a, aT, dt, 9);
+      if (!on && d.a < 0.01) {
+        dockSlots[d.side][d.idx] = undefined;
+        docks.delete(key);
+        continue;
+      }
+      if (b && d.threadId !== b.id) {
+        d.threadId = b.id;
+        d.wrap.reset();
+        d.scroll = {};
+      }
+      if (on) d.b = b;
+      const th = d.b && on ? DH : TAG_H;
+      if (REDUCED_MOTION) d.h = th;
+      else [d.h, d.vh] = springStep(d.h, d.vh, th, dt, MOVE_W);
+      const o = d.o;
+      const bb = d.b;
+      const a = d.a * dim;
+      if (a < 0.01) continue;
+      const side = d.side;
+      const y = R().y + 190 + d.idx * (DH + 16);
+      const slide = REDUCED_MOTION ? 0 : (1 - easeOut(clamp(d.a / Math.max(0.01, aT || 1)))) * 40;
+      const x = side === 'left' ? R().x + 64 - slide : R().x + R().w - 64 - DW + slide;
+      const pulse = REDUCED_MOTION ? 0.9 : 0.8 + 0.2 * Math.sin(anim * 4);
+      // edge light in the speaker's colour
+      ctx.save();
+      const ex = side === 'left' ? R().x : R().x + R().w;
+      const g = ctx.createRadialGradient(ex, y + d.h / 2, 0, ex, y + d.h / 2, 420);
+      g.addColorStop(0, hexA(o.color, (bb ? 0.42 : 0.22) * a * pulse));
+      g.addColorStop(1, hexA(o.color, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(side === 'left' ? ex : ex - 420, y + d.h / 2 - 420, 420, 840);
+      ctx.restore();
+      glass(ctx, blur, x, y, DW, d.h, Math.min(RAD, d.h / 2), { alpha: a, glow: o.color });
+      ctx.save();
+      ctx.globalAlpha *= a;
+      const dir = side === 'left' ? -1 : 1;
+      chevrons(ctx, (side === 'left' ? x - 26 : x + DW + 26), y + Math.min(d.h, TAG_H) / 2, dir, o.color, 15, 4);
+      const hy = y + (d.h > TAG_H + 4 ? PADT + HEADH / 2 : d.h / 2);
+      ctx.save();
+      rrect(ctx, x, y, DW, d.h, RAD);
+      ctx.clip();
+      dot(ctx, x + PADX + 7, hy, 7, o.color);
+      ctx.font = F.name;
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(o.name, x + PADX + 26, hy);
+      const nameW = textW(ctx, o.name, F.name);
+      ctx.font = F.sub;
+      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.fillText(`·  ${side === 'left' ? 'on your left' : 'on your right'}`, x + PADX + 26 + nameW + 12, hy + 1);
+      if (bb) {
+        eqBars(ctx, x + DW - PADX - 26, hy, o.color, REDUCED_MOTION ? 0.6 : anim, bb.speaking ? 1 : 0.18, 18);
+        d.wrap.update(ctx, bb.tokens, DW - PADX * 2, F.body, anim);
+        scrollTo(d.scroll, d.wrap.lines.length, rows, dt);
+        drawText(ctx, d.wrap, d.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: DW - PADX * 2 });
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+    // someone behind you: glow along the bottom edge, one line docked above the You bar
     let by = bottomY() + 10;
-    for (const o of bySide.behind) {
+    for (const o of view.offscreen) {
+      if (o.side !== 'behind') continue;
       const b = o.bubble;
       const a = (b ? b.alpha : 1) * dim;
       edgeGlow(ctx, 'behind', o.color, a * 0.8, 480);
-      const text = b ? b.lines.join(' ') : '';
-      const parts = `${o.name}  ·  behind you${text ? '  —  ' + text : ''}`;
-      const w = textW(ctx, parts, F.sub) + 90;
+      const w = Math.min(R().w - 200, 900);
+      const head = `${o.name}  ·  behind you`;
+      const headW = textW(ctx, head, F.sub);
+      const text = b ? fitTail(ctx, b.text, w - headW - 110, F.sub) : '';
       glass(ctx, blur, midX() - w / 2, by - 50, w, 44, 22, { alpha: a, glow: o.color });
       ctx.save();
       ctx.globalAlpha *= a;
@@ -513,74 +783,91 @@ export function createBubbleLayer() {
       ctx.font = F.sub;
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(parts, midX() - w / 2 + 44, by - 27);
+      ctx.fillText(head, midX() - w / 2 + 44, by - 27);
+      if (text) {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillText(`—  ${text}`, midX() - w / 2 + 56 + headW, by - 27);
+      }
       ctx.restore();
       by -= 54;
     }
   }
 
   // ------------------------------------------------------------ lower caption + You bar
-  function drawLower(ctx, blur, b, anim, dim) {
-    if (!b) return;
-    const lines = b.lines.map((l, i) => (i === 0 && b.cut ? `… ${l}` : l));
-    const nameW = textW(ctx, b.name, F.name);
-    const bodyW = Math.max(...lines.map((l) => textW(ctx, l, F.body)));
-    const w = Math.max(bodyW, nameW + 80) + PADX * 2;
-    const h = PADT + HEADH + 8 + lines.length * LH + PADB - 4;
+  /** A voice the engine could not place: a fixed-size caption at the bottom centre. */
+  function drawLower(ctx, blur, view, env, dim) {
+    const { anim, dt } = env;
+    const b = view.lower;
+    const cfg = view.config;
+    const rows = rowsOf(cfg);
+    if (b && (!lowerCard || lowerCard.threadId !== b.id)) {
+      lowerCard = { threadId: b.id, a: lowerCard?.a ?? 0, wrap: createLineWrap(), scroll: {}, b };
+    }
+    if (!lowerCard) return null;
+    const c = lowerCard;
+    if (b) c.b = b;
+    const aT = b ? b.alpha * (b.current ? 1 : 0.7) : 0;
+    c.a = REDUCED_MOTION ? aT : ease(c.a, aT, dt, 9);
+    if (!b && c.a < 0.01) {
+      lowerCard = null;
+      return null;
+    }
+    const bb = c.b;
+    const w = Math.round(reserveW(ctx, cfg)) + PADX * 2;
+    const h = bubbleH(rows, false);
     const x = midX() - w / 2;
     const y = bottomY() - h - 6;
-    const a = b.alpha * dim;
-    glass(ctx, blur, x, y, w, h, RAD, { alpha: a, glow: b.color });
+    const a = c.a * dim;
+    glass(ctx, blur, x, y, w, h, RAD, { alpha: a, glow: bb.color });
     ctx.save();
     ctx.globalAlpha *= a;
     const hy = y + PADT + HEADH / 2;
-    dot(ctx, x + PADX + 7, hy, 7, b.color);
+    dot(ctx, x + PADX + 7, hy, 7, bb.color);
     ctx.font = F.name;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(b.name, x + PADX + 26, hy);
-    eqBars(ctx, x + w - PADX - 26, hy, b.color, anim, b.speaking ? 1 : 0.18, 18);
-    ctx.font = F.body;
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = b.final ? '#FFFFFF' : 'rgba(255,255,255,0.72)';
-    lines.forEach((l, i) => ctx.fillText(l, x + PADX, y + PADT + HEADH + 8 + 31 + i * LH));
+    ctx.fillText(bb.name, x + PADX + 26, hy);
+    eqBars(ctx, x + w - PADX - 26, hy, bb.color, REDUCED_MOTION ? 0.6 : anim, bb.speaking ? 1 : 0.18, 18);
+    c.wrap.update(ctx, bb.tokens, w - PADX * 2, F.body, anim);
+    scrollTo(c.scroll, c.wrap.lines.length, rows, dt);
+    drawText(ctx, c.wrap, c.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: w - PADX * 2 });
     ctx.restore();
+    return { x: x - 10, y: y - 10, w: w + 20, h: h + 20 };
   }
 
-  function drawYou(ctx, blur, b, view, anim, dim) {
-    const key = 'you-bar';
-    let cs = cards.get(key);
-    if (!cs) {
-      cs = { a: 0, w: 300, seen: anim };
-      cards.set(key, cs);
+  /** The wearer's own words: one line of fixed width that rolls up as it fills. */
+  function drawYou(ctx, blur, view, env, dim) {
+    const { anim, dt } = env;
+    const b = view.you;
+    const c = youCard;
+    if (b && c.threadId !== b.id) {
+      c.threadId = b.id;
+      c.wrap.reset();
+      c.scroll = {};
     }
-    const present = !!b;
-    cs.a += ((present ? 1 : 0) - cs.a) * follow(view.dt, 8);
-    if (b) cs.b = b;
-    const bb = cs.b;
-    if (!bb || cs.a < 0.01) return;
+    if (b) c.b = b;
+    c.a = REDUCED_MOTION ? (b ? 1 : 0) : ease(c.a, b ? 1 : 0, dt, 8);
+    const bb = c.b;
+    if (!bb || c.a < 0.01) return;
     const label = bb.typed ? 'You (typed)' : 'You';
-    const text = bb.lines.map((l, i) => (i === 0 && bb.cut ? `… ${l}` : l)).join(' ');
-    const lw = textW(ctx, label, F.youLabel);
-    const tw = textW(ctx, text, F.you);
-    const w = Math.min(R().w - 120, tw + lw + 22 * 2 + 40 + (view.speaking && !bb.final ? 40 : 0));
-    cs.w += (w - cs.w) * follow(view.dt, 14);
+    const lw = textW(ctx, 'You (typed)', F.youLabel);
+    const w = Math.min(R().w - 240, 1000);
     const h = 60;
-    const x = midX() - cs.w / 2;
-    const y = R().y + R().h - 118 + (1 - easeOut(cs.a)) * 16;
-    const a = cs.a * (present ? b.alpha : 1) * dim;
-    glass(ctx, blur, x, y, cs.w, h, h / 2, { alpha: a, tint: 'rgba(14,16,22,0.46)' });
+    const x = midX() - w / 2;
+    const y = R().y + R().h - 118 + (REDUCED_MOTION ? 0 : (1 - easeOut(c.a)) * 12);
+    const a = c.a * (b ? b.alpha : 1) * dim;
+    glass(ctx, blur, x, y, w, h, h / 2, { alpha: a, tint: 'rgba(14,16,22,0.46)' });
     ctx.save();
     ctx.globalAlpha *= a;
-    rrect(ctx, x, y, cs.w, h, h / 2);
-    ctx.clip();
     ctx.font = F.youLabel;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = bb.typed ? ACCENT : 'rgba(255,255,255,0.58)';
     ctx.fillText(label, x + 24, y + h / 2 + 1);
-    ctx.font = F.you;
-    ctx.fillStyle = bb.final ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.72)';
-    ctx.fillText(text, x + 24 + lw + 16, y + h / 2 + 1);
+    const tx = x + 24 + lw + 16;
+    const tw = w - (tx - x) - 28;
+    c.wrap.update(ctx, bb.tokens, tw, F.you, anim);
+    scrollTo(c.scroll, c.wrap.lines.length, 1, dt);
+    drawText(ctx, c.wrap, c.scroll.top ?? 0, tx, y + 12, 1, anim, { w: tw, font: F.you, lh: 36, base: 28, draft: 0.72 });
     ctx.restore();
   }
 
@@ -588,109 +875,41 @@ export function createBubbleLayer() {
   function render(ctx, view, env) {
     const { blur, anim } = env;
     const dim = view.paused ? 0.3 : 1;
-    const cfg = view.config;
-    const dt = view.dt;
 
     // face brackets: strangers when they first appear, proposals while they wait for an answer
     for (const f of view.faces) {
-      if (f.tiny) continue;
+      if (f.tiny || f.ghost) continue;
       const prop = f.proposal;
+      const t = REDUCED_MOTION ? 0 : anim;
       if (prop && prop.state === 'proposed') {
-        faceBrackets(ctx, f, { a: 0.9 * dim, color: ACCENT, dashed: true, t: anim, scale: 1.3 });
+        faceBrackets(ctx, f, { a: 0.9 * dim, color: ACCENT, dashed: true, t, scale: 1.3 });
       } else if (prop && prop.state === 'confirmed' && prop.age < 1.2) {
-        faceBrackets(ctx, f, { a: (1 - prop.age / 1.2) * dim, color: MINT, t: anim, scale: 1.3 });
+        faceBrackets(ctx, f, { a: (1 - prop.age / 1.2) * dim, color: MINT, t, scale: 1.3 });
       } else if (!f.known && anim - f.born < 3.5) {
         const a = clamp((anim - f.born) / 0.35) * clamp((3.5 - (anim - f.born)) / 0.5);
-        faceBrackets(ctx, f, { a: a * 0.85 * dim, color: '#FFFFFF', dashed: true, t: anim, scale: 1.3 });
+        faceBrackets(ctx, f, { a: a * 0.85 * dim, color: '#FFFFFF', dashed: true, t, scale: 1.3 });
       }
     }
 
-    // items: a bubble or a tag per face, dots for tiny faces
-    const items = [];
-    const bubbleByFace = new Map(view.bubbles.map((b) => [b.face.key, b]));
+    const lowerRect = lowerCard ? lastLower : null;
+    const placed = layoutFaces(ctx, view, { ...env, obstacles: [...(env.obstacles || []), ...(lowerRect ? [lowerRect] : [])] });
+
+    ghosts = ghosts.filter((g) => anim - g.born < 0.25);
+    for (const g of ghosts) {
+      g.a = g.a0 * (REDUCED_MOTION ? 0 : 1 - (anim - g.born) / 0.25);
+      g.blur = blur;
+      drawCard(ctx, g, anim);
+    }
+    // tags first, then earlier bubbles, the current speaker's on top
+    const order = [...cards.values()].sort((a, b) => rank(a) - rank(b));
+    for (const c of order) {
+      c.blur = blur;
+      drawCard(ctx, c, anim);
+    }
     for (const f of view.faces) {
-      const b = bubbleByFace.get(f.key);
-      if (f.tiny && !b) {
-        items.push({ key: f.key, type: 'dot', face: f });
-        continue;
-      }
-      items.push({ key: f.key, type: b ? 'bubble' : 'tag', face: f, b, blur, dim });
-    }
-
-    const live = items.filter((i) => i.type !== 'dot');
-    const rects = [];
-    for (const it of live) {
-      const m = measure(ctx, it, cfg);
-      const t = target(it, m);
-      t.key = it.key;
-      it.target = t;
-      rects.push(t);
-    }
-    // keep clear of the status pill, the alerts, and everyone else's face (eyes to chin)
-    const obstacles = [{ x: R().x + 14, y: R().y + 12, w: 440, h: 78 }, ...(env.obstacles || [])];
-    for (const f of view.faces) {
-      if (f.tiny) continue;
-      obstacles.push({ x: f.cx - f.w * 0.3, y: f.cy - f.h * 0.28, w: f.w * 0.6, h: f.h * 0.62, owner: f.key });
-    }
-    relax(rects, obstacles);
-
-    // smooth toward targets
-    const present = new Set();
-    for (const it of live) {
-      present.add(it.key);
-      let cs = cards.get(it.key);
-      const t = it.target;
-      if (!cs) {
-        cs = { x: t.x, y: t.y, w: t.w, h: t.h, a: 0, tailA: 0, firm: 0, words: [], utt: null };
-        cards.set(it.key, cs);
-      }
-      const kp = follow(dt, 9);
-      const ks = follow(dt, 14);
-      cs.x += (t.x - cs.x) * kp;
-      cs.y += (t.y - cs.y) * kp;
-      cs.w += (t.w - cs.w) * ks;
-      cs.h += (t.h - cs.h) * ks;
-      const aT = it.type === 'bubble' ? it.b.alpha : 1;
-      cs.a += (aT - cs.a) * follow(dt, 10);
-      cs.tailA += ((it.type === 'bubble' ? 1 : 0) - cs.tailA) * follow(dt, 10);
-      if (it.type === 'bubble') {
-        if (cs.utt !== it.b.utt_id) cs.firm = 0;
-        cs.firm += ((it.b.final ? 1 : 0) - cs.firm) * follow(dt, 8);
-        syncWords(cs, it, anim);
-      }
-      cs.item = it;
-      cs.seen = anim;
-    }
-    // cards whose face disappeared fade out in place
-    for (const [key, cs] of cards) {
-      if (key.startsWith('off:') || key === 'you-bar') continue;
-      if (!present.has(key)) {
-        cs.a += (0 - cs.a) * follow(dt, 10);
-        if (cs.a < 0.01 || anim - cs.seen > 3) cards.delete(key);
-      }
-    }
-    for (const [key, cs] of cards) {
-      if (key.startsWith('off:') && anim - cs.seen > 0.05) {
-        cs.a += (0 - cs.a) * follow(dt, 10);
-        if (cs.a < 0.01) cards.delete(key);
-      }
-    }
-
-    // draw tags first, then bubbles (speakers on top)
-    const order = [...cards.entries()]
-      .filter(([k]) => !k.startsWith('off:') && k !== 'you-bar')
-      .sort((a, b) => rank(a[1]) - rank(b[1]));
-    for (const [, cs] of order) {
-      const it = cs.item;
-      it.dim = dim;
-      it.blur = blur;
-      drawCard(ctx, blur, cs, it, anim);
-    }
-    for (const it of items) {
-      if (it.type !== 'dot') continue;
-      const f = it.face;
+      if (!f.tiny || cards.has(f.key)) continue;
       ctx.save();
-      ctx.globalAlpha = dim;
+      ctx.globalAlpha = dim * (f.ghost ? 0.5 : 1);
       dot(ctx, f.cx, f.top - 8, 7, f.color, 14);
       ctx.strokeStyle = 'rgba(255,255,255,0.7)';
       ctx.lineWidth = 1.5;
@@ -700,18 +919,33 @@ export function createBubbleLayer() {
       ctx.restore();
     }
 
-    drawOffscreen(ctx, blur, view.offscreen, view, anim, dim);
-    drawLower(ctx, blur, view.lower, anim, dim);
-    drawYou(ctx, blur, view.you, view, anim, dim);
-    return rects;
+    drawOffscreen(ctx, blur, view, env, dim);
+    lastLower = drawLower(ctx, blur, view, env, dim);
+    drawYou(ctx, blur, view, env, dim);
+    return placed;
+  }
+  let lastLower = null;
+
+  /** Draw order: tags, then bubbles from the least to the most recently updated. */
+  function rank(c) {
+    if (c.kind !== 'bubble' || !c.b) return -1e9;
+    return c.b.current ? 1e9 : c.b.tUpdate;
   }
 
-  function rank(cs) {
-    const it = cs.item;
-    if (!it) return 0;
-    if (it.type === 'bubble') return it.b.speaking ? 3 : 2;
-    return 1;
+  /** Card states for tests and measurements: where each card is and what it shows. */
+  function debug() {
+    const out = [];
+    for (const c of cards.values()) {
+      const top = Math.round(c.scroll.top ?? 0);
+      const shown = [];
+      for (let i = top; i < Math.min(c.wrap.lines.length, top + c.rows); i++) {
+        const ln = c.wrap.lines[i];
+        shown.push(c.wrap.tokens.slice(ln.start, ln.end).map((t) => t.text).join(' '));
+      }
+      out.push({ key: c.key, kind: c.kind, slot: c.slot, x: c.x, y: c.y, w: c.w, h: c.h, a: c.a, thread: c.threadId, lines: c.kind === 'bubble' ? shown : [], utt: c.b?.utt_id ?? null, face: c.face ? { cx: c.face.cx, cy: c.face.cy, w: c.face.w, h: c.face.h, track: c.face.track_id } : null });
+    }
+    return out;
   }
 
-  return { render };
+  return { render, debug, cards };
 }
