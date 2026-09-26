@@ -41,7 +41,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `audio.vad` | 2 Audio & Lang | `t, is_speech, prob` | Every 32 ms |
 | `audio.transcript` | 2 Audio & Lang | `utt_id, t_start, t_end, text, final, lang, words: [(word, t0, t1)]` | No speaker yet |
 | `audio.voice_match` | 2 Audio & Lang | `utt_id, person_id or None, score` | After ≥ 1 s of speech |
-| `voice.harvest` | 1 Vision (fusion) | `person_id, t0, t1` | Section 2 adds that audio span to the session print |
+| `voice.harvest` | 1 Vision (fusion) | `person_id, t0, t1, talkers=1` | Section 2 adds that audio span to the session print; for a saved person it may refine their print (A-21, see "Enrollment station"). `talkers`: the most faces talking at once over the span. Sent `[voice] harvest_lag_s` after `t1`, so the span's audio has arrived |
 | `caption` | 1 Vision (fusion) | `utt_id, speaker: Speaker, text, final, lang, words` | The transcript with its speaker; split into `<utt_id>`, `<utt_id>.1`, ... where the speaker changes |
 | `caption.retract` | 1 Vision (fusion) | `utt_id` | A segment id sent earlier is no longer part of its utterance: drop it (see "Caption segments") |
 | `caption.translation` | 2 Audio & Lang | `utt_id, source_lang, text_en` | 0.5–1.2 s after a final |
@@ -57,8 +57,12 @@ A service reports its health by publishing `status.part` about once per second. 
 | `hw.link` | 3 Hardware | `connected, firmware, driver` | On change |
 | `speech_out.playing` | 3 Hardware | `state` (`start`, `end`), `t` | Section 2 mutes mic captions until end + 0.5 s |
 | `reply.spoken` | 3 Hardware | `text, voice` (`elevenlabs`, `kokoro`), `t` | Shown as "You (typed)" and saved to history |
-| `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason, track_id=None` | "more light", "come closer"; face enrollment echoes the requested track_id to correlate voice consent |
-| `enroll.progress` | 1 Vision / 2 Audio & Lang | `track_id, part` (`face`, `voice`), `fraction` (0–1), `person_id=None, hint=""` | While an enrollment runs; see "Save a person" |
+| `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason, track_id=None, source="glasses", session_id=None` | "more light", "come closer"; face enrollment echoes the requested track_id to correlate voice consent. `source: "station"`: saved at the laptop (see "Enrollment station") |
+| `enroll.progress` | 1 Vision / 2 Audio & Lang | `track_id, part` (`face`, `voice`), `fraction` (0–1), `person_id=None, hint="", source="glasses", session_id=None` | While an enrollment runs; see "Save a person" |
+| `enroll.state` | 1 Vision (station) | `session_id, client_id, phase, name, track_id, request_id, person_id, face_ok, voice_ok, sentence, need_s, reason` (+ `camera, shared, mic, score, message` in some phases) | Enrollment station: which screen the phone shows; see "Enrollment station" |
+| `enroll.preview` | 1 Vision (station) | `session_id, client_id, jpeg` (bytes), `width, height, face` ([x, y, w, h] fractions or None), `ok, hint` | ~12/s during the face step; memory only, never stored |
+| `enroll.level` | 2 Audio (station) | `session_id, client_id, level` (0–1), `db, peak, clipping, speech, noise_db, voiced_s, need_s, hint` | ~15/s during the voice step |
+| `enroll.mismatch` | 1 Vision (station) | `session_id, client_id, request_id, track_id, name, score, threshold` | The laptop face isn't the glasses face the save started from |
 | `save.request` | 4 Pages & Engine | `request_id, track_id, name, t, expires_t, person_id=None, proposal_id=None` | A double tap asked to save this person; pages ask them for consent |
 | `save.cancel` | 4 Pages & Engine | `request_id` (or None), `reason, track_id=None, name=""` | The request ended without an enrollment, or nobody could be saved |
 | `person.changed` | 1 Vision | `person_id, name, action` (`enrolled`, `renamed`, `deleted`) | Everyone updates their caches |
@@ -101,6 +105,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | name | args | Handled by |
 |---|---|---|
 | `enroll.start` | track_id, name, consent (true), consent_t (epoch seconds), request_id (optional, answers a `save.request`) | 1 Vision (face) then 2 Audio & Lang (voice) |
+| `enroll.station` | action: `start` {name, consent (true), consent_t (epoch seconds), request_id?, track_id?}; `retry`, `new_person`, `skip_voice`, `cancel` {session_id} | 1 Vision's enrollment station (face, then voice at the laptop); the hub adds the page's `client_id` |
 | `save.start` | track_id (optional) | 4 Pages & Engine: "save this person" without the touch pad (key D) |
 | `save.cancel` | request_id | 4 Pages & Engine: the person declined on the phone or console |
 | `person.rename` | person_id, name | 1 Vision |
@@ -211,7 +216,7 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 
 | type | Sent to | Fields |
 |---|---|---|
-| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, presets}` |
+| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, presets, enroll?: {source, sentence}}` (`enroll` only when `[enroll]` is configured) |
 | `paused` | all | `paused` (bool), sent on every change |
 | `camera` | all | `on` (bool), sent on every change |
 | `enroll_result` | all (the lens since P-29) | as the bus event `enroll.result` |
@@ -220,6 +225,10 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 | `save_cancel` | all | as the bus event `save.cancel` |
 | `person_changed` | console, phone | as the bus event `person.changed` |
 | `hw_link` | console, phone | as the bus event `hw.link` |
+| `enroll_state` | only the page that started the station save | as the bus event `enroll.state`, without `client_id`; also re-sent to a phone that says hello while that page is gone |
+| `enroll_preview` | only that page | as `enroll.preview` with `jpeg_b64` instead of `jpeg`; only the newest waits if the page is slow |
+| `enroll_level` | only that page | as the bus event `enroll.level` |
+| `enroll_mismatch` | only that page | as the bus event `enroll.mismatch` |
 
 `caption.translation` is not sent on its own: the engine re-sends that utterance's
 `caption` with its `translation` field filled in. Times (`t`, `t_start`, word times)
@@ -268,3 +277,63 @@ Y / N / P are tap / hold / pause and D (or Y twice quickly) is the double tap.
    session-only entry the confirmed name made for the same face (vision drops it), so they are
    recognised as saved from then on. Audio handles `enroll.result` ahead of its audio backlog,
    and `person.changed` {action: `enrolled`} no longer invalidates it.
+
+## Enrollment station (V-23, A-21, P-35)
+
+The glasses camera and mic are for the world outside. People are saved at the laptop: its
+own camera (`[enroll] camera_name`, "OV02E10"; infrared cameras never) and mic
+(`[enroll] mic_name`, "Microphone Array", WASAPI, never another mic). `[enroll] source =
+"glasses"` keeps the P-29 flow above. Code: `engine/attune/station/`.
+
+1. **Start.** The person being saved ticks consent on the phone, which sends `enroll.station`
+   {action: `start`, name, consent: true, consent_t, request_id?, track_id?} (a double tap
+   on the glasses carries that face's `track_id` and the `save.request` id; the phone's own
+   "Remember me" tab carries neither). The hub adds `client_id` (the page that sent it). The
+   save flow treats it like `enroll.start` for its request; walking to the laptop (the face
+   leaving the glasses view) does not cancel the request in station mode. A new start
+   replaces a running save (its last state has reason `replaced`).
+2. **Face.** `enroll.state` {phase: `opening`}, then `face` {camera, shared}. The laptop
+   camera is opened only now (or, if the main camera already holds it because the glasses
+   webcam is missing, its frames are shared: `shared: true`). `enroll.preview` goes to that
+   page only: a 3:4 JPEG from the middle of the frame, ~360 px wide, with the face box and a
+   hint ("look at the laptop camera", "move to the middle", "come closer", "move back a
+   little", "face the camera", "more light", "hold still", "one person at a time").
+   `enroll.progress` {part: `face`, source: `station`, session_id} as in P-29. The camera
+   closes when the step ends. No usable face in `face_timeout_s`: phase `face_failed`
+   {reason}; the phone offers `retry`.
+3. **Identity check** (only with a `track_id`): the laptop prints are compared with that
+   glasses face's prints (median of best matches). Below `[enroll] identity_match`:
+   `enroll.mismatch` and phase `mismatch` {score}; the phone shows "That isn't the person
+   you were looking at" with **Try again** (`retry`: the face step again) and **Save as
+   someone new** (`new_person`: saved without the link to that glasses face). Nothing is
+   saved before one is chosen; no choice in `decision_timeout_s` cancels.
+4. **Saved.** Phase `saving`; vision saves the face prints (`enroll.result` {part: `face`,
+   source: `station`, track_id if linked}, `person.changed` {`enrolled`}) and names every
+   glasses track with this face at once, replacing the session-only entry of the linked face
+   and of any other session entry with the same face.
+5. **Voice.** Phase `voice` {mic, sentence, need_s}: the laptop mic opens; the person reads
+   the sentence shown on the phone. `enroll.level` (meter and one hint: "a bit softer",
+   "too noisy", "speak up", "read the sentence aloud", "keep talking") and `enroll.progress`
+   {part: `voice`}. After `[voice] enroll_s` of voiced speech the mic closes, CAM++ makes the
+   print, `voice.json` is written with `source: "station"`, and `enroll.result` {part:
+   `voice`, ok, source: `station`} makes the audio side load it. Failure: phase
+   `voice_failed` {reason}; `retry` or `skip_voice` (the face stays saved).
+6. **End.** Phase `done` (face_ok, voice_ok), `cancelled` {reason: `cancelled`, `paused`,
+   `timeout`, `replaced`, `consent is required`, ...} or `fallback` {reason:
+   `camera_unavailable`, `camera_lost`, `station_off`; message}: the laptop camera can't be
+   used, so the phone offers saving at the glasses instead (`enroll.start`). Pause and
+   forget session cancel a running save.
+
+**Voice prints across mics (A-21).** A station print is made on the laptop mic but heard on
+the glasses mic. Its scores are compared with `[voice] station_match` and shifted onto the
+`[fusion] voice_match` scale. A saved person's print is refined only from `voice.harvest`
+spans with `talkers == 1` (a confident face match that is the lip-synced talker, at least
+`harvest_after_s`) of at least `adapt_min_s` voiced seconds that score at least `adapt_min`
+for them and higher than for anyone else, at most once per `adapt_gap_s`: the embedding joins
+a bank of at most `adapt_max_prints` glasses prints, and their score is the better of the
+base print and the bank's mean. The base print is never replaced. `voice.json`: `consent,
+consent_t, source` (`station` or `glasses`; missing = `glasses`), `embedding`, `adapted`
+(the bank, when `adapt_persist`). Deleted with the person.
+
+**Privacy.** Frames, face crops and audio exist only in memory during the save; the preview
+goes only to the page that started it and is never stored. Only prints are saved.

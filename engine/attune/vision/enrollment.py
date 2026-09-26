@@ -12,6 +12,10 @@ While it runs, the service publishes `enroll.progress` {track_id, part: face, fr
 (TODO P-29): `progress()` is the smaller of good crops / `enroll_crops` and elapsed /
 `enroll_s`, so the glasses' ring fills over the capture window and stalls while no usable
 crop arrives; `hint()` names what is wrong with the latest crops ("more light").
+
+The enrollment station (V-23, attune/station/) runs the same job on the laptop camera's frames:
+the same quality gate, the same 8-most-varied rule, and a few more reasons for a person
+lining up with the laptop camera ("move to the middle", "one person at a time").
 """
 
 from __future__ import annotations
@@ -27,7 +31,22 @@ REASONS = {
     "dark": "more light",
     "blurry": "hold still",
     "lost": "stay in view",
+    # enrollment station (V-23): lining up with the laptop camera
+    "none": "look at the laptop camera",
+    "off_center": "move to the middle",
+    "close": "move back a little",
+    "crowd": "one person at a time",
 }
+
+
+def identity_score(prints: np.ndarray, others: np.ndarray) -> float:
+    """How alike two sets of face prints are: the median, over `prints`, of each one's best
+    match in `others` (cosine; prints are unit length). V-23 checks the station face against
+    the glasses face the save started from with it."""
+    prints, others = np.atleast_2d(prints), np.atleast_2d(others)
+    if not len(prints) or not len(others):
+        return 0.0
+    return float(np.median((prints @ others.T).max(axis=1)))
 
 
 @dataclass

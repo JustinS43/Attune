@@ -6,6 +6,10 @@ Subscribes to vision, audio, sensor and name events, ticks 15 times a second,
 and publishes `scene` (every tick and immediately when the speaker changes),
 `caption` (transcripts with their speaker), `caption.retract` (segment ids a later
 draft dropped) and `voice.harvest`.
+
+A-21: every tick notes how many visible faces are talking; a harvest waits
+`[voice] harvest_lag_s` (so its audio has reached the audio side) and leaves with
+`talkers`, the most faces talking at once over its span (see fusion/harvest.py).
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from typing import Any
 
 from ..vision import types as T
 from ..vision.settings import load_settings
+from .harvest import DelayedHarvests, TalkerLog
 from .speaker import SpeakerFusion
 
 log = logging.getLogger(__name__)
@@ -34,6 +39,9 @@ class FusionService:
         self.clock = clock
         _, self.settings = load_settings(config)
         self.fusion = SpeakerFusion(self.settings)
+        voice = (config or {}).get("voice") or {}
+        self.talkers = TalkerLog()
+        self.harvests = DelayedHarvests(float(voice.get("harvest_lag_s", 0.4)))
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -56,7 +64,7 @@ class FusionService:
         for topic, handler in subs.items():
             self.bus.subscribe(topic, self._locked(handler))
         self.bus.subscribe(T.AUDIO_TRANSCRIPT, self._on_transcript)
-        self.bus.subscribe(T.SESSION_FORGET, self._locked(lambda ev: f.forget_session()))
+        self.bus.subscribe(T.SESSION_FORGET, self._locked(self._on_forget))
         self.bus.subscribe(T.PAUSED, self._on_paused)
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="fusion", daemon=True)
@@ -78,8 +86,27 @@ class FusionService:
         with self._lock:
             self.fusion.on_transcript(ev, self.clock())
 
+    def _on_forget(self, ev) -> None:
+        self.fusion.forget_session()
+        self.harvests.clear()
+        self.talkers.clear()
+
     def _on_paused(self, ev) -> None:
         self._paused = bool(T.get(ev, "paused", False))
+
+    def talking_faces(self, now: float) -> int:
+        """Visible faces talking now: Light-ASD's verdict where it is fresh, else the lip checks."""
+        f = self.fusion
+        covered = f.asd_gate.covered(f, now)
+        n = 0
+        for tid, tr in f.tracks.items():
+            if now - tr.t > 0.5:
+                continue
+            if tid in covered:
+                n += bool(covered[tid].talking)
+            else:
+                n += bool(tr.talking or tr.probable)
+        return n
 
     def _run(self) -> None:
         period = 1.0 / self.settings.rate_hz
@@ -100,13 +127,18 @@ class FusionService:
                     scene, captions, harvest = self.fusion.tick(now)
                     retractions = self.fusion.take_retractions()
                     speaker = self.fusion.current
+                    self.talkers.note(now, self.talking_faces(now))
+                    if harvest is not None:
+                        self.harvests.add(harvest)
+                    ready = self.harvests.due(now, self.talkers)
                 self.bus.publish(T.SCENE, scene)
                 for cap in captions:
                     self.bus.publish(T.CAPTION, cap)
                 for gone in retractions:
                     self.bus.publish(T.CAPTION_RETRACT, gone)
-                if harvest is not None and not self._paused:
-                    self.bus.publish(T.VOICE_HARVEST, harvest)
+                for done in ready:
+                    if not self._paused:
+                        self.bus.publish(T.VOICE_HARVEST, done)
                 if speaker is not before and log.isEnabledFor(logging.DEBUG):
                     log.debug("Speaker: %s", speaker)
                 if now - last_status >= 1.0:
