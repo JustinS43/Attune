@@ -98,7 +98,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-22 Film source in the lens: two-decoder player with a watchdog (no more black footage), chrome that scales with the window · M2 (#25, #28)
 - [x] P-23 Phone app: Ryan's logo designs, colorways and the Apricot Studio palette (`?palette=apricot`), kept working with the live engine · M3 (#24)
 - [x] P-24 Engine works with a USB webcam (Logitech C922): MSMF hardware transforms off before OpenCV loads · M0 (#27)
-- [ ] P-25 Caption layout polish: one steady slot per person, no jumping bubbles, calm Mono and Corner lines · M3 — in progress
+- [x] P-25 Caption layout polish: one steady slot per person, no jumping bubbles, calm Mono and Corner lines · M3 (#36)
 - [ ] P-26 Re-render the launch film in the three glasses looks (Colour, Mono, Corner) from the lens's own renderers · M3 – M4 — pipeline in progress, renders after P-25
 - [x] P-27 Phone enrollment tab: consented face photo preview and guided voice enrollment · M3 (#33)
 

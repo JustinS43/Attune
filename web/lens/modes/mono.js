@@ -8,14 +8,18 @@
  * 530x165 px of the 1920x1080 frame, centred horizontally and at or slightly above eye level
  * (display height levels 0-8, keys [ and ]; level 4 puts its centre about 5 degrees up). It is
  * head-locked, so there are no face-anchored bubbles: the current speaker's name, 4 caption lines,
- * and < > chevrons at the band's edges toward the speaker or a sound. Pure green light only: no
+ * and < > chevrons at the band's edges toward the speaker or a sound.
+ * Captions are a running log with fixed line positions (modes/common.js): each speaker turn
+ * starts on a new line, earlier turns dim, drafts are dimmer and firm up without reflowing,
+ * and the text rolls up one line at a time. The name in the header only changes when the
+ * speaker does; a proposal or "saved" line takes the fourth line and the text rolls up to make room. Pure green light only: no
  * fills, nothing dark (a waveguide cannot draw black), a 3-4 px glow, nothing outside the band.
  * Alerts become an icon and a word; name proposals read "SAM?  ✓ Y  ✕ N".
  */
 
-import { W, H, FT, PX, font, clamp, hexA, rrect, icon, chevrons, wrapPx, degToPx } from '../hud.js';
+import { W, H, FT, PX, font, clamp, lerp, hexA, rrect, icon, chevrons, degToPx, REDUCED_MOTION } from '../hud.js';
 import { t3Flash } from '../alerts.js';
-import { inView, primaryCaption } from './common.js';
+import { inView, createCaptionLog } from './common.js';
 
 const G = '#28FF46'; // rgb(40,255,70)
 const VW = 640; // the display's own pixels
@@ -31,6 +35,12 @@ const F = {
   small: font(560, 16, FT),
   big: font(680, 34, FT),
   mid: font(520, 21, FT),
+  // alerts must read over a bright scene: heavier and larger, drawn with an outline (strong())
+  alertBig: font(800, 38, FT),
+  alertMid: font(700, 24, FT),
+  alertHead: font(800, 23, FT),
+  alertLine: font(700, 30, FT),
+  alertSmall: font(650, 16, FT),
 };
 const LINE_X = 52;
 const LINE_W = VW - LINE_X * 2;
@@ -62,8 +72,39 @@ function text(ctx, str, x, y, f, a = 1, align = 'left', spacing = 0) {
   ctx.textAlign = 'left';
 }
 
+/**
+ * Alert text that holds up over a bright scene while staying pure green light: the glyphs are
+ * thickened with a green outline under a wider glow (more emitted light, no dark fill).
+ */
+function strong(ctx, str, x, y, f, a = 1, align = 'left', spacing = 0, lw = 1.6) {
+  ctx.save();
+  ctx.font = f;
+  ctx.textAlign = align;
+  ctx.letterSpacing = `${spacing}px`;
+  ctx.globalAlpha = a;
+  ctx.shadowColor = hexA(G, 1);
+  ctx.shadowBlur = 7 * PX;
+  ctx.strokeStyle = G;
+  ctx.lineWidth = lw;
+  ctx.lineJoin = 'round';
+  ctx.strokeText(str, x, y);
+  ctx.shadowBlur = 3.5 * PX;
+  ctx.fillStyle = G;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function strongIcon(ctx, name, x, y, size, a = 1) {
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.shadowColor = hexA(G, 1);
+  ctx.shadowBlur = 7 * PX;
+  icon(ctx, name, x, y, size, G, 3.2);
+  ctx.restore();
+}
+
 function edgeChevrons(ctx, side, anim, strong) {
-  const a = strong ? 0.55 + 0.45 * Math.sin(anim * 7) : 0.85;
+  const a = strong && !REDUCED_MOTION ? 0.55 + 0.45 * Math.sin(anim * 7) : 0.85;
   const n = strong ? 2 : 1;
   ctx.save();
   if (side === 'left') chevrons(ctx, 22, VH / 2 + 6, -1, G, 12, 3, n, a);
@@ -82,8 +123,12 @@ function monoIcon(ctx, name, x, y, size, lw = 2.2, a = 1) {
 }
 
 export function createMonoMode() {
+  const log = createCaptionLog();
+  let last = null;
   return {
     id: 'mono',
+    /** What the band shows (for tests and measurements). */
+    debug: () => last,
     name: 'Mono green waveguide',
     device: 'Binocular · Even Realities G1 class',
     blur: false,
@@ -126,41 +171,54 @@ export function createMonoMode() {
         text(ctx, 'PAUSED', VW / 2 - 62, VH / 2 + 3, F.big, 0.95, 'left', 4);
         text(ctx, 'P TO RESUME', VW / 2, VH / 2 + 44, F.small, 0.65, 'center', 2.5);
       } else if (urgent) {
-        // an urgent alarm takes the whole band
-        const flash = urgent.acked ? 1 : 0.35 + 0.65 * t3Flash(urgent.age);
-        monoIcon(ctx, urgent.acked ? 'check' : 'warn', VW / 2 - 190, 44, 42, 2.6, flash);
-        text(ctx, urgent.label.toUpperCase(), VW / 2 - 136, 80, F.big, flash, 'left', 3);
-        text(ctx, urgent.acked ? 'ACKNOWLEDGED' : urgent.detail.toUpperCase(), VW / 2, 124, F.mid, 0.9, 'center', 2);
+        // an urgent alarm takes the whole band: the word flashes in the T3 rhythm but never
+        // drops below half brightness, so it stays readable over a bright scene
+        const flash = urgent.acked || REDUCED_MOTION ? 1 : 0.55 + 0.45 * t3Flash(urgent.age);
+        const label = urgent.label.toUpperCase();
+        ctx.font = F.alertBig;
+        ctx.letterSpacing = '3px';
+        const lw = ctx.measureText(label).width;
+        ctx.letterSpacing = '0px';
+        const x0 = VW / 2 - (lw + 58) / 2;
+        strongIcon(ctx, urgent.acked ? 'check' : 'warn', x0, 38, 46, flash);
+        strong(ctx, label, x0 + 58, 80, F.alertBig, flash, 'left', 3, 2);
+        strong(ctx, urgent.acked ? 'ACKNOWLEDGED' : urgent.detail.toUpperCase(), VW / 2, 128, F.alertMid, 1, 'center', 2, 1.2);
         if (!urgent.acked) {
-          text(ctx, 'A  ACKNOWLEDGE', VW / 2, 176, F.small, 0.7, 'center', 2.5);
+          strong(ctx, 'A  ACKNOWLEDGE', VW / 2, 176, F.alertSmall, 0.85, 'center', 2.5, 0.8);
           edgeChevrons(ctx, urgent.side, anim, true);
         }
       } else {
-        const cap = primaryCaption(view);
-        // header: a sound, else the speaker, else who is in view
+        const prop = view.pendingProposal;
+        const toast = view.toasts.find((t) => t.kind === 'learned' && t.age < 3);
+        const footer = !!prop || !!toast;
+        const footY = BODY_Y + 3 * LH;
+        const rows = footer ? 3 : 4;
+        const st = log.update(ctx, view, LINE_W, F.body, rows, anim, view.dt);
+        const cap = st?.current ?? null;
+        const capA = st?.currentAlpha ?? 0;
+        last = { key: chip ? `alert:${chip.id}` : st?.currentKey ?? null, name: chip ? chip.label : cap?.name ?? null, lines: log.shown(st, rows), side: !chip && cap?.dir && cap.dir.side !== 'ahead' ? cap.dir.side : null };
+        // header: a sound, else the current speaker (changes only when the speaker does), else who is in view
         if (chip) {
           const w = `${chip.label.toUpperCase()}${chip.count > 1 ? ` ×${chip.count}` : ''}`;
-          monoIcon(ctx, chip.acked ? 'check' : chip.icon, LINE_X - 2, 11, 24, 2.3);
-          text(ctx, w, LINE_X + 30, HEAD_Y, F.head, 1, 'left', 2);
-          if (cap) text(ctx, chip.acked ? 'OK' : chip.detail.toUpperCase(), VW - LINE_X, HEAD_Y, F.small, 0.75, 'right', 2);
+          strongIcon(ctx, chip.acked ? 'check' : chip.icon, LINE_X - 4, 8, 28);
+          strong(ctx, w, LINE_X + 32, HEAD_Y + 1, F.alertHead, 1, 'left', 2, 1.2);
+          if (cap) strong(ctx, chip.acked ? 'OK' : chip.detail.toUpperCase(), VW - LINE_X, HEAD_Y, F.alertSmall, 0.9, 'right', 2, 0.8);
           edgeChevrons(ctx, chip.side, anim, !chip.acked);
         } else if (cap) {
           const name = cap.name.toUpperCase();
-          text(ctx, name, LINE_X, HEAD_Y, F.head, cap.alpha, 'left', 2);
+          text(ctx, name, LINE_X, HEAD_Y, F.head, capA, 'left', 2);
           ctx.font = F.head;
           ctx.letterSpacing = '2px';
           const nw = ctx.measureText(name).width;
           ctx.letterSpacing = '0px';
-          if (cap.speaking) {
-            ctx.globalAlpha = cap.alpha * 0.9;
-            ctx.fillStyle = G;
-            for (let i = 0; i < 3; i++) {
-              const v = 0.35 + 0.65 * Math.abs(Math.sin(anim * (7 + i * 2.3) + i));
-              ctx.fillRect(LINE_X + nw + 12 + i * 6, HEAD_Y - 6 - 7 * v, 3, 14 * v);
-            }
+          ctx.globalAlpha = capA * 0.9;
+          ctx.fillStyle = G;
+          for (let i = 0; i < 3; i++) {
+            const v = cap.speaking && !REDUCED_MOTION ? 0.35 + 0.65 * Math.abs(Math.sin(anim * (7 + i * 2.3) + i)) : 0.3;
+            ctx.fillRect(LINE_X + nw + 12 + i * 6, HEAD_Y - 6 - 7 * v, 3, 14 * v);
           }
           const right = cap.translated ? `${cap.lang.toUpperCase()} → EN` : cap.pending ? `${cap.lang.toUpperCase()} …` : cap.dir?.off ? cap.dir.side.toUpperCase() : '';
-          if (right) text(ctx, right, VW - LINE_X, HEAD_Y, F.small, 0.75 * cap.alpha, 'right', 2);
+          if (right) text(ctx, right, VW - LINE_X, HEAD_Y, F.small, 0.75 * capA, 'right', 2);
         } else {
           const names = inView(view);
           text(ctx, names.length ? `IN VIEW · ${names.join(' · ').toUpperCase()}` : 'LISTENING', LINE_X, HEAD_Y, F.small, 0.55, 'left', 2.5);
@@ -172,23 +230,27 @@ export function createMonoMode() {
         ctx.fillRect(LINE_X, 42, LINE_W, 1.2);
         ctx.restore();
 
-        const prop = view.pendingProposal;
-        const toast = view.toasts.find((t) => t.kind === 'learned' && t.age < 3);
-        const footer = !!prop || !!toast;
-        const footY = BODY_Y + 3 * LH;
-        if (cap) {
-          const lines = wrapPx(ctx, cap.text, LINE_W, F.body);
-          const maxLines = footer ? 3 : 4;
-          const shown = lines.slice(-maxLines);
-          const a = cap.alpha * (cap.final ? 1 : 0.66);
-          shown.forEach((ln, i) => text(ctx, (i === 0 && lines.length > maxLines ? '… ' : '') + ln, LINE_X, BODY_Y + i * LH, F.body, a));
-          if (!chip && cap.dir && cap.dir.side !== 'ahead') edgeChevrons(ctx, cap.dir.side, anim, !!cap.dir.off);
+        if (st) {
+          // the caption lines: fixed rows under the rule; lines leaving at the top fade out
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 46, VW, BODY_Y + (rows - 1) * LH + 10 - 46);
+          ctx.clip();
+          log.eachVisible(st, rows, (t, m, x, row, lineA, e) => {
+            const p = clamp((anim - m.born) / 0.2);
+            if (p <= 0) return;
+            const firm = t.final ? (m.firm == null ? 1 : clamp((anim - m.firm) / 0.25)) : 0;
+            const earlier = e.key === st.currentKey ? 1 : 0.5; // an earlier speaker's lines step back
+            text(ctx, t.text, LINE_X + x, BODY_Y + row * LH, F.body, e.alpha * lineA * p * lerp(0.62, 1, firm) * earlier);
+          });
+          ctx.restore();
+          if (!chip && cap?.dir && cap.dir.side !== 'ahead') edgeChevrons(ctx, cap.dir.side, anim, !!cap.dir.off);
         } else if (chip) {
-          // nobody talking: the band has room to spell the sound out
+          // nobody talking: the band has room to spell the sound out, large and heavy
           const more = view.alerts.filter((x) => x !== chip && !x.watch && x.level !== 'urgent');
-          text(ctx, chip.acked ? 'Acknowledged' : chip.detail, LINE_X, BODY_Y, F.body, 0.95);
-          if (more[0]) text(ctx, `+ ${more[0].label} · ${more[0].detail}`, LINE_X, BODY_Y + LH, F.body, 0.75);
-          if (!chip.acked && !footer) text(ctx, 'A  ACKNOWLEDGE', VW - LINE_X, footY, F.small, 0.65, 'right', 2.5);
+          strong(ctx, chip.acked ? 'Acknowledged' : chip.detail, LINE_X, BODY_Y + 6, F.alertLine, 1, 'left', 0.5, 1.4);
+          if (more[0]) strong(ctx, `+ ${more[0].label} · ${more[0].detail}`, LINE_X, BODY_Y + LH + 14, F.alertMid, 0.9, 'left', 0, 1);
+          if (!chip.acked && !footer) strong(ctx, 'A  ACKNOWLEDGE', VW - LINE_X, footY, F.alertSmall, 0.85, 'right', 2.5, 0.8);
         }
         if (prop) {
           const label = `${prop.name.toUpperCase()}?`;

@@ -1,6 +1,7 @@
 /*
  * Mode 1 - Full-colour AR, Meta Orion class (binocular waveguide, about 70 degrees diagonal).
- * Face-anchored name tags and speech bubbles, docked off-screen speakers, the You bar,
+ * Face-anchored name tags and speech bubbles (one calm slot per person, bubbles.js), docked
+ * off-screen speakers, the You bar,
  * alert chips/cards with direction, name proposals, the status pill and paused state.
  *
  * Section 4 - Pages, Engine & Demo. TODO: P-06, P-07, P-08.
@@ -46,6 +47,7 @@ export function createColorMode() {
     device: 'Binocular · Meta Orion class',
     blur: true,
     region: ORION_REGION,
+    bubbles, // bubbles.debug() lists every card's place and text (measurements, tests)
     render(ctx, view, env) {
       const R = ORION_REGION;
       setRegion(R);
