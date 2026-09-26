@@ -615,13 +615,19 @@ class SpeakerFusion:
                 break  # can't recover further back
         return since
 
+    def _latest_voice_match(self, now: float) -> tuple[float, str, str | None, float] | None:
+        """Latest voice result for the current speech run, including a non-match."""
+        start = self.speech_start if self.speech_start is not None else now
+        return next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
+
     def _voice_verdict(self, tr: _TrackInfo, now: float) -> str | None:
         """What this utterance's voice match says about a face: "veto", "support" or None."""
-        start = self.speech_start if self.speech_start is not None else now
-        match = next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
+        match = self._latest_voice_match(now)
         if match is None:
             return None
-        _, _, pid, _ = match
+        _, _, pid, score = match
+        if score < self.s.voice_match:
+            return None
         vid = voice_id(tr.person_id, tr.track_id)
         if pid is not None:
             if pid == vid or self.claimed.get(pid) == vid:
@@ -644,9 +650,8 @@ class SpeakerFusion:
     def _claim(self, now: float) -> None:
         """Let a face that clearly talks with an off-screen voice claim it (offscreen_claim_s)."""
         s = self.s
-        start = self.speech_start if self.speech_start is not None else now
-        match = next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
-        pid = match[2] if match is not None else None
+        match = self._latest_voice_match(now)
+        pid = match[2] if match is not None and match[3] >= s.voice_match else None
         if pid is None or not pid.startswith("offscreen-") or pid in self.claimed:
             pid = None
         for tr in self.tracks.values():
@@ -716,13 +721,9 @@ class SpeakerFusion:
         side = self._sensor_side(now)
         start = self.speech_start if self.speech_start is not None else now
         if now - start >= s.offscreen_after_s:
-            matches = [
-                m
-                for m in self.voice_matches
-                if m[0] >= start - 0.5 and m[2] and m[3] >= s.voice_match
-            ]
-            if matches:
-                _, _, vid, _ = matches[-1]
+            match = self._latest_voice_match(now)
+            if match is not None and match[2] and match[3] >= s.voice_match:
+                _, _, vid, _ = match
                 if vid in self.claimed:  # an off-screen voice that turned out to be a face
                     vid = self.claimed[vid]
                 elif vid.startswith("offscreen-"):  # a voice only ever heard off screen
@@ -997,7 +998,7 @@ class SpeakerFusion:
         if not fresh or any(not tr.measured or tr.stirring for tr in fresh):
             return None
         start = self.speech_start if self.speech_start is not None else now
-        match = next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
+        match = self._latest_voice_match(now)
         if match is not None:
             _, _, pid, score = match
             if pid is not None:
