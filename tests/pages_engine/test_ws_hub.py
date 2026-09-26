@@ -269,6 +269,12 @@ def test_relays_and_audiences(hub_env):
         }
 
 
+def test_late_pages_get_the_current_hw_link(hub_env):
+    hub_env.bus.publish(C.HW_LINK, {"connected": True, "firmware": "1.0", "driver": "L298"})
+    with page(hub_env.client, "phone") as (phone, _):
+        assert recv_type(phone, "hw_link")["driver"] == "L298"
+
+
 def test_person_changed_resends_people(hub_env):
     with page(hub_env.client, "console") as (console, _):
         recv_type(console, "people")

@@ -193,6 +193,7 @@ class Hub:
         self.latest_status: dict | None = None
         self._part_ok: dict[str, bool] = {}
         self._hw_connected: bool | None = None
+        self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
 
         # shared with the encoder thread
         self._frame: Any = None
@@ -224,7 +225,7 @@ class Hub:
             C.PAUSED: self._on_paused_bus,
             C.ENROLL_RESULT: lambda ev: post(self._on_enroll_result, ev),
             C.PERSON_CHANGED: lambda ev: post(self._on_person_changed, ev),
-            C.HW_LINK: lambda ev: post(self._on_hw_link, ev),
+            C.HW_LINK: self._on_hw_link_bus,
             C.STATUS: lambda ev: post(self._on_status, ev),
             C.STATUS_PART: lambda ev: post(self._on_status_part, ev),
             C.SESSION_FORGET: lambda ev: post(self._on_forget, ev),
@@ -286,6 +287,10 @@ class Hub:
     def _on_scene_bus(self, ev: Any) -> None:
         self._scene_raw = ev
         self._post(self._on_scene, ev)
+
+    def _on_hw_link_bus(self, ev: Any) -> None:
+        self._hw_link = ev
+        self._post(self._on_hw_link, ev)
 
     def _on_paused_bus(self, ev: Any) -> None:
         self._paused = bool(get(ev, "paused", False))
@@ -521,6 +526,8 @@ class Hub:
         )
         if role in C.WS_AUDIENCE[C.WS_PEOPLE]:
             client.push(C.WS_PEOPLE, {"people": self.people})
+        if role in C.WS_AUDIENCE[C.WS_HW_LINK] and self._hw_link is not None:
+            client.push(C.WS_HW_LINK, to_jsonable(self._hw_link))
         if role == "console":
             if self.latest_status is not None:
                 client.push(C.WS_STATUS, self.latest_status)
