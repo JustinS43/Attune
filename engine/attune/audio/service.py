@@ -46,6 +46,7 @@ class AudioService:
         self.worker = Worker(
             bus, "audio", self._handle, maxsize=round(100 * cfg.get("inbox_s", 30.0))
         )
+        self.auto_voice_tracks: dict[str, str] = {}
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(cfg)
         # gain before the VAD only: quiet or distant speech must be detected at all (A-24)
@@ -217,6 +218,7 @@ class AudioService:
 
     def _handle(self, topic: str, e: dict, generation: int) -> None:
         if topic == "session.forget":
+            self.auto_voice_tracks.clear()
             self._reset()
             self.ring.clear()
             self.speech_intervals.clear()
@@ -247,7 +249,25 @@ class AudioService:
         elif topic == "voice.harvest" and not self.paused and self.clock() >= self.muted_until:
             audio = self._speech_span(e["t0"], e["t1"])
             if generation == self.worker.generation:
-                self.voices.harvest(e["person_id"], audio, e.get("talkers", 1))
+                key = e["person_id"]
+                result = self.voices.harvest(key, audio, e.get("talkers", 1))
+                target = self.auto_voice_tracks.get(
+                    key, key if str(key).startswith("auto-") else None
+                )
+                if target and result == "session" and self.voices.remember_auto(target, key):
+                    self.auto_voice_tracks.pop(key, None)
+                    self.worker.publish(
+                        "enroll.result",
+                        {
+                            "person_id": target,
+                            "part": "voice",
+                            "ok": True,
+                            "reason": "",
+                            "source": "auto",
+                            "track_id": None,
+                        },
+                        generation,
+                    )
         elif topic == "command":
             name, args = e["name"], e.get("args", {})
             if name == "enroll.start":
@@ -277,6 +297,26 @@ class AudioService:
                 self._reset()
                 with self._asr_lock:
                     self.language, self.asr, self.languages = language, asr, langs
+        elif topic == "enroll.result" and e["part"] == "face" and e.get("source") == "auto":
+            track_id = e.get("track_id")
+            person_id = e.get("person_id")
+            if e.get("ok") and track_id is not None and person_id:
+                key = f"track-{track_id}"
+                self.auto_voice_tracks[key] = person_id
+                if self.voices.remember_auto(person_id, key):
+                    self.auto_voice_tracks.pop(key, None)
+                    self.worker.publish(
+                        "enroll.result",
+                        {
+                            "person_id": person_id,
+                            "part": "voice",
+                            "ok": True,
+                            "reason": "",
+                            "source": "auto",
+                            "track_id": None,
+                        },
+                        generation,
+                    )
         elif topic == "enroll.result" and e["part"] == "voice" and e.get("source") == "station":
             # A-21: the enrollment station saved this print from the laptop mic; load it
             if e.get("ok") and e.get("person_id"):
@@ -457,7 +497,14 @@ class AudioService:
             and isinstance(self.asr, NemotronASR)
             and getattr(self.asr, "samples", 0) < cfg.get("split_context_s", 120) * 16000
         )
-        if self.segmenter.confirmed and (final or count - self.sent >= cfg["asr_chunk_ms"] * 16):
+        # Nemotron consumes each VAD frame cheaply; Whisper re-decodes the growing
+        # utterance on every call, so a frame-sized interval makes it fall behind.
+        draft_ms = (
+            self.config["whisper"].get("draft_interval_ms", cfg["asr_chunk_ms"])
+            if isinstance(self.asr, WhisperASR)
+            else cfg["asr_chunk_ms"]
+        )
+        if self.segmenter.confirmed and (final or count - self.sent >= draft_ms * 16):
             fresh = self.utterance[self.sent // 512 :]
             audio = np.concatenate(fresh) if fresh else np.empty(0, np.float32)
             result = self._recognize(audio, final and not cut)
