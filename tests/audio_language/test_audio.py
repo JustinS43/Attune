@@ -160,7 +160,7 @@ def test_mic_name_selection_falls_back(config, monkeypatch):
         query_hostapis=lambda: [{"name": "Core Audio"}],
     )
     mic = MicReader(config["audio"], lambda: 0, lambda e: None, sd)
-    assert mic._device(False) is None
+    assert mic._device() == (None, False)
 
 
 def test_mic_name_selection_falls_back_to_wasapi_default_on_windows(config, monkeypatch):
@@ -175,10 +175,10 @@ def test_mic_name_selection_falls_back_to_wasapi_default_on_windows(config, monk
     ]
     sd = SimpleNamespace(query_devices=lambda: devices, query_hostapis=lambda: hosts)
     mic = MicReader(config["audio"], lambda: 0, lambda e: None, sd)
-    assert mic._device(False) == 1
+    assert mic._device() == (1, False)
     hosts[1]["default_input_device"] = -1
     with pytest.raises(RuntimeError):
-        mic._device(False)
+        mic._device()
 
 
 class FakeASR:
