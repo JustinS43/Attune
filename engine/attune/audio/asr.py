@@ -50,6 +50,43 @@ class UtteranceLevel:
         return np.asarray(samples * self.gain, dtype=np.float32)
 
 
+# The writing system of each caption language. On podcast audio the multilingual model
+# now and then writes a laugh, a mumble or crosstalk as a word in another script (Arabic
+# "اللي" inside an English sentence); with the languages set, such words are dropped.
+SCRIPTS = {
+    "ar": "ARABIC", "fa": "ARABIC", "ur": "ARABIC", "ru": "CYRILLIC", "uk": "CYRILLIC",
+    "bg": "CYRILLIC", "sr": "CYRILLIC", "el": "GREEK", "he": "HEBREW", "hi": "DEVANAGARI",
+    "mr": "DEVANAGARI", "th": "THAI", "ko": "HANGUL", "zh": "CJK", "ja": "CJK",
+}  # fmt: skip
+_JA = ("HIRAGANA", "KATAKANA")
+
+
+def allowed_scripts(languages: list[str]) -> set[str] | None:
+    """Scripts the configured languages are written in (None: any, e.g. auto-detect)."""
+    if not languages:
+        return None
+    out = {SCRIPTS.get(code.split("-")[0].lower(), "LATIN") for code in languages}
+    if any(code.split("-")[0].lower() == "ja" for code in languages):
+        out.update(_JA)
+    return out
+
+
+def _script(ch: str) -> str | None:
+    import unicodedata
+
+    if not ch.isalpha():
+        return None
+    name = unicodedata.name(ch, "")
+    return next((s for s in ("CJK",) + _JA if s in name), name.split(" ")[0] or None)
+
+
+def in_scripts(word: str, scripts: set[str] | None) -> bool:
+    """True when every letter of `word` is in one of `scripts` (or scripts is None)."""
+    if scripts is None:
+        return True
+    return all(sc is None or sc in scripts for sc in map(_script, word))
+
+
 def token_words(tokens: list, times: list, duration: float) -> list[tuple[str, float, float]]:
     """Combine sentencepiece tokens; clamp model timestamps to real PCM duration."""
     result: list[tuple[str, float, float]] = []
@@ -254,6 +291,9 @@ class NemotronASR:
             tokens, times = list(tokens)[base:end], list(times)[base:end]
             text = "".join(t for t in tokens if not t.startswith("<")).replace("▁", " ")
         text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", text)).strip()
-        return Recognition(
-            text, language.split("-")[0].lower(), token_words(tokens, times, duration)
-        )
+        words = token_words(tokens, times, duration)
+        scripts = allowed_scripts(self.config.get("languages", ["en"]))
+        if scripts is not None and not all(in_scripts(w, scripts) for w, _, _ in words):
+            words = [w for w in words if in_scripts(w[0], scripts)]
+            text = " ".join(w for w, _, _ in words)
+        return Recognition(text, language.split("-")[0].lower(), words)

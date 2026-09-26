@@ -486,6 +486,13 @@ def run(args) -> int:
     args.threads = args.threads or 4
     args.det_size = args.det_size or 640
     args.tail = 15.0 if args.tail is None else args.tail
+    if getattr(args, "boost", False) and sys.platform == "win32":
+        # above-normal priority for this process only: a laptop shared with other jobs
+        # otherwise starves vision (2-15 fps) and the scores measure the load, not the engine
+        import ctypes
+
+        k32 = ctypes.windll.kernel32
+        k32.SetPriorityClass(k32.GetCurrentProcess(), 0x8000)
     truth = Truth(people={}, intervals=[])
     got = engine_run(args, truth)
     got["name"] = args.name
@@ -762,6 +769,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--set", action="append", help="config override, e.g. audio.asr_chunk_ms=160")
     r.add_argument("--cpu", action="store_true", help="vision and Light-ASD on the CPU")
     r.add_argument("--no-asd", action="store_true")
+    r.add_argument("--boost", action="store_true", help="above-normal CPU priority (Windows)")
     r.add_argument(
         "--tail", type=float, default=15.0,
         help="keep recording this long after the clip (a busy laptop needs time to catch up)",
