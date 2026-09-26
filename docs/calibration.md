@@ -24,6 +24,16 @@ separate clock origin per service. Calibration profiles are measurement data:
 Section 4 must load the selected profile when wiring fusion's wearer threshold,
 sensor gains and audiovisual offset. They do not rewrite shared defaults.
 
+Capture timestamps use one PortAudio-to-engine clock mapping per stream, so
+callback scheduling jitter does not become a false audio gap. Both output sample
+rates use continuous soxr resampling; a real timestamp gap or overflow discards
+filter history. Windows preferred and fallback devices are explicitly selected
+from WASAPI. Capture availability and overflow/drop counts appear in the audio
+service health report. Utterance gain is established from the first speech chunk;
+trailing quiet chunks are not independently amplified.
+
+The device selection and timing fields follow the [sounddevice capture API](https://python-sounddevice.readthedocs.io/en/0.5.3/api/checking-hardware.html).
+
 ## Local models
 
 Services never download weights or send data to remote endpoints. Arrange downloads
@@ -35,7 +45,9 @@ machine; the CUDA package index is intended for the demo laptop, not this Mac.
 - Nemotron uses explicit encoder, decoder, joiner and token paths under `[nemotron]`.
   The released streaming Nemotron model is **English-only**. Set `audio.languages`
   to `["en"]` for it; missing local Nemotron weights select local Whisper instead.
-  Multilingual lists and auto detection use Whisper from the start, avoiding an
+  Runtime decoder failures also retry the accumulated utterance through local
+  Whisper; unavailable fallback weights discard partial recognition and report an
+  error. Multilingual lists and auto detection use Whisper from the start, avoiding an
   English recognizer silently corrupting Spanish. This differs from the build
   plan's assumption of multilingual Nemotron. See the [upstream model list](https://k2-fsa.github.io/sherpa/onnx/nemo/nemotron-streaming.html).
 - Whisper requires a local CTranslate2 large-v3-turbo directory under `[whisper]`.
@@ -118,7 +130,8 @@ left/right direction, motor suppression, acknowledge, 30-second re-alert and
 ## Verification and remaining checks
 
 Run `uv run --project engine --extra dev pytest tests/audio_language` and Ruff on
-this section's files. The tests use generated PCM and injected model responses;
+this section's files. The 50 tests use generated PCM, injected model responses and simulated devices;
+the capture tests additionally exercise the real soxr library when installed;
 they exercise service event flow, word timing, consent, privacy invalidation,
 language validation, priorities, rhythm bands and alert lifecycle. They do not
 establish real ASR accuracy, CUDA performance, EfficientAT accuracy, device
