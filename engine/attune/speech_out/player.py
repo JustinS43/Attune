@@ -13,6 +13,8 @@ from collections.abc import Callable, Iterable
 
 import numpy as np
 
+from attune.audio import portaudio
+
 logger = logging.getLogger(__name__)
 
 BLOCK = 2048  # samples per write, so a cancel is honoured within ~0.1 s
@@ -64,6 +66,17 @@ class SoundDevicePlayer:
         on_start: Callable[[], None] | None = None,
     ) -> float:
         """Blocking: play every chunk, return seconds played. Honours ``cancel``."""
+        # The mic may re-initialise PortAudio after a hot-plug; that must not free this stream.
+        with portaudio.stream_open():
+            return self._play(chunks, sample_rate, cancel, on_start)
+
+    def _play(
+        self,
+        chunks: Iterable[np.ndarray],
+        sample_rate: int,
+        cancel: threading.Event,
+        on_start: Callable[[], None] | None,
+    ) -> float:
         stream, rate = self._open(sample_rate)
         played = 0
         started = False

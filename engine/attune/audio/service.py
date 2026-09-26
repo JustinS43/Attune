@@ -91,7 +91,11 @@ class AudioService:
         self.worker.start()
         if self.mic is not False:
             self.mic = self.mic or MicReader(
-                cfg, self.clock, lambda block: self.worker.publish("audio.block", block)
+                cfg,
+                self.clock,
+                lambda block: self.worker.publish("audio.block", block),
+                # Only return to the preferred mic between utterances.
+                busy=lambda: self.segmenter.start is not None,
             )
             self.worker.health = self.mic.health
             try:
