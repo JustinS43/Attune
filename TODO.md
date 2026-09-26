@@ -138,6 +138,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
 - [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
 - [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
+- [ ] P-44 QA follow-ups: e2e covers the phone's ElevenLabs settings (a saved key is never shown back, other origins refused, works in the demo frame); privacy check follows automatic contacts; load-tolerant station, hub and file-camera tests; panel buttons keep their text colour, stat labels 11 px
 
 ## Gates and end-to-end checks (whole team)
 

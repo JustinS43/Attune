@@ -1010,20 +1010,35 @@ def scen_privacy(run: Run) -> list[Check]:
     # nothing personal written to disk
     after_files = run.main_root.data_files()
     new = sorted(set(after_files) - set(run.snap_before or {}))
+    # AGENTS.md: people clearly heard talking with the wearer become automatic contacts, kept
+    # as face and voice prints in data/people; never a photo or a recording, never elsewhere
     media = [
         f
         for f in new
         if re.search(
-            r"\.(jpe?g|png|webp|bmp|wav|mp3|ogg|flac|webm|mp4|npy|npz)$",
+            r"\.(jpe?g|png|webp|bmp|gif|wav|mp3|ogg|flac|m4a|webm|mp4)$",
             f,
             re.IGNORECASE,
         )
     ]
+    stray = [
+        f
+        for f in new
+        if re.search(r"\.(npy|npz)$", f, re.IGNORECASE) and not f.startswith("people/")
+    ]
+    contacts = sorted(
+        {f.split("/")[1] for f in new if f.count("/") >= 2 and f.startswith("people/")}
+    )
     out.append(
         check(
-            "privacy: no photos, audio or prints written during the flows",
-            not media,
-            {"new_files": new[:30]},
+            "privacy: no photos or audio written; prints only as contacts in data/people",
+            not media and not stray,
+            {
+                "photos_or_audio": media,
+                "prints_outside_people": stray,
+                "automatic_contacts": len(contacts),
+                "new_files": new[:20],
+            },
         )
     )
     for f in new:
