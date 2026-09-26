@@ -4,9 +4,7 @@ The wearer's phone view of Attune: live captions, people, name proposals, sound 
 
 ## Open it
 
-**From the Attune engine (live).** The engine serves this page at `/phone/`. On the laptop, open `http://localhost:8000/phone/`.
-
-From a real phone on the same Wi-Fi, the engine must listen on the network, not only on the laptop: start it with `--host 0.0.0.0`, then open `http://<laptop-ip>:8000/phone/` on the phone (`ipconfig` shows the laptop's IPv4 address). Windows may ask to allow Python through the firewall on private networks.
+**From the Attune engine (live).** The engine serves this page at `/phone/`. On the laptop, open `http://localhost:8000/phone/`. For the demo the phone is simulated on the laptop: on a desktop-sized window the page draws itself inside a phone frame, so put it in its own browser window beside the lens view. No real phone or app install is involved.
 
 **Against an engine elsewhere.** Add `?engine=host:port`, for example when serving the pages from another port during development:
 
@@ -41,4 +39,4 @@ The page connects to the engine's WebSocket through `web/shared/ws.js` with role
 
 Captions, names and settings live in the page's memory and disappear when the tab closes; nothing is written to the phone. The page talks only to the Attune engine (WebSocket and `/api/history`), asks for no camera or microphone, and inserts all engine text as text, never as HTML. Its Content Security Policy allows scripts and styles from its own origin only, and network connections to its own origin, WebSockets, and `localhost` (for `?engine=` during development). Only text the wearer sends to speak leaves the laptop (to ElevenLabs), and history is deleted after 24 hours, as the engine contract says.
 
-The link has no pairing or authentication yet: anyone on the same network who can open the page can control the engine. Use it on a trusted network for the demo.
+The engine listens on `127.0.0.1` only, so just the laptop itself can open this page. The link has no pairing or authentication, which is fine while the phone is simulated on the laptop.
