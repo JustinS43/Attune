@@ -31,6 +31,23 @@ voice thresholds were tuned on; if `--check` reports it wrong, you have another 
 models never match. Without a saved person, the demo can show speech placement but cannot
 verify saved-name accuracy.
 
+On a CPU-only laptop, the default large Whisper model may decode too slowly for a
+live rehearsal. For a diagnostic run, download the optional multilingual Base model
+and point a local config at it:
+
+```bash
+python scripts/download_models.py --yes whisper_cpu_config.json \
+    whisper_cpu_model.bin whisper_cpu_tokenizer.json whisper_cpu_vocabulary.txt
+```
+
+```toml
+[whisper]
+model_path = "models/faster-whisper-base"
+```
+
+This does not change the project's default model or its quality target. `--check`
+verifies required models by default; pass optional model names to check those too.
+
 Run everything from the repo root, so `config/`, `models/` and `data/` resolve:
 
 ```bash
