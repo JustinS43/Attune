@@ -271,11 +271,11 @@ def test_relays_and_audiences(hub_env):
         assert not kinds & {
             "status",
             "event_log",
-            "enroll_result",
             "hw_link",
             "people",
             "thumbnails",
         }
+        assert "enroll_result" in kinds  # the save flow's result shows on the glasses (P-28)
 
 
 def test_late_pages_get_the_current_hw_link(hub_env):

@@ -575,3 +575,49 @@ def test_whisper_final_preserves_non_latin_spacing_and_clamps_word_times():
     result = WhisperASR({"languages": ["zh"]}, model).feed(np.ones(16000), True)
     assert result.text == "你好。"
     assert result.words == [("你", 0, 0.4), ("好。", 1, 1)]
+
+
+def test_voice_enrollment_progress_and_failures(config, bus, tmp_path):
+    """P-28: voice progress for the glasses, and a reason when it cannot finish."""
+    voices = VoicePrints(tmp_path, lambda pcm: [1.0, 0.0], 0.5, 5, 1)
+    service = AudioService(bus, config, voices=voices, vad=lambda pcm: 0.0)
+    now = [0.0]
+    service.clock = lambda: now[0]
+    start = {"name": "enroll.start", "args": {"track_id": 1, "consent": True, "consent_t": 0}}
+    face_ok = {"part": "face", "person_id": "sam", "track_id": 1, "ok": True}
+    service._handle("command", start, 0)
+    service._handle("enroll.result", face_ok, 0)
+    progress = [e for t, e in bus.events if t == "enroll.progress"]
+    assert progress[-1] == {
+        "track_id": 1,
+        "person_id": "sam",
+        "part": "voice",
+        "fraction": 0.0,
+        "hint": "keep talking",
+    }
+    service.ring.append(0, np.ones(3 * 16000))
+    service.speech_intervals.append((0, 2))
+    caption = {"speaker": {"kind": "face", "track_id": 1}, "final": True}
+    service._handle("caption", caption | {"utt_id": "a", "words": [("Hi", 0, 2)]}, 0)
+    progress = [e for t, e in bus.events if t == "enroll.progress"]
+    assert progress[-1]["fraction"] == pytest.approx(0.4)
+    # their face leaves: the voice part fails with a reason, nothing is saved
+    service._handle("vision.track_lost", {"track_id": 1, "t": 3, "side": "left"}, 0)
+    result = [e for t, e in bus.events if t == "enroll.result"][-1]
+    assert result == {
+        "person_id": "sam",
+        "part": "voice",
+        "ok": False,
+        "reason": "stay in view",
+        "track_id": 1,
+    }
+    assert service.enrollment is None and not voices.enrolled
+    # they stay but never say enough: it gives up after voice.enroll_timeout_s
+    config["voice"]["enroll_timeout_s"] = 30.0
+    service._handle("command", start, 0)
+    service._handle("enroll.result", face_ok, 0)
+    now[0] = 31.0
+    service._handle("audio.block", {"t": 31.0, "sample_rate": 16000, "samples": np.zeros(512)}, 0)
+    result = [e for t, e in bus.events if t == "enroll.result"][-1]
+    assert (result["ok"], result["reason"]) == (False, "not enough speech")
+    assert service.enrollment is None and not voices.enrolled

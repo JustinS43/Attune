@@ -32,7 +32,7 @@ from .appearance import dominant_color, upper_body_box
 from .camera import Camera
 from .detector import FaceDetector
 from .embedder import FaceEmbedder, align, crop_quality
-from .enrollment import EnrollJob, finish, validate_request
+from .enrollment import EnrollJob, finish, hint, progress, validate_request
 from .gallery import Gallery, Identity, IdentityRules
 from .mouth import LipHistory, MouthMeter
 from .settings import load_settings
@@ -210,6 +210,7 @@ class VisionService:
                 int(tid), T.get(args, "name").strip(), str(T.get(args, "consent_t")), now
             )
             log.info("Enrolling %s from track %s", self.job.name, tid)
+            self._enroll_progress(now, force=True)
         elif name == "person.rename":
             person = self.gallery.rename(T.get(args, "person_id"), T.get(args, "name"))
             if person:
@@ -312,6 +313,8 @@ class VisionService:
 
         if self.job and t - self.job.start_t >= self.s.enroll_s:
             self._finish_enrollment(t)
+        elif self.job:
+            self._enroll_progress(t)
 
         t0 = time.perf_counter()
         self._lips(image, upd.active, t)
@@ -356,6 +359,7 @@ class VisionService:
             if not q.ok:
                 if prio == 0:
                     self.job.rejects[q.reason] += 1
+                    self.job.last_reject = (q.reason, t)
                 continue
             bucket = self._enroll_budget if prio == 0 else self._rec_budget
             if not bucket.take(t):
@@ -375,6 +379,7 @@ class VisionService:
             tr.data["recent"].append(emb)
             if prio == 0 and self.job:
                 self.job.prints.append(emb)
+                self.job.last_accept_t = t
             else:
                 self.rules.observe(tr.data["ident"], emb, t)
 
@@ -391,6 +396,7 @@ class VisionService:
                 "Enrollment of %s refused: %s (%d good crops)", job.name, reason, len(job.prints)
             )
             return
+        self._enroll_progress(t, force=True, job=job, fraction=1.0)
         person = self.gallery.enroll(job.name, prints, job.consent_t)
         tr = self._find(job.track_id)
         if tr is not None:
@@ -403,6 +409,32 @@ class VisionService:
         )
         log.info(
             "Enrolled %s as %s with %d face prints", person.name, person.person_id, len(prints)
+        )
+
+    def _enroll_progress(
+        self,
+        t: float,
+        force: bool = False,
+        job: EnrollJob | None = None,
+        fraction: float | None = None,
+    ) -> None:
+        """`enroll.progress` for the face part, at most 5 times a second (P-28)."""
+        job = job or self.job
+        if job is None or (not force and t - job.last_progress_t < 0.2):
+            return
+        job.last_progress_t = t
+        frac = (
+            progress(job, t, self.s.enroll_s, self.s.enroll_crops) if fraction is None else fraction
+        )
+        self.bus.publish(
+            T.ENROLL_PROGRESS,
+            {
+                "track_id": job.track_id,
+                "person_id": None,
+                "part": "face",
+                "fraction": round(frac, 3),
+                "hint": hint(job, t),
+            },
         )
 
     def _lips(self, image: np.ndarray, active: list[FaceTrack], t: float) -> None:

@@ -194,6 +194,7 @@ class Hub:
         self._part_ok: dict[str, bool] = {}
         self._hw_connected: bool | None = None
         self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
+        self.save_pending: dict | None = None  # the save request waiting for consent (P-28)
 
         # shared with the encoder thread
         self._frame: Any = None
@@ -225,6 +226,9 @@ class Hub:
             C.PAUSED: self._on_paused_bus,
             C.CAMERA_STATE: lambda ev: post(self._on_camera, ev),
             C.ENROLL_RESULT: lambda ev: post(self._on_enroll_result, ev),
+            C.ENROLL_PROGRESS: lambda ev: post(self._on_relay, C.WS_ENROLL_PROGRESS, ev),
+            C.SAVE_REQUEST: lambda ev: post(self._on_save, C.WS_SAVE_REQUEST, ev),
+            C.SAVE_CANCEL: lambda ev: post(self._on_save, C.WS_SAVE_CANCEL, ev),
             C.PERSON_CHANGED: lambda ev: post(self._on_person_changed, ev),
             C.HW_LINK: self._on_hw_link_bus,
             C.STATUS: lambda ev: post(self._on_status, ev),
@@ -380,6 +384,18 @@ class Hub:
         if msg_type == C.WS_NAME_PROPOSAL:
             self._log_event(f"Name {body.get('name')}: {body.get('state')}")
 
+    def _on_save(self, msg_type: str, ev: Any) -> None:
+        """Save a person (P-28): the consent request and its end go to every page."""
+        body = to_jsonable(ev)
+        self.broadcast(msg_type, body)
+        if msg_type == C.WS_SAVE_REQUEST:
+            self.save_pending = body
+            self._log_event(f"Save {body.get('name')}? Waiting for their consent")
+        else:
+            if self.save_pending and self.save_pending.get("request_id") == body.get("request_id"):
+                self.save_pending = None
+            self._log_event(f"Save {body.get('name') or 'request'}: {body.get('reason')}")
+
     def _on_alert(self, ev: Any) -> None:
         body = to_jsonable(ev)
         self.broadcast(C.WS_ALERT, body)
@@ -459,12 +475,22 @@ class Hub:
             self._log_event(f"{part}: {get(ev, 'detail', '') or 'not running'}")
 
     def _on_forget(self, ev: Any) -> None:
+        self.save_pending = None
         self.captions.clear()
         self.translations.clear()
         self.event_log.clear()
         self._log_event("Session forgotten")
 
     def _on_command_event(self, ev: Any) -> None:
+        args = get(ev, "args") or {}
+        pending = self.save_pending
+        if (
+            get(ev, "name") == "enroll.start"
+            and pending
+            and isinstance(args, dict)
+            and args.get("request_id") == pending.get("request_id")
+        ):
+            self.save_pending = None  # consent given; the enrollment reports from here
         if get(ev, "name") == "mark":
             note = (get(ev, "args") or {}).get("note", "")
             self._log_event(f"Mark: {note}" if note else "Mark")
@@ -539,6 +565,9 @@ class Hub:
             client.push(C.WS_PEOPLE, {"people": self.people})
         if role in C.WS_AUDIENCE[C.WS_HW_LINK] and self._hw_link is not None:
             client.push(C.WS_HW_LINK, to_jsonable(self._hw_link))
+        pending = self.save_pending
+        if pending is not None and self.clock() < float(pending.get("expires_t") or 0):
+            client.push(C.WS_SAVE_REQUEST, pending)  # a page that opens late can still consent
         if role == "console":
             if self.latest_status is not None:
                 client.push(C.WS_STATUS, self.latest_status)

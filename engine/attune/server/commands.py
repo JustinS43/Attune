@@ -8,7 +8,7 @@ command names are logged and ignored.
 
 The engine owns four commands and handles them from the bus `command` topic, so
 they work the same whoever sends them (a page, or Section 3's touch router, which
-publishes `command` pause.toggle on a double tap):
+publishes `command` pause.toggle on a triple tap):
 
 - `pause.toggle`: flips the pause state and publishes `paused` {paused}.
 - `session.forget`: publishes `session.forget` {} so every section wipes session data.

@@ -1,4 +1,10 @@
-"""Audio service: capture, VAD, ASR, mute gating and consented voice prints."""
+"""Audio service: capture, VAD, ASR, mute gating and consented voice prints.
+
+Voice enrollment (after a consented face result) reports `enroll.progress` {part: voice,
+fraction = seconds of their speech collected / voice.enroll_s} as their captions arrive
+(TODO P-28), and ends with a failed `enroll.result` when their face leaves the view ("stay in
+view") or `voice.enroll_timeout_s` passes without enough speech ("not enough speech").
+"""
 
 from __future__ import annotations
 
@@ -213,9 +219,10 @@ class AudioService:
                     "started_t": self.clock(),
                 }
                 self.pending_consent = None
+                self._voice_progress(0.0, "keep talking", generation)
         elif topic == "vision.track_lost":
             if self.enrollment and self.enrollment["track_id"] == e["track_id"]:
-                self.enrollment = None
+                self._voice_failed("stay in view", generation)
             if self.pending_consent and self.pending_consent["track_id"] == e["track_id"]:
                 self.pending_consent = None
         elif topic == "caption" and e.get("final") and self.enrollment:
@@ -233,7 +240,9 @@ class AudioService:
                 audio = self._speech_span(a, b)
                 self.enrollment["audio"].append(audio)
                 combined = np.concatenate(self.enrollment["audio"])
-                if len(combined) >= self.config["voice"]["enroll_s"] * 16000:
+                need = self.config["voice"]["enroll_s"] * 16000
+                self._voice_progress(min(1.0, len(combined) / need), "", generation)
+                if len(combined) >= need:
                     request = self.enrollment
                     self.voices.enroll(
                         request["person_id"],
@@ -258,7 +267,39 @@ class AudioService:
                     )
                     self.enrollment = None
         elif topic == "audio.block" and e["sample_rate"] == 16000:
+            timeout = float(self.config["voice"].get("enroll_timeout_s", 45.0))
+            if self.enrollment and self.clock() - self.enrollment["started_t"] > timeout:
+                self._voice_failed("not enough speech", generation)
             self._audio(e, generation)
+
+    def _voice_progress(self, fraction: float, hint: str, generation: int) -> None:
+        request = self.enrollment
+        self.worker.publish(
+            "enroll.progress",
+            {
+                "track_id": request["track_id"],
+                "person_id": request["person_id"],
+                "part": "voice",
+                "fraction": round(fraction, 3),
+                "hint": hint,
+            },
+            generation,
+        )
+
+    def _voice_failed(self, reason: str, generation: int) -> None:
+        """End a running voice enrollment without saving anything, and say why."""
+        request, self.enrollment = self.enrollment, None
+        self.worker.publish(
+            "enroll.result",
+            {
+                "person_id": request["person_id"],
+                "part": "voice",
+                "ok": False,
+                "reason": reason,
+                "track_id": request["track_id"],
+            },
+            generation,
+        )
 
     def _audio(self, e: dict, generation: int) -> None:
         samples = np.asarray(e["samples"], dtype=np.float32)
