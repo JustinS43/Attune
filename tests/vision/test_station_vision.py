@@ -341,7 +341,7 @@ def test_station_save_names_the_glasses_face_at_once(tmp_path, two_people):
         h.svc.station.stop()
     phases = [s["phase"] for s in h.states()]
     assert "mismatch" not in phases and phases[-1] == "done", phases
-    res = [r for r in h.bus.published[T.ENROLL_RESULT] if r.part == "face"][-1]
+    res = [r for r in h.bus.published[T.ENROLL_RESULT] if T.get(r, "part") == "face"][-1]
     assert res.ok and res.source == "station" and res.track_id == a.track_id
     pid = res.person_id
     assert h.bus.last(T.PERSON_CHANGED) == T.PersonChanged(pid, "Alex", "enrolled")
@@ -382,7 +382,7 @@ def test_someone_else_at_the_laptop_is_caught(tmp_path, two_people):
     finally:
         h.svc.station.stop()
     assert h.states()[-1]["phase"] == "done"
-    res = [r for r in h.bus.published[T.ENROLL_RESULT] if r.part == "face"][-1]
+    res = [r for r in h.bus.published[T.ENROLL_RESULT] if T.get(r, "part") == "face"][-1]
     assert res.ok and res.track_id is None  # not linked to the glasses face
     face = h.main_face(h.glasses(0.3, A[0]))
     assert face.track_id == a.track_id and face.name != "Alex"

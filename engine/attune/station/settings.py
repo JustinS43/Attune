@@ -45,7 +45,7 @@ class EnrollSettings:
     dominant_ratio: float = 1.3  # the person must be this much wider than any other face
     same_person: float = 0.4  # every print must be this close to the session's first prints
     # Identity check: the station face against the glasses track the save started from.
-    identity_match: float = 0.3
+    identity_match: float = 0.35  # LFW: same person >= 0.55, others <= 0.24
     decision_timeout_s: float = 60.0  # "That isn't the person you were looking at" waits this long
     # Voice step: read the sentence into the laptop mic; [voice] enroll_s of voiced speech.
     sentence: str = DEFAULT_SENTENCE

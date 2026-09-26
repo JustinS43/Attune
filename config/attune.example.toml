@@ -213,7 +213,9 @@ min_face_share = 0.22            # face narrower than this share of the preview:
 max_face_share = 0.8             # wider: "move back a little"
 dominant_ratio = 1.3             # the person must be this much wider than any other face
 same_person = 0.4                # every print this close to the first ones (one person only)
-identity_match = 0.3             # station face vs the glasses face the save started from
+# station face vs the glasses face the save started from (median of best matches). LFW, real
+# models, 143 people: the same person scored 0.55-0.84, different people -0.07-0.24
+identity_match = 0.35
 decision_timeout_s = 60          # "That isn't the person you were looking at" waits this long
 sentence = "Every morning I walk my dog through the park, buy fresh bread and orange juice, and enjoy watching children play by the quiet river."
 voice_timeout_s = 40
