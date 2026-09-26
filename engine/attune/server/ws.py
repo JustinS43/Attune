@@ -20,6 +20,10 @@ Enrollment station (V-23): `enroll.station` commands get the sending page's `cli
 `enroll_state`, `enroll_preview`, `enroll_level` and `enroll_mismatch` go only to that page
 (if it reconnects, the next phone to say hello takes the save over). Previews use a one-slot
 buffer like frames, so a slow phone skips them instead of queueing.
+
+A page that says hello (first time or after a reconnect) gets the recent captions again
+(A-22), so nothing said while it was away is lost: the phone and console get every caption
+the hub remembers, the lens only those still on screen (`bubble_fade_s` + 3 s).
 """
 
 from __future__ import annotations
@@ -209,6 +213,7 @@ class Hub:
         self._paused = False
         self.captions: OrderedDict[str, dict] = OrderedDict()
         self.translations: OrderedDict[str, str] = OrderedDict()
+        self.caption_t: dict[str, float] = {}  # when each remembered caption last changed
         self.event_log: deque[dict] = deque(maxlen=50)
         self.people: list[dict] = []
         self.latest_status: dict | None = None
@@ -390,8 +395,10 @@ class Hub:
             msg["translation"] = self.translations[utt]
         self.captions[utt] = msg
         self.captions.move_to_end(utt)
+        self.caption_t[utt] = self.clock()
         while len(self.captions) > CAPTION_MEMORY:
-            self.captions.popitem(last=False)
+            gone, _ = self.captions.popitem(last=False)
+            self.caption_t.pop(gone, None)
         self.broadcast(C.WS_CAPTION, msg)
 
     def _on_caption_retract(self, ev: Any) -> None:
@@ -400,6 +407,7 @@ class Hub:
         if utt is None:
             return
         self.captions.pop(str(utt), None)
+        self.caption_t.pop(str(utt), None)
         self.translations.pop(str(utt), None)
         self.broadcast(C.WS_CAPTION_RETRACT, {"utt_id": utt})
 
@@ -414,6 +422,7 @@ class Hub:
         if caption is not None:
             caption = {**caption, "translation": text}
             self.captions[utt] = caption
+            self.caption_t[utt] = self.clock()
             self.broadcast(C.WS_CAPTION, caption)
 
     def _on_relay(self, msg_type: str, ev: Any) -> None:
@@ -561,6 +570,7 @@ class Hub:
     def _on_forget(self, ev: Any) -> None:
         self.save_pending = None
         self.captions.clear()
+        self.caption_t.clear()
         self.translations.clear()
         self.event_log.clear()
         self._log_event("Session forgotten")
@@ -649,6 +659,7 @@ class Hub:
                 "config": self.welcome_config,
             },
         )
+        self._replay_captions(client, role)
         if role in C.WS_AUDIENCE[C.WS_PEOPLE]:
             client.push(C.WS_PEOPLE, {"people": self.people})
         if role in C.WS_AUDIENCE[C.WS_HW_LINK] and self._hw_link is not None:
@@ -666,6 +677,19 @@ class Hub:
                 client.push(C.WS_STATUS, self.latest_status)
             for entry in list(self.event_log):
                 client.push(C.WS_EVENT_LOG, entry)
+
+    def _replay_captions(self, client: Client, role: str) -> None:
+        """Send a page that just connected the captions it missed (A-22)."""
+        if role not in C.WS_AUDIENCE[C.WS_CAPTION]:
+            return
+        if role == "lens":
+            # only what would still be on the glasses, so a reconnect never floods them
+            since = self.clock() - float(self.welcome_config["bubble_fade_s"]) - 3.0
+        else:
+            since = float("-inf")
+        for utt, msg in list(self.captions.items()):
+            if self.caption_t.get(utt, float("-inf")) >= since:
+                client.push(C.WS_CAPTION, msg)
 
     async def sender(self, client: Client) -> None:
         """Send one page its queued JSON messages, then its newest frame."""

@@ -78,11 +78,22 @@ vad_start = 0.5
 vad_end = 0.35
 min_speech_ms = 250
 end_silence_ms = 400
-asr_chunk_ms = 560
+asr_chunk_ms = 32                # feed the recogniser every VAD frame: it decodes each 560 ms chunk
+                                # as soon as its audio is in (A-22; 560 made words wait ~0.45 s more)
+pre_roll_ms = 320               # audio kept before speech starts; padded with silence when shorter
 languages = ["en", "es"]        # empty = auto-detect
 mute_after_reply_s = 0.5
+soft_split_s = 5                # a longer utterance ends at its next pause, so finals (history,
+                                # translation) keep coming during a monologue (10 s: ~12 s late)
+soft_split_gap_s = 0.1          # ...a pause is this much silence (the VAD dips inside words too)
+split_context_s = 120           # a split carries on the recogniser's stream (a fresh one drops the
+                                # first words of quiet speech) until it has heard this much
 max_utterance_s = 30
 target_rms = 0.1
+rescue_max_s = 2.5              # a short utterance heard as nothing is decoded again on the side
+voice_match_every_s = 1.0       # voice match at most this often per utterance (and at its end)...
+voice_match_max_s = 6.0         # ...on its newest 6 s of speech (the whole utterance stalled audio)
+inbox_s = 30                    # audio queued while a step is slow is kept, never dropped
 
 [alerts]
 window_s = 1.0
@@ -108,6 +119,13 @@ name_confidence = 0.8
 timeout_s = 1.5
 max_queue = 32
 reply_context_lines = 6
+reply_delay_s = 1.0              # A-23: suggest replies once the talk pauses, not after every final
+description_max_px = 224         # clothing crops are shrunk to this before the model reads them
+[llm.timeouts]                   # per job kind; others use timeout_s. A slow job is skipped and
+translation = 4.0                # never blocks a translation (it is stopped and runs after it)
+names = 3.0
+replies = 4.0
+descriptions = 4.0
 
 # ---------- Section 3 - Hardware & Services ----------
 [hardware]
@@ -132,6 +150,7 @@ presets = [
 [history]
 db_path = "data/history.db"
 retention_hours = 24             # rows older than this are deleted
+orphan_draft_s = 10              # a draft caption whose final never came is saved after this long
 
 # ---------- Section 4 - Pages ----------
 [pages]
@@ -158,7 +177,9 @@ decoder = "models/nemotron/decoder.int8.onnx"
 joiner = "models/nemotron/joiner.int8.onnx"
 provider = "cpu"
 num_threads = 2
-flush_s = 0.8
+flush_s = 0.4                   # silence after a final: 0.4 decodes every last word, 0.8 cost ~0.2 s
+word_settle_s = 1.5             # a split mid-talk keeps the last word for the next utterance
+                                # (it may be half decoded) unless this much audio came after it
 
 [whisper]
 model_path = "models/faster-whisper-large-v3-turbo"

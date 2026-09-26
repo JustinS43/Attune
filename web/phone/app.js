@@ -958,6 +958,20 @@ function goLive() {
   state.powered = true;
 }
 
+function showCaptions() {
+  if (state.screen === 'live') {
+    const feed = document.querySelector('#live-feed');
+    if (feed) {
+      const atBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 40;
+      fillLiveFeed(feed);
+      if (atBottom) viewport.scrollTop = viewport.scrollHeight;
+    }
+  } else if (state.screen === 'home') {
+    const preview = document.querySelector('#home-preview');
+    if (preview) fillHomePreview(preview);
+  }
+}
+
 function onMessage(msg) {
   saveSheet.onMessage(msg); // P-29: the "Save this person?" sheet over any screen
   station.onMessage(msg); // P-35: saving at the laptop camera and mic, over any screen
@@ -979,17 +993,15 @@ function onMessage(msg) {
       const entry = {...msg, time: i >= 0 ? state.captions[i].time : timeNow()};
       if (i >= 0) state.captions[i] = entry; else state.captions.push(entry);
       if (state.captions.length > 80) state.captions.splice(0, state.captions.length - 80);
-      if (state.screen === 'live') {
-        const feed = document.querySelector('#live-feed');
-        if (feed) {
-          const atBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 40;
-          fillLiveFeed(feed);
-          if (atBottom) viewport.scrollTop = viewport.scrollHeight;
-        }
-      } else if (state.screen === 'home') {
-        const preview = document.querySelector('#home-preview');
-        if (preview) fillHomePreview(preview);
-      }
+      showCaptions();
+      break;
+    }
+    case 'caption_retract': {
+      // a segment the engine folded back into its utterance: its words are in another caption
+      const i = state.captions.findIndex(c => c.utt_id === msg.utt_id);
+      if (i < 0) break;
+      state.captions.splice(i, 1);
+      showCaptions();
       break;
     }
     case 'people':

@@ -750,6 +750,29 @@ class SpeakerFusion:
             return before
         return after or before
 
+    def _speaker_may_come(self, now: float) -> bool:
+        """Could a speaker be decided within `first_words_wait_ms`? (V-24)
+
+        Holding the first words back only helps while a visible mouth is moving but not
+        yet judged talking (or Light-ASD's score for it is not clearly "silent"), or while
+        a known voice may still be matched. With every face still or none on screen, and
+        no voice to match, the words are shown at once as "Someone".
+        """
+        covered = self.asd_gate.covered(self, now)
+        for tr in self.tracks.values():
+            if now - tr.t > 0.5:
+                continue
+            asd = covered.get(tr.track_id)
+            if asd is not None:
+                if asd.score >= self.s.asd_off:
+                    return True
+            elif tr.stirring or tr.moving or tr.probable:
+                return True
+        start = self.speech_start if self.speech_start is not None else now
+        known = any(m[2] for m in self.voice_matches)
+        heard = any(m[0] >= start - 0.5 for m in self.voice_matches)
+        return known and not heard
+
     def _captions_for(self, ev, now: float, first_seen: float) -> list[Caption] | None:
         """The captions for one transcript draft, or None to wait a little for a speaker.
 
@@ -771,6 +794,7 @@ class SpeakerFusion:
             mem is None
             and (first is None or first.kind == "someone")
             and now - first_seen < self.s.first_words_wait_ms / 1000
+            and self._speaker_may_come(now)
         ):
             return None  # wait a little for a speaker (only before anything is shown)
         evidence = [self.speaker_at(_mid(w)) or _someone() for w in words]
