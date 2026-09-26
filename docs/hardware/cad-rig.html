@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attune Prototype Rig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --ground: #ECEFF3;
+  --panel: #FFFFFF;
+  --panel-2: #F5F7F9;
+  --ink: #15202B;
+  --ink-2: #526072;
+  --ink-3: #788596;
+  --rule: #D6DCE4;
+  --rule-2: #B8C2CE;
+  --accent: #0A8470;
+  --accent-ink: #065A4C;
+  --accent-soft: #DBF1EC;
+  --warn: #8A5A00;
+  --warn-soft: #FFF1D6;
+  --warn-rule: #E8C987;
+  --vp: #E1E6EC;
+  --vp-grid-1: #B3BECB;
+  --vp-grid-2: #CDD5DE;
+  --vp-edge: #0C1219;
+  --vp-leader: #3C4858;
+  --ghost: #8FA1B6;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #0C1015; --panel: #131920; --panel-2: #0F141A; --ink: #E2E8EF; --ink-2: #9AA7B7; --ink-3: #6E7B8B;
+    --rule: #232C37; --rule-2: #34404F; --accent: #55D6BF; --accent-ink: #8DEEDC; --accent-soft: #0F322C;
+    --warn: #F0B54A; --warn-soft: #30240E; --warn-rule: #5E4717;
+    --vp: #0F141A; --vp-grid-1: #2A3647; --vp-grid-2: #1A2330; --vp-edge: #A3B3C6; --vp-leader: #8D9CAF; --ghost: #7489A1;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0C1015; --panel: #131920; --panel-2: #0F141A; --ink: #E2E8EF; --ink-2: #9AA7B7; --ink-3: #6E7B8B;
+  --rule: #232C37; --rule-2: #34404F; --accent: #55D6BF; --accent-ink: #8DEEDC; --accent-soft: #0F322C;
+  --warn: #F0B54A; --warn-soft: #30240E; --warn-rule: #5E4717;
+  --vp: #0F141A; --vp-grid-1: #2A3647; --vp-grid-2: #1A2330; --vp-edge: #A3B3C6; --vp-leader: #8D9CAF; --ghost: #7489A1;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--ground); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.sheet { max-width: 1320px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 32px); padding-block: 22px 56px; display: grid; gap: 18px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.titleblock { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 32px; align-items: end; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+.eyebrow { font: 500 12px/1.3 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { font-family: var(--f-display); font-weight: 600; font-size: clamp(32px, 4.4vw, 50px); line-height: 1; letter-spacing: -0.01em; margin: 8px 0 10px; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); max-width: 66ch; }
+.tb { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); margin: 0; border: 1.5px solid var(--ink); background: var(--panel); }
+.tb div { padding: 6px 12px 7px; border-right: 1px solid var(--rule-2); border-bottom: 1px solid var(--rule-2); min-width: 104px; }
+.tb div:nth-child(3n) { border-right: 0; }
+.tb div:nth-last-child(-n+3) { border-bottom: 0; }
+.tb dt { font: 500 10px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.tb dd { margin: 2px 0 0; font: 500 14px/1.3 var(--f-mono); font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .titleblock { grid-template-columns: minmax(0, 1fr); } .tb { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tb div { min-width: 0; } }
+
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 16px; align-items: start; }
+.cad { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+.seg { display: inline-flex; border: 1px solid var(--rule-2); border-radius: 7px; overflow: hidden; }
+.seg button { font: 500 12px/1 var(--f-mono); padding: 8px 10px; background: transparent; color: var(--ink-2); border: 0; border-right: 1px solid var(--rule); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { color: var(--ink); background: var(--panel-2); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.explode { display: inline-flex; align-items: center; gap: 8px; font: 500 12px/1 var(--f-mono); color: var(--ink-2); }
+.explode input { width: 116px; accent-color: var(--accent); }
+.explode output { min-width: 3.2em; font-variant-numeric: tabular-nums; }
+.alert-btn { position: absolute; top: 10px; right: 10px; z-index: 4; font: 500 12px/1 var(--f-mono); padding: 8px 11px; border-radius: 7px; border: 1px solid var(--warn-rule); background: var(--warn-soft); color: var(--warn); cursor: pointer; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+.alert-btn:hover { filter: brightness(0.97); }
+#viewport { position: relative; height: clamp(440px, 70vh, 760px); background: var(--vp); touch-action: none; overflow: hidden; }
+#viewport > canvas { display: block; }
+.labels { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.callouts { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.callouts svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.leader { stroke: var(--vp-leader); stroke-width: 1; }
+.leader.is-hot { stroke: var(--accent); stroke-width: 1.6; }
+.pin-dot { fill: var(--accent); }
+.callouts.compact .balloon { padding: 3px; }
+.callouts.compact .balloon span { display: none; }
+.balloon { position: absolute; left: 0; top: 0; pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 999px; background: var(--panel); border: 1px solid var(--rule-2); color: var(--ink); font: 500 12px/1 var(--f-mono); white-space: nowrap; cursor: pointer; }
+.balloon b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--ink); font-weight: 500; font-size: 11px; }
+.balloon.own b { border-style: dashed; border-color: var(--ink-3); }
+.balloon.is-hot { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.balloon.is-hot b { border-color: var(--accent); border-style: solid; }
+.dimlabel { font: 500 11px/1 var(--f-mono); color: var(--accent-ink); background: var(--vp); padding: 2px 4px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.vp-hint { position: absolute; z-index: 3; left: 12px; bottom: 10px; font: 400 11px/1.3 var(--f-mono); color: var(--ink-3); pointer-events: none; max-width: calc(100% - 120px); }
+.vp-status { position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; font: 500 13px/1.5 var(--f-mono); color: var(--ink-2); pointer-events: none; }
+.vp-toast { position: absolute; z-index: 3; top: 52px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100% - 24px)); padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); border: 1px solid var(--warn-rule); color: var(--ink); font: 500 12.5px/1.4 var(--f-body); pointer-events: none; text-align: center; }
+
+.bom { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: auto; }
+@media (min-width: 961px) { .bom { max-height: calc(clamp(440px, 70vh, 760px) + 56px); } }
+.bom-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--rule); }
+.bom h2 { font-family: var(--f-display); font-weight: 600; font-size: 22px; line-height: 1.1; margin: 0 0 4px; }
+.bom-head p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.grp { padding: 6px 8px 10px; border-bottom: 1px solid var(--rule); }
+.grp:last-child { border-bottom: 0; }
+.grp h3 { font: 500 11px/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 8px 8px 6px; }
+.row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; align-items: start; width: 100%; text-align: left; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+.row:hover, .row.is-hot { background: var(--accent-soft); }
+.row .num { grid-row: span 2; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--ink); display: grid; place-items: center; font: 500 11px/1 var(--f-mono); margin-top: 1px; }
+.row.own .num { border-style: dashed; border-color: var(--ink-3); color: var(--ink-2); }
+.row .name { font-weight: 500; font-size: 14px; line-height: 1.35; }
+.row .qty { font: 500 12px/1.6 var(--f-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.row .where { grid-column: 2 / 4; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
+.row .off { font: 400 11px/1 var(--f-mono); color: var(--ink-3); }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px 18px; min-width: 0; }
+.card h2 { font-family: var(--f-display); font-weight: 600; font-size: 24px; line-height: 1.1; margin: 0 0 4px; }
+.card .sub { margin: 0 0 14px; font-size: 14px; color: var(--ink-2); max-width: 60ch; }
+.scroll-x { overflow-x: auto; }
+table.pins { border-collapse: collapse; width: 100%; min-width: 500px; font-size: 13.5px; }
+.pins th { text-align: left; font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding: 6px 8px; border-bottom: 1.5px solid var(--rule-2); }
+.pins td { padding: 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.pins tr:last-child td { border-bottom: 0; }
+.pins .pin { font: 500 13px/1.4 var(--f-mono); color: var(--accent-ink); white-space: nowrap; }
+.w { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(127,127,127,.45); }
+.w-y { background: #E4BE22; } .w-r { background: #D23B30; } .w-k { background: #16181B; } .w-o { background: #E9892B; } .w-w { background: #E8E8E2; } .w-u { background: #7C8591; }
+.fine { font-size: 12.5px; color: var(--ink-2); margin: 12px 0 0; }
+.flow { display: grid; grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr); grid-template-areas: "jbl . ." "a1 . ." "rig a2 pack" "a3 . a4" "lap lap lap" "a5 . a6" "scr . ph"; }
+.fn { border: 1.2px solid var(--rule-2); background: var(--panel-2); border-radius: 8px; padding: 9px 12px 10px; min-width: 0; }
+.fn b { display: block; font: 600 16px/1.2 var(--f-display); }
+.fn span { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
+.fn.brain { background: var(--accent-soft); border-color: var(--accent); }
+.fa { position: relative; min-height: 50px; }
+.fa::before { content: ""; position: absolute; left: 50%; top: 2px; bottom: 2px; border-left: 1.5px solid var(--ink-2); }
+.fa.dash::before { border-left-style: dashed; }
+.fa i, .fh i { position: absolute; width: 0; height: 0; border: 5px solid transparent; }
+.fa i { left: calc(50% - 4.25px); bottom: 0; border-top: 7px solid var(--ink-2); border-bottom: 0; }
+.fa i.up { top: 0; bottom: auto; border-top: 0; border-bottom: 7px solid var(--ink-2); }
+.fa em, .fh em { font: 500 11px/1.25 var(--f-mono); font-style: normal; color: var(--ink-3); }
+.fa em { position: absolute; left: calc(50% + 10px); right: 0; top: 50%; transform: translateY(-50%); }
+.fh { position: relative; align-self: center; height: 12px; }
+.fh::before { content: ""; position: absolute; left: 2px; right: 2px; top: 50%; border-top: 1.5px solid var(--ink-2); }
+.fh i.l { left: 0; top: calc(50% - 4.25px); border-left: 0; border-right: 7px solid var(--ink-2); }
+.fh i.r { right: 0; top: calc(50% - 4.25px); border-right: 0; border-left: 7px solid var(--ink-2); }
+.fh em { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); text-align: center; }
+ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 11px; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; font-size: 14.5px; }
+ol.steps li::before { content: counter(step); width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--ink); display: grid; place-items: center; font: 500 11px/1 var(--f-mono); }
+ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14.5px; }
+ul.notes li::marker { color: var(--ink-3); }
+.warnbox { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); border: 1px solid var(--warn-rule); font-size: 13.5px; }
+.warnbox b { color: var(--warn); font-weight: 600; }
+.unused { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 110ch; }
+.unused b { font-weight: 500; color: var(--ink); }
+@media (max-width: 960px) { .workspace { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  table.pins { min-width: 0; font-size: 12.5px; }
+  .pins th, .pins td { padding: 7px 5px; }
+  .pins .pin { white-space: normal; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="sheet">
+  <header class="titleblock">
+    <div>
+      <div class="eyebrow">Hackathon prototype · CAD view</div>
+      <h1>Attune prototype rig</h1>
+      <p class="lede">A webcam and sensors taped to your own glasses, wired to a small Arduino pack on your chest, feeding the Attune app on your laptop. Every electronic part comes from the MLH Hardware Lab menu.</p>
+    </div>
+    <dl class="tb">
+      <div><dt>Dwg no.</dt><dd>ATN-RIG-01</dd></div>
+      <div><dt>Rev</dt><dd>A</dd></div>
+      <div><dt>Units</dt><dd>mm</dd></div>
+      <div><dt>Scale</dt><dd>1:1 model</dd></div>
+      <div><dt>Worn mass</dt><dd>≈150 g est.</dd></div>
+      <div><dt>Date</dt><dd>2026-09-25</dd></div>
+    </dl>
+  </header>
+
+  <section class="workspace">
+    <div class="cad">
+      <div class="toolbar" role="toolbar" aria-label="3D view controls">
+        <div class="seg" role="group" aria-label="Camera view">
+          <button type="button" data-view="iso" aria-pressed="true">Iso</button>
+          <button type="button" data-view="front" aria-pressed="false">Front</button>
+          <button type="button" data-view="side" aria-pressed="false">Side</button>
+          <button type="button" data-view="top" aria-pressed="false">Top</button>
+          <button type="button" data-view="glasses" aria-pressed="false">Glasses</button>
+        </div>
+        <label class="explode" for="explode">Explode <input id="explode" type="range" min="0" max="100" step="1" value="0"><output id="explode-out" for="explode">0%</output></label>
+        <div class="seg" role="group" aria-label="Show in model">
+          <button type="button" id="t-labels" aria-pressed="true">Labels</button>
+          <button type="button" id="t-dims" aria-pressed="false">Dimensions</button>
+          <button type="button" id="t-head" aria-pressed="true">Head</button>
+        </div>
+      </div>
+      <div id="viewport">
+        <button type="button" class="alert-btn" id="alert">Simulate smoke alarm</button>
+        <div class="vp-status" id="vp-status">Loading 3D model…</div>
+        <div class="vp-toast" id="vp-toast" role="status" hidden></div>
+        <div class="vp-hint">Drag to orbit · scroll or pinch to zoom · right-drag to pan · click a label to focus it</div>
+      </div>
+    </div>
+
+    <aside class="bom" aria-labelledby="bom-h">
+      <div class="bom-head">
+        <h2 id="bom-h">Bill of materials</h2>
+        <p>Numbers match the labels in the model. Point at a row to highlight the part; click to fly to it.</p>
+      </div>
+      <div class="grp">
+        <h3>Worn on the glasses</h3>
+        <button type="button" class="row" data-item="1"><span class="num">1</span><span class="name">Logitech Webcam</span><span class="qty">×1</span><span class="where">Camera and microphone, clipped over the bridge</span></button>
+        <button type="button" class="row" data-item="2"><span class="num">2</span><span class="name">Sound Sensor</span><span class="qty">×2</span><span class="where">Outside each temple; comparing left and right loudness gives the direction of a sound</span></button>
+        <button type="button" class="row" data-item="3"><span class="num">3</span><span class="name">LED Socket Kit</span><span class="qty">×2</span><span class="where">On each hinge, LED bent to face your eye; flashes on the side an alarm came from</span></button>
+        <button type="button" class="row" data-item="4"><span class="num">4</span><span class="name">Touch Sensor</span><span class="qty">×1</span><span class="where">Right temple; tap to confirm a name</span></button>
+        <button type="button" class="row" data-item="5"><span class="num">5</span><span class="name">130 Mini DC Brushless Motor</span><span class="qty">×1</span><span class="where">Right temple tip, tape weight on the shaft so it buzzes on alerts</span></button>
+      </div>
+      <div class="grp">
+        <h3>Control pack, on your chest</h3>
+        <button type="button" class="row" data-item="6"><span class="num">6</span><span class="name">Arduino Kit</span><span class="qty">×1</span><span class="where">Reads the sensors, drives the LEDs and motor, talks to the laptop over USB</span></button>
+        <button type="button" class="row" data-item="7"><span class="num">7</span><span class="name">Solderless Breadboard</span><span class="qty">×1</span><span class="where">5 V and ground rails; every module plugs in here</span></button>
+        <button type="button" class="row" data-item="8"><span class="num">8</span><span class="name">Motor/Servo Driver Board</span><span class="qty">×1</span><span class="where">Powers the motor, which an Arduino pin can't do on its own</span></button>
+        <button type="button" class="row" data-item="9"><span class="num">9</span><span class="name">Grove Jumper Wires</span><span class="qty">×6</span><span class="where">One per sensor or LED, taped along the temples, plus one for the driver board</span></button>
+        <button type="button" class="row" data-item="10"><span class="num">10</span><span class="name">Male to Male Jumper Wires</span><span class="qty">≈25</span><span class="where">Pushed into the far end of each Grove cable, then into the breadboard and Arduino pins</span></button>
+        <button type="button" class="row" data-item="15"><span class="num">15</span><span class="name">Ceramic Capacitor, 0.1 µF</span><span class="qty">×1</span><span class="where">Marked "104"; clamped in the driver's M1 terminal with the motor leads, to stop motor noise reaching the sound sensors <span class="off">Not in model</span></span></button>
+      </div>
+      <div class="grp">
+        <h3>For the demo</h3>
+        <button type="button" class="row" data-item="11"><span class="num">11</span><span class="name">JBL Go Speaker</span><span class="qty">×1</span><span class="where">Plays doorbell and smoke-alarm recordings. Not worn. <span class="off">Not in model</span></span></button>
+      </div>
+      <div class="grp">
+        <h3>Yours, not from the lab</h3>
+        <button type="button" class="row own" data-item="12"><span class="num">12</span><span class="name">Glasses</span><span class="qty">×1</span><span class="where">Any pair; sunglasses or safety glasses work</span></button>
+        <button type="button" class="row own" data-item="13"><span class="num">13</span><span class="name">Tape</span><span class="qty">1 roll</span><span class="where">Holds everything on, and doubles as the motor's off-center weight</span></button>
+        <button type="button" class="row own" data-item="14"><span class="num">14</span><span class="name">Laptop</span><span class="qty">×1</span><span class="where">Runs the Attune engine and every model; both USB cables plug in here</span></button>
+      </div>
+    </aside>
+  </section>
+
+  <section class="two">
+    <div class="card">
+      <h2>Wiring</h2>
+      <p class="sub">Pin map for the Arduino. The menu's Grove cables have a plug at both ends, so push Male to Male jumper wires into the far plug to reach the breadboard. Yellow is signal, red is 5 V, black is ground; white is unused except on the driver.</p>
+      <div class="scroll-x">
+        <table class="pins">
+          <thead><tr><th>Part</th><th>Part pin</th><th>Goes to</th><th>Wire</th></tr></thead>
+          <tbody>
+            <tr><td>Sound Sensor, left</td><td>SIG</td><td class="pin">A0</td><td><span class="w w-y"></span>Grove</td></tr>
+            <tr><td>Sound Sensor, right</td><td>SIG</td><td class="pin">A1</td><td><span class="w w-y"></span>Grove</td></tr>
+            <tr><td>Touch Sensor</td><td>SIG</td><td class="pin">D2</td><td><span class="w w-y"></span>Grove</td></tr>
+            <tr><td>LED Socket, left</td><td>SIG</td><td class="pin">D5</td><td><span class="w w-y"></span>Grove</td></tr>
+            <tr><td>LED Socket, right</td><td>SIG</td><td class="pin">D6</td><td><span class="w w-y"></span>Grove</td></tr>
+            <tr><td>Motor/Servo Driver</td><td>Grove port, I²C</td><td class="pin">SDA / SCL</td><td><span class="w w-w"></span><span class="w w-y"></span>Grove</td></tr>
+            <tr><td>Every Grove cable</td><td>VCC / GND</td><td class="pin">5V / GND rails</td><td><span class="w w-r"></span><span class="w w-k"></span>Grove</td></tr>
+            <tr><td>Breadboard rails</td><td>+ / −</td><td class="pin">5V / GND</td><td><span class="w w-r"></span><span class="w w-k"></span>Jumpers</td></tr>
+            <tr><td>Motor/Servo Driver</td><td>Power terminal</td><td class="pin">5V / GND rails</td><td><span class="w w-r"></span><span class="w w-k"></span>Jumpers</td></tr>
+            <tr><td>130 Mini DC Brushless Motor</td><td>Two leads</td><td class="pin">Driver M1</td><td><span class="w w-r"></span><span class="w w-k"></span>Motor leads</td></tr>
+            <tr><td>Ceramic Capacitor, 0.1 µF</td><td>Two legs</td><td class="pin">Driver M1</td><td>Clamped with the motor leads</td></tr>
+            <tr><td>Arduino</td><td>USB</td><td class="pin">Laptop</td><td><span class="w w-u"></span>Kit cable</td></tr>
+            <tr><td>Logitech Webcam</td><td>USB</td><td class="pin">Laptop</td><td><span class="w w-u"></span>Built-in cable</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine">The driver in the menu photo has a Grove port, so it runs over I²C; the model name printed on the board tells you which library to install. If yours has no Grove port, use D9 for speed and D8 for direction instead. The menu calls the motor brushless, but the photo shows a regular two-wire motor. If yours has three wires, the driver can't run it, so use the menu's Servo Motor on D9 as a tapper instead.</p>
+    </div>
+
+    <div class="card">
+      <h2>Signal flow</h2>
+      <p class="sub">The laptop does the thinking. The glasses only see and hear; the pack handles touch, lights and buzz.</p>
+      <div class="flow">
+        <div class="fn" style="grid-area: jbl"><b>JBL Go Speaker</b><span>Plays doorbell and smoke-alarm recordings</span></div>
+        <div class="fa dash" style="grid-area: a1"><i></i><em>sound</em></div>
+        <div class="fn" style="grid-area: rig"><b>Glasses rig</b><span>Webcam, 2 sound sensors, touch sensor, 2 LEDs, motor</span></div>
+        <div class="fh" style="grid-area: a2"><i class="l"></i><i class="r"></i><em>Grove + jumper wires</em></div>
+        <div class="fn" style="grid-area: pack"><b>Control pack</b><span>Arduino, breadboard, motor driver</span></div>
+        <div class="fa" style="grid-area: a3"><i></i><em>USB video + audio</em></div>
+        <div class="fa" style="grid-area: a4"><i class="up"></i><i></i><em>USB serial</em></div>
+        <div class="fn brain" style="grid-area: lap"><b>Laptop</b><span>Attune engine: faces, captions, who's talking, alerts, conversation history</span></div>
+        <div class="fa" style="grid-area: a5"><i></i><em>HUD view</em></div>
+        <div class="fa" style="grid-area: a6"><i></i><em>Audio out</em></div>
+        <div class="fn" style="grid-area: scr"><b>Laptop screen</b><span>Lens view and history, recorded</span></div>
+        <div class="fn" style="grid-area: ph"><b>Laptop speakers</b><span>Typed replies, spoken by ElevenLabs</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="two">
+    <div class="card">
+      <h2>Assembly</h2>
+      <p class="sub">About an hour with two people. Test each part on the laptop before taping the next one on.</p>
+      <ol class="steps">
+        <li>Clip the webcam over the top of the frame at the bridge, then wrap two strips of tape around the clip and frame. Aim it straight ahead using the laptop preview.</li>
+        <li>Tape a sound sensor to the outside of each temple, microphone facing out, about 2 cm behind the hinge.</li>
+        <li>Tape an LED socket on top of each hinge. Bend the LED legs so the LED points back at your eye; the Needle Nose Pliers at the lab's workbench make this easy.</li>
+        <li>Tape the touch sensor to the right temple where your finger naturally lands.</li>
+        <li>Wrap a lump of tape off-center on the motor shaft so it wobbles, then tape the motor to the right temple tip.</li>
+        <li>Run every cable along the temples, with a strip of tape every few centimetres, and let them drop behind your ears. Where each Grove cable ends, push Male to Male jumper wires into its plug and tape the joint.</li>
+        <li>Build the pack: breadboard, driver board and Arduino side by side, wired per the table. Tape it to your shirt at chest height.</li>
+        <li>Plug the webcam and the Arduino into the laptop, start the Attune engine, then open the lens view in Chrome.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Notes</h2>
+      <p class="sub">Things that will bite on demo day.</p>
+      <ul class="notes">
+        <li>It's front-heavy, mostly from the webcam. The motor at the back helps balance it; take the rig off between demos.</li>
+        <li>Everything runs from the two USB cables, so stay within reach of the laptop. Keep motor buzzes short, because USB can't run it continuously.</li>
+        <li>Two sound sensors assume the lab lends two. With only one, skip left/right direction; the alerts still work.</li>
+        <li>The Grove cables probably won't reach your chest on their own. The jumpers pushed into their plugs make up the distance; tape each joint so it can't pull apart.</li>
+        <li>Only enroll teammates who agree to it. Strangers stay session-only.</li>
+        <li>Sizes in the model are approximate and depend on the exact parts the lab hands you.</li>
+      </ul>
+      <div class="warnbox"><b>Never set off a real alarm at the venue.</b> Play doorbell and smoke-alarm recordings from the JBL Go instead. The alerts are a demo, not a smoke alarm.</div>
+    </div>
+  </section>
+
+  <p class="unused"><b>Not used from the menu:</b> Buzzer, Gear Stepper Motor Driver Pack, Thumb Joystick, I2C Color Sensor, Air Quality Sensor, NFC/RFID tag board, LCD RGB Backlight, Red Quad Alphanumeric Display, Ultrasonic Distance Sensor, 3-Axis Digital Accelerometer, Rotary Angle Sensor, Temperature and Barometer Sensor, UV Sensor, Light Sensor, Infrared Reflective Sensor, Soil Moisture Sensor, Micro Switch, Button, Raspberry Pi Kit, Google Nest Mini, Resistors, Female to Male Jumper Wires, Female to female Jumper Wires. The Servo Motor is the backup haptic if the driver board can't run the motor. The workbench tools, such as the multimeter and wire stripper, stay at the lab and can't be rented.</p>
+</div>
+
+<script>
+  setTimeout(function () {
+    if (!window.__rigReady) {
+      var s = document.getElementById('vp-status');
+      if (s) { s.hidden = false; s.textContent = "The 3D viewer couldn't load. Check your connection and reload; the parts list, wiring and steps below still apply."; }
+    }
+  }, 15000);
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const DEG = Math.PI / 180;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const vpEl = document.getElementById('viewport');
+const statusEl = document.getElementById('vp-status');
+const toastEl = document.getElementById('vp-toast');
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const isDark = () => {
+  const t = document.documentElement.getAttribute('data-theme');
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+};
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (err) {
+  statusEl.textContent = "This browser couldn't start 3D graphics, so the model is off. The parts list, wiring and steps below still apply.";
+  window.__rigReady = true;
+  throw err;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.domElement.setAttribute('role', 'img');
+renderer.domElement.setAttribute('aria-label', '3D model of glasses with a webcam clipped over the bridge, a sound sensor on each temple, LEDs on the hinges, a touch sensor on the right temple, a vibration motor at the right temple tip, and cables running down to an Arduino pack on the chest.');
+vpEl.prepend(renderer.domElement);
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.className = 'labels';
+vpEl.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1, 2, 9000);
+camera.position.set(700, 420, 800);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.09;
+controls.screenSpacePanning = true;
+controls.minDistance = 80;
+controls.maxDistance = 3200;
+controls.target.set(0, -140, -20);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x7c8796, 1.05));
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.45); keyLight.position.set(320, 560, 460); scene.add(keyLight);
+const backLight = new THREE.DirectionalLight(0xffffff, 0.55); backLight.position.set(-460, 220, -420); scene.add(backLight);
+
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x0c1219, transparent: true, opacity: 0.4 });
+function mat(color, o = {}) {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: o.r ?? 0.6, metalness: o.m ?? 0 });
+  if (o.op != null) { m.transparent = true; m.opacity = o.op; m.depthWrite = !!o.dw; }
+  m.userData.baseOpacity = o.op ?? 1;
+  return m;
+}
+function mesh(parent, geo, material, pos, rot, edges = true) {
+  const m = new THREE.Mesh(geo, material);
+  if (pos) m.position.copy(pos);
+  if (rot) { if (rot.isQuaternion) m.quaternion.copy(rot); else m.rotation.set(rot[0], rot[1], rot[2]); }
+  if (edges) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 40), edgeMat));
+  parent.add(m);
+  return m;
+}
+const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const rbox = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
+const cyl = (r, h, seg = 28) => new THREE.CylinderGeometry(r, r, h, seg);
+const alongQ = (dir) => new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), dir.clone().normalize());
+
+const PACK_POS = V(0, -262, 22), PACK_ROT = -12 * DEG;
+const packT = new THREE.Object3D();
+packT.position.copy(PACK_POS); packT.rotation.x = PACK_ROT; packT.updateMatrixWorld(true);
+const PW = (x, y, z) => packT.localToWorld(V(x, y, z));
+
+const parts = {};
+function part(key, explode = [0, 0, 0], opts = {}) {
+  const g = new THREE.Group(); g.name = key;
+  if (opts.pack) { g.position.copy(PACK_POS); g.rotation.x = PACK_ROT; }
+  scene.add(g);
+  parts[key] = { group: g, base: g.position.clone(), explode: V(...explode), fade: !!opts.fade, mats: new Set() };
+  return g;
+}
+
+/* ---------------- glasses (yours) ---------------- */
+function lensShape(w, h, rt, rb) {
+  const s = new THREE.Shape(), x0 = -w / 2, x1 = w / 2, y0 = -h / 2, y1 = h / 2;
+  s.moveTo(x0 + rb, y0); s.lineTo(x1 - rb, y0); s.quadraticCurveTo(x1, y0, x1, y0 + rb);
+  s.lineTo(x1, y1 - rt); s.quadraticCurveTo(x1, y1, x1 - rt, y1); s.lineTo(x0 + rt, y1);
+  s.quadraticCurveTo(x0, y1, x0, y1 - rt); s.lineTo(x0, y0 + rb); s.quadraticCurveTo(x0, y0, x0 + rb, y0);
+  return s;
+}
+const GL = part('glasses');
+const frameM = mat(0x23272d, { r: 0.5 });
+const lensM = mat(0xa8c3d8, { r: 0.08, op: 0.2 });
+const tipDir = V(0, -Math.sin(35 * DEG), -Math.cos(35 * DEG));
+for (const sx of [-1, 1]) {
+  const outer = lensShape(54, 40, 9, 16);
+  outer.holes.push(lensShape(47, 33, 6, 13));
+  const rimGeo = new THREE.ExtrudeGeometry(outer, { depth: 4, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.8, bevelSegments: 2, curveSegments: 18 });
+  rimGeo.translate(0, 0, -2);
+  mesh(GL, rimGeo, frameM, V(sx * 36, 0, 0));
+  const lensGeo = new THREE.ExtrudeGeometry(lensShape(47.6, 33.6, 6.2, 13.2), { depth: 1.4, bevelEnabled: false, curveSegments: 18 });
+  lensGeo.translate(0, 0, -0.7);
+  const lens = mesh(GL, lensGeo, lensM, V(sx * 36, 0, 0), null, false); lens.renderOrder = 2;
+  mesh(GL, rbox(7, 12, 9, 1.5), frameM, V(sx * 66.5, 10, -2.5));
+  mesh(GL, rbox(3.5, 7, 113, 1.2), frameM, V(sx * 69, 10, -62));
+  mesh(GL, rbox(3.5, 6, 40, 1.2), frameM, V(sx * 69, 10, -118.5).addScaledVector(tipDir, 20), [-35 * DEG, 0, 0]);
+  mesh(GL, new THREE.SphereGeometry(1, 16, 12).scale(3, 5, 1.6), mat(0xd8dde3, { r: 0.3 }), V(sx * 11, -7, -6), [0, 0, sx * 0.25], false);
+}
+mesh(GL, rbox(20, 5, 5, 1.5), frameM, V(0, 10, 0));
+
+/* ---------------- 1 webcam ---------------- */
+const WC = part('webcam', [0, 72, 36]);
+const camBody = mat(0x1b1d21, { r: 0.42 });
+mesh(WC, rbox(73, 30, 26, 7), camBody, V(0, 36, 2));
+mesh(WC, rbox(64, 22, 1.2, 0.6), mat(0x08090b, { r: 0.12 }), V(0, 36, 15.2), null, false);
+mesh(WC, cyl(7.2, 2.6, 36), mat(0x3a4049, { r: 0.3, m: 0.7 }), V(0, 36, 16.2), [90 * DEG, 0, 0]);
+mesh(WC, new THREE.CircleGeometry(5, 36), mat(0x0c1a2b, { r: 0.05, m: 0.4 }), V(0, 36, 17.55), null, false);
+mesh(WC, new THREE.CircleGeometry(1.6, 20), mat(0x2f5a86, { r: 0.05, m: 0.2 }), V(1.4, 37.4, 17.6), null, false);
+for (const sx of [-1, 1]) mesh(WC, cyl(0.9, 0.6, 12), mat(0x2a2e34), V(sx * 24, 36, 15.9), [90 * DEG, 0, 0], false);
+mesh(WC, new THREE.SphereGeometry(1.1, 12, 10), mat(0x3a3f45, { r: 0.2 }), V(13, 36, 15.9), null, false);
+mesh(WC, rbox(30, 5, 13, 1.5), camBody, V(0, 18.5, -4));
+mesh(WC, rbox(30, 19, 3, 1.2), camBody, V(0, 11, -9.5));
+
+/* ---------------- Grove modules ---------------- */
+const pcbM = () => mat(0x1f64b5, { r: 0.55 });
+function groveConnector(parent, pos, rot) {
+  const c = new THREE.Group(); c.position.copy(pos); if (rot) c.rotation.set(rot[0], rot[1], rot[2]); parent.add(c);
+  mesh(c, box(10, 5.2, 5.6), mat(0xf1f0ea, { r: 0.55 }), V(0, 0, 0));
+  return c;
+}
+function soundSensor(key, sx) {
+  const S = part(key, [sx * 58, 0, 0]);
+  const x0 = sx * 71.6;
+  mesh(S, box(1.6, 20, 40), pcbM(), V(x0, 10, -40));
+  const mx = x0 + sx * (0.8 + 3.4);
+  mesh(S, cyl(4.9, 6.8, 30), mat(0xb9bec6, { r: 0.35, m: 0.75 }), V(mx, 10, -26), [0, 0, 90 * DEG]);
+  mesh(S, new THREE.CircleGeometry(4.1, 28), mat(0x16181b, { r: 0.9 }), V(mx + sx * 3.45, 10, -26), [0, sx * 90 * DEG, 0], false);
+  mesh(S, box(1.4, 5, 6.2), mat(0x131417, { r: 0.4 }), V(x0 + sx * 1.5, 5.5, -40));
+  mesh(S, box(1.2, 2.2, 3.6), mat(0xc9b07a, { r: 0.4 }), V(x0 + sx * 1.4, 14.5, -45), null, false);
+  groveConnector(S, V(x0 + sx * 3.4, 10, -55), [0, 0, sx * 90 * DEG]);
+}
+soundSensor('soundL', -1);
+soundSensor('soundR', 1);
+
+const ledMats = {};
+function ledSocket(key, sx) {
+  const L = part(key, [sx * 34, 48, 6]);
+  const bx = sx * 61, by = 21.8, bz = -4;
+  mesh(L, box(20, 1.6, 20), pcbM(), V(bx, by, bz));
+  groveConnector(L, V(sx * 66.5, by + 0.8 + 2.6, bz), [0, 90 * DEG, 0]);
+  const lx = sx * 56, ly = by + 3.2, lz = bz - 13.5;
+  const legM = mat(0xc4c8ce, { r: 0.3, m: 0.8 });
+  for (const o of [-1.27, 1.27]) {
+    const c = new THREE.CatmullRomCurve3([V(lx + o, by + 0.8, bz - 7), V(lx + o, ly, bz - 8.5), V(lx + o, ly, lz + 2.5)]);
+    L.add(new THREE.Mesh(new THREE.TubeGeometry(c, 12, 0.28, 6, false), legM));
+  }
+  const ledM = mat(0xd93a2e, { r: 0.25, op: 0.92, dw: true });
+  ledMats[key] = ledM;
+  mesh(L, cyl(2.9, 1, 24), ledM, V(lx, ly, lz + 2.2), [90 * DEG, 0, 0], false);
+  mesh(L, cyl(2.5, 4.6, 24), ledM, V(lx, ly, lz - 0.6), [90 * DEG, 0, 0], false);
+  mesh(L, new THREE.SphereGeometry(2.5, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), ledM, V(lx, ly, lz - 2.9), [-90 * DEG, 0, 0], false);
+}
+ledSocket('ledL', -1);
+ledSocket('ledR', 1);
+
+(function touchSensor() {
+  const T = part('touch', [62, -8, 0]);
+  const x0 = 71.6;
+  mesh(T, box(1.6, 20, 20), pcbM(), V(x0, 10, -82));
+  mesh(T, cyl(6.2, 0.5, 36), mat(0xd3e3f3, { r: 0.6 }), V(x0 + 1.05, 10, -79), [0, 0, 90 * DEG], false);
+  mesh(T, cyl(4.2, 0.6, 36), mat(0x1f64b5, { r: 0.55 }), V(x0 + 1.12, 10, -79), [0, 0, 90 * DEG], false);
+  groveConnector(T, V(x0 + 3.4, 10, -88.5), [0, 0, -90 * DEG]);
+})();
+
+/* ---------------- 5 motor (right temple tip) ---------------- */
+const tipStart = V(69, 10, -118.5);
+const motorC = tipStart.clone().addScaledVector(tipDir, 17).add(V(12.3, 0, 0));
+const motorCap = motorC.clone().addScaledVector(tipDir, -13.3);
+(function motorPart() {
+  const Mo = part('motor', [62, -28, -28]);
+  const q = alongQ(tipDir);
+  mesh(Mo, cyl(10, 25, 36), mat(0xc3c8cf, { r: 0.32, m: 0.85 }), motorC, q);
+  mesh(Mo, cyl(9.2, 2.2, 36), mat(0xe9e3d6, { r: 0.7 }), motorCap, q);
+  for (const o of [-5, 5]) mesh(Mo, box(1.4, 3, 2.6), mat(0xc9a55a, { r: 0.35, m: 0.8 }), motorCap.clone().add(V(o, 0, 0)).addScaledVector(tipDir, -1.9), q, false);
+  mesh(Mo, cyl(1, 8, 12), mat(0xd9dde2, { r: 0.25, m: 0.9 }), motorC.clone().addScaledVector(tipDir, 16.5), q, false);
+  mesh(Mo, new THREE.CylinderGeometry(6, 6, 4, 24, 1, false, 0, Math.PI), mat(0x9ea5ae, { r: 0.9 }), motorC.clone().addScaledVector(tipDir, 19), q);
+})();
+
+/* ---------------- control pack ---------------- */
+const AX = 45, AZ = 2;
+const DX = -58, DY = 3, DZ = 13;
+const BX = -38;
+(function arduino() {
+  const A = part('arduino', [72, -16, 38], { pack: true });
+  mesh(A, rbox(68.6, 53.4, 1.6, 0.8), mat(0x0f8c95, { r: 0.5 }), V(AX, 0, AZ));
+  mesh(A, rbox(7.5, 9.2, 3.3, 1.2), mat(0xc7ccd2, { r: 0.3, m: 0.85 }), V(AX + 32, 10, AZ + 2.45));
+  mesh(A, box(13, 9, 11), mat(0x151619, { r: 0.6 }), V(AX + 28, -14, AZ + 6.3));
+  const hdr = mat(0x17181b, { r: 0.6 });
+  mesh(A, box(26, 2.6, 8.5), hdr, V(AX - 14, 24.6, AZ + 5.05));
+  mesh(A, box(21, 2.6, 8.5), hdr, V(AX + 12, 24.6, AZ + 5.05));
+  mesh(A, box(21, 2.6, 8.5), hdr, V(AX - 18, -24.6, AZ + 5.05));
+  mesh(A, box(16, 2.6, 8.5), hdr, V(AX + 8, -24.6, AZ + 5.05));
+  mesh(A, box(16, 22, 2.6), mat(0xbfc4cb, { r: 0.35, m: 0.8 }), V(AX - 22, 3, AZ + 2.1));
+  mesh(A, box(8, 8, 1.2), mat(0x141517, { r: 0.45 }), V(AX + 2, -9, AZ + 1.4));
+  mesh(A, box(3.5, 3.5, 1.4), mat(0xe5e7ea, { r: 0.5 }), V(AX - 30, -15, AZ + 1.5));
+  const ledIM = new THREE.InstancedMesh(box(1.3, 1.3, 0.5), mat(0x8e2a24, { r: 0.45 }), 96);
+  const m4 = new THREE.Matrix4(); let i = 0;
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 12; c++) { m4.makeTranslation(AX + 1 + c * 1.9, 4 - r * 1.9, AZ + 1.05); ledIM.setMatrixAt(i++, m4); }
+  A.add(ledIM);
+})();
+(function breadboard() {
+  const B = part('breadboard', [-70, -24, 0], { pack: true });
+  mesh(B, rbox(82.5, 54.5, 8.5, 1.2), mat(0xf3f1ea, { r: 0.75 }), V(BX, 0, 0));
+  const railR = mat(0xd0342c, { r: 0.6 }), railB = mat(0x2b5bd7, { r: 0.6 });
+  for (const sy of [1, -1]) {
+    mesh(B, box(76, 0.6, 0.3), railR, V(BX, sy * 25.2, 4.35), null, false);
+    mesh(B, box(76, 0.6, 0.3), railB, V(BX, sy * 17.9, 4.35), null, false);
+  }
+  mesh(B, box(76, 1.6, 0.3), mat(0xd9d6cc, { r: 0.8 }), V(BX, 0, 4.3), null, false);
+  const holes = [];
+  for (let c = 0; c < 30; c++) for (let r = 0; r < 5; r++) for (const sy of [1, -1]) holes.push([BX - 36.8 + c * 2.54, sy * (3.81 + r * 2.54)]);
+  for (let c = 0; c < 29; c++) { if (c % 6 === 5) continue; for (const ry of [20.3, 22.84]) for (const sy of [1, -1]) holes.push([BX - 35.5 + c * 2.54, sy * ry]); }
+  const holeIM = new THREE.InstancedMesh(box(1.05, 1.05, 0.4), mat(0x3b3e44, { r: 0.9 }), holes.length);
+  const m4 = new THREE.Matrix4();
+  holes.forEach(([x, y], k) => { m4.makeTranslation(x, y, 4.3); holeIM.setMatrixAt(k, m4); });
+  B.add(holeIM);
+})();
+(function driver() {
+  const D = part('driver', [-64, 30, 46], { pack: true });
+  mesh(D, rbox(40, 40, 1.6, 0.8), mat(0x1d4f9a, { r: 0.55 }), V(DX, DY, DZ));
+  mesh(D, box(25, 2.6, 8.4), mat(0x17181b, { r: 0.6 }), V(DX, DY - 16, DZ - 5));
+  const term = mat(0x1f8a4c, { r: 0.55 }), screw = mat(0xc9ced4, { r: 0.3, m: 0.85 });
+  for (const o of [-8, 8]) {
+    mesh(D, box(10, 7.5, 9), term, V(DX + o, DY + 15.5, DZ + 5.3));
+    for (const s of [-2.5, 2.5]) mesh(D, cyl(1.5, 0.8, 16), screw, V(DX + o + s, DY + 15.5, DZ + 10.2), [90 * DEG, 0, 0], false);
+  }
+  mesh(D, box(10, 6.5, 1.5), mat(0x131417, { r: 0.45 }), V(DX - 2, DY - 2, DZ + 1.55));
+  mesh(D, cyl(2.6, 5.5, 20), mat(0x2b3e8f, { r: 0.4 }), V(DX + 9, DY - 7, DZ + 3.55), [90 * DEG, 0, 0]);
+  mesh(D, cyl(2.6, 5.5, 20), mat(0x2b3e8f, { r: 0.4 }), V(DX + 9, DY + 2, DZ + 3.55), [90 * DEG, 0, 0]);
+  groveConnector(D, V(DX + 16, DY - 6, DZ + 3.6), [0, 0, 90 * DEG]);
+})();
+
+/* ---------------- cables ---------------- */
+class OffsetCurve extends THREE.Curve {
+  constructor(base, frames, n, off) { super(); this.base = base; this.frames = frames; this.n = n; this.off = off; }
+  getPoint(t, target = new THREE.Vector3()) {
+    this.base.getPoint(t, target);
+    const i = Math.min(this.n, Math.max(0, Math.round(t * this.n)));
+    return target.addScaledVector(this.frames.binormals[i], this.off);
+  }
+}
+const spline = (pts) => new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+const matCache = (opts = {}) => { const c = {}; return (col) => (c[col] ??= mat(col, opts)); };
+function wires(parent, pts, colors, matFor, r = 0.52, pitch = 1.1) {
+  const base = spline(pts);
+  const n = Math.max(60, Math.round(base.getLength() / 2));
+  if (colors.length === 1) { parent.add(new THREE.Mesh(new THREE.TubeGeometry(base, n, r, 10, false), matFor(colors[0]))); return; }
+  const frames = base.computeFrenetFrames(n, false);
+  colors.forEach((col, i) => {
+    const off = (i - (colors.length - 1) / 2) * pitch;
+    parent.add(new THREE.Mesh(new THREE.TubeGeometry(new OffsetCurve(base, frames, n, off), n, r, 6, false), matFor(col)));
+  });
+}
+const WIRE = { y: 0xe4be22, w: 0xe8e8e2, r: 0xd23b30, k: 0x1c1d20, g: 0x2e9d57, b: 0x2f6fd6, o: 0xe9892b, usb: 0x16171a };
+const GROVE = [WIRE.k, WIRE.r, WIRE.w, WIRE.y];
+function drop(sx, lane, tail) {
+  return [
+    V(sx * (69.2 + lane * 1.3), 12.6 + (lane % 2) * 1.2, -104),
+    V(sx * (70.4 + lane * 1.5), 5, -122),
+    V(sx * (70 + lane * 1.6), -42, -128),
+    V(sx * (63 + lane * 2), -120, -102),
+    V(sx * (47 + lane * 2.2), -198, -26),
+    ...tail,
+  ];
+}
+const intoBoard = (ex) => [PW(ex, 62, 30), PW(ex, 24, 14), PW(ex, 11.43, 5.6)];
+
+const GC = part('groveCables', [0, 0, 0], { fade: true });
+const gMat = matCache({ r: 0.55 });
+wires(GC, [V(-66.5, 26.2, -9.2), V(-68.3, 19.5, -17), V(-68.2, 15.1, -30), V(-68.2, 15.1, -70), ...drop(-1, 0, intoBoard(-34))], GROVE, gMat);
+wires(GC, [V(66.5, 26.2, -9.2), V(68.3, 19.5, -17), V(68.2, 15.1, -30), V(68.2, 15.1, -70), ...drop(1, 0, intoBoard(-11))], GROVE, gMat);
+wires(GC, [V(-75.4, 10, -59.5), V(-74.4, 6.5, -64), V(-68.8, 3.2, -69), V(-68.6, 3.2, -92), ...drop(-1, 1, intoBoard(-31.5))], GROVE, gMat);
+wires(GC, [V(75.4, 10, -59.5), V(74.4, 6.5, -64), V(68.8, 3.2, -69), V(68.6, 3.2, -92), ...drop(1, 1, intoBoard(-8.5))], GROVE, gMat);
+wires(GC, [V(75.2, 10, -95.2), V(74.4, 11, -100), ...drop(1, 2, intoBoard(-6))], GROVE, gMat);
+
+const ML = part('motorLeads', [0, 0, 0], { fade: true });
+wires(ML, [motorCap.clone().add(V(0, 1.2, 0)).addScaledVector(tipDir, -3.5), V(79.5, 9.8, -113), V(75.5, 8.4, -114),
+  ...drop(1, 3, [PW(DX - 8, 62, 30), PW(DX - 8, 32, 24), PW(DX - 8, DY + 17.5, DZ + 10.5)])], [WIRE.r, WIRE.k], matCache({ r: 0.5 }), 0.55, 1.2);
+
+const US = part('usb', [0, 0, 0], { fade: true });
+const uMat = matCache({ r: 0.5 });
+wires(US, [V(-9, 33, -11.3), V(-24, 29.5, -15.5), V(-50, 24.5, -17.5), V(-64.5, 21.2, -21), V(-68.8, 18.4, -32), V(-68.9, 18.2, -70),
+  V(-70.2, 17.4, -98), V(-72, 7, -122), V(-71.5, -42, -130), V(-66, -122, -104), V(-60, -205, -28), V(-94, -262, 12),
+  V(-78, -318, 58), V(10, -346, 98), V(150, -350, 108)], [WIRE.usb], uMat, 1.9);
+wires(US, [PW(AX + 35.5, 10, AZ + 2.45), PW(AX + 44, 9, 3), V(118, -292, 62), V(136, -334, 104), V(150, -350, 132)], [WIRE.usb], uMat, 1.9);
+for (const z of [108, 132]) {
+  mesh(US, rbox(22, 8.5, 15.5, 2), mat(0x1a1b1e, { r: 0.55 }), V(161, -350, z));
+  mesh(US, box(12, 4.6, 12), mat(0xc2c7cd, { r: 0.3, m: 0.85 }), V(178, -350, z));
+}
+
+const JP = part('jumpers', [0, 0, 0], { pack: true, fade: true });
+const jMat = matCache({ r: 0.5 });
+const jump = (a, b, col) => {
+  const c = new THREE.QuadraticBezierCurve3(V(...a), V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(a[2], b[2]) + 13), V(...b));
+  JP.add(new THREE.Mesh(new THREE.TubeGeometry(c, 28, 0.62, 6, false), jMat(col)));
+};
+const TOP = 11.3;
+jump([AX - 20, 24.6, TOP], [BX + 30, 22.84, 4.3], WIRE.r);
+jump([AX - 17.5, 24.6, TOP], [BX + 32.5, 20.3, 4.3], WIRE.k);
+jump([AX + 5, 24.6, TOP], [BX + 16.5, 13.97, 4.3], WIRE.y);
+jump([AX + 7.5, 24.6, TOP], [BX + 19, 13.97, 4.3], WIRE.y);
+jump([AX + 10, -24.6, TOP], [BX + 16.5, -13.97, 4.3], WIRE.g);
+jump([AX + 2.5, -24.6, TOP], [BX + 21.6, -13.97, 4.3], WIRE.b);
+jump([AX, -24.6, TOP], [BX + 24.1, -13.97, 4.3], WIRE.b);
+jump([AX - 26, 24.6, TOP], [DX + 16, DY - 7.3, DZ + 6.4], WIRE.w);
+jump([AX - 23.5, 24.6, TOP], [DX + 16, DY - 4.7, DZ + 6.4], WIRE.y);
+
+/* ---------------- tape (yours) ---------------- */
+const TP = part('tape', [0, 0, 0], { fade: true });
+const tapeM = mat(0x9ea5ae, { r: 0.92 });
+for (const sx of [-1, 1]) {
+  mesh(TP, rbox(9, 17, 17, 1.5), tapeM, V(sx * 22, 15.5, -3));
+  mesh(TP, rbox(6.6, 21.6, 6, 1.2), tapeM, V(sx * 69.8, 10, -35));
+  mesh(TP, rbox(6.6, 21.6, 6, 1.2), tapeM, V(sx * 69.8, 10, -50));
+  mesh(TP, rbox(7, 7.5, 22, 1.2), tapeM, V(sx * 57, 20.8, -4));
+  mesh(TP, rbox(8.5, 11, 5, 1.2), tapeM, V(sx * 70.4, 12.2, -100));
+}
+mesh(TP, rbox(6.6, 21.6, 5, 1.2), tapeM, V(69.8, 10, -74.5));
+for (const o of [-6.5, 6.5]) mesh(TP, box(25.5, 6, 21.5), tapeM, V(79.3, motorC.y, motorC.z).addScaledVector(tipDir, o), alongQ(tipDir));
+
+/* ---------------- head reference ---------------- */
+const head = new THREE.Group(); scene.add(head);
+const ghostM = new THREE.MeshStandardMaterial({ color: 0x8fa1b6, transparent: true, opacity: 0.15, roughness: 0.95, depthWrite: false });
+const ghost = (geo, pos) => { const m = new THREE.Mesh(geo, ghostM); m.position.copy(pos); m.renderOrder = -1; head.add(m); };
+ghost(new THREE.SphereGeometry(1, 48, 32).scale(66, 108, 86), V(0, -14, -100));
+ghost(new THREE.SphereGeometry(1, 24, 16).scale(10, 24, 13).rotateX(-0.28), V(0, -32, -10));
+for (const sx of [-1, 1]) ghost(new THREE.SphereGeometry(1, 24, 16).scale(7, 26, 14), V(sx * 66, -20, -110));
+ghost(new THREE.CylinderGeometry(47, 54, 160, 40, 1, true), V(0, -190, -92));
+ghost(new THREE.SphereGeometry(1, 48, 24).scale(178, 64, 104), V(0, -304, -72));
+
+/* ---------------- collect materials per part ---------------- */
+for (const p of Object.values(parts)) p.group.traverse((o) => { if (o.isMesh) p.mats.add(o.material); });
+
+/* ---------------- callouts ---------------- */
+const ITEM_PARTS = { 1: ['webcam'], 2: ['soundL', 'soundR'], 3: ['ledL', 'ledR'], 4: ['touch'], 5: ['motor', 'motorLeads'], 6: ['arduino'], 7: ['breadboard'], 8: ['driver'], 9: ['groveCables'], 10: ['jumpers'], 12: ['glasses'], 13: ['tape'], 14: ['usb'] };
+const WORN = ['glasses', 'webcam', 'soundL', 'soundR', 'ledL', 'ledR', 'touch', 'motor'];
+const SVGNS = 'http://www.w3.org/2000/svg';
+const calloutLayer = document.createElement('div');
+calloutLayer.className = 'callouts';
+const leaderSvg = document.createElementNS(SVGNS, 'svg');
+leaderSvg.setAttribute('aria-hidden', 'true');
+calloutLayer.appendChild(leaderSvg);
+vpEl.appendChild(calloutLayer);
+const alertBtn = document.getElementById('alert');
+const hintEl = vpEl.querySelector('.vp-hint');
+const callouts = [];
+let labelsOn = true, explodeT = 0, selected = null, hot = null, needsRender = true, measureAll = true;
+function callout(item, key, text, anchor, at, own = false) {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'balloon' + (own ? ' own' : '');
+  el.innerHTML = `<b>${item}</b><span>${text}</span>`;
+  el.setAttribute('aria-label', `${item} ${text}`);
+  el.title = text;
+  el.addEventListener('click', (e) => { e.stopPropagation(); selectItem(item, true); });
+  el.addEventListener('pointerenter', () => setHot(item));
+  el.addEventListener('pointerleave', () => setHot(selected));
+  const line = document.createElementNS(SVGNS, 'line');
+  line.setAttribute('class', 'leader');
+  const dot = document.createElementNS(SVGNS, 'circle');
+  dot.setAttribute('class', 'pin-dot');
+  dot.setAttribute('r', '3');
+  leaderSvg.append(line, dot);
+  calloutLayer.appendChild(el);
+  callouts.push({ item, key, anchor, at, el, line, dot, w: 0, h: 0, x: 0, y: 0, ax: 0, ay: 0 });
+}
+callout(1, 'webcam', 'Logitech Webcam', V(22, 51, 6), V(70, 112, 44));
+callout(2, 'soundR', 'Sound Sensor ×2', V(79.4, 13, -26), V(150, 62, -6));
+callout(3, 'ledR', 'LED Socket ×2', V(56, 27.6, -17), V(104, 96, -30));
+callout(4, 'touch', 'Touch Sensor', V(73, 13, -79), V(160, 12, -84));
+callout(5, 'motor', '130 Mini DC Brushless Motor', V(91.2, -1, -136), V(178, -50, -150));
+const arA = PW(AX, 14, 4), brA = PW(BX + 20, -20, 4.4), drA = PW(DX, 12, 15), jpA = PW(AX - 6, 24.6, 20);
+callout(6, 'arduino', 'Arduino Kit', arA, arA.clone().add(V(112, 34, 46)));
+callout(7, 'breadboard', 'Breadboard', brA, brA.clone().add(V(-104, -62, 56)));
+callout(8, 'driver', 'Motor/Servo Driver', drA, drA.clone().add(V(-122, 48, 44)));
+callout(9, 'groveCables', 'Grove Jumper Wires', V(-66.5, -118, -101), V(-172, -104, -60));
+callout(10, 'jumpers', 'Male to Male Jumper Wires', jpA, jpA.clone().add(V(40, 70, 66)));
+callout(12, 'glasses', 'Your glasses', V(-52, -19.5, 2), V(-150, -34, 60), true);
+callout(13, 'tape', 'Tape', V(-70.4, 17.5, -100), V(-150, 62, -118), true);
+callout(14, 'usb', 'To laptop USB', V(184, -350, 120), V(252, -326, 124), true);
+
+const _pv = new THREE.Vector3(), _off = new THREE.Vector3();
+function project(v) {
+  _pv.copy(v).add(_off).project(camera);
+  return { x: (_pv.x + 1) / 2 * W, y: (1 - _pv.y) / 2 * H, ok: _pv.z > -1 && _pv.z < 1 };
+}
+// Balloons sit where their 3D label point projects, then get pushed apart in screen space so none overlap
+// each other, the viewport edge, or the overlay controls.
+function layoutCallouts() {
+  // Narrow screens get number-only balloons, keyed to the parts list like a drawing.
+  const compact = W < 600;
+  if (compact !== calloutLayer.classList.contains('compact')) { calloutLayer.classList.toggle('compact', compact); measureAll = true; }
+  const live = [];
+  for (const c of callouts) {
+    const p = parts[c.key];
+    let show = labelsOn && (!p.fade || explodeT < 0.3), a, b;
+    if (show) {
+      _off.copy(p.explode).multiplyScalar(explodeT);
+      a = project(c.anchor); b = project(c.at);
+      show = a.ok && b.ok && a.x > 0 && a.x < W && a.y > 0 && a.y < H;
+    }
+    c.el.hidden = !show;
+    c.dot.style.display = show ? '' : 'none';
+    if (!show) { c.line.style.display = 'none'; continue; }
+    if (measureAll || !c.w) { c.w = c.el.offsetWidth; c.h = c.el.offsetHeight; }
+    c.ax = a.x; c.ay = a.y; c.x = b.x; c.y = b.y;
+    live.push(c);
+  }
+  measureAll = false;
+  const obst = [{ x: W - 48, y: H - 48, w: 84, h: 84 }];
+  for (const el of [alertBtn, hintEl]) obst.push({ x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2, w: el.offsetWidth, h: el.offsetHeight });
+  if (!toastEl.hidden) obst.push({ x: toastEl.offsetLeft, y: toastEl.offsetTop + toastEl.offsetHeight / 2, w: toastEl.offsetWidth, h: toastEl.offsetHeight });
+  const PAD = 6, M = 8;
+  const clampC = (c) => {
+    c.x = Math.min(Math.max(c.x, c.w / 2 + M), Math.max(c.w / 2 + M, W - c.w / 2 - M));
+    c.y = Math.min(Math.max(c.y, c.h / 2 + M), Math.max(c.h / 2 + M, H - c.h / 2 - M));
+  };
+  live.forEach(clampC);
+  for (let it = 0; it < 80; it++) {
+    let moved = false;
+    for (let i = 0; i < live.length; i++) {
+      const A = live[i];
+      for (let j = i + 1; j < live.length; j++) {
+        const B = live[j];
+        const dx = B.x - A.x, dy = B.y - A.y;
+        const ox = (A.w + B.w) / 2 + PAD - Math.abs(dx), oy = (A.h + B.h) / 2 + PAD - Math.abs(dy);
+        if (ox <= 0 || oy <= 0) continue;
+        moved = true;
+        if (oy < ox) { const s = (dy < 0 ? -1 : 1) * oy / 2; A.y -= s; B.y += s; }
+        else { const s = (dx < 0 ? -1 : 1) * ox / 2; A.x -= s; B.x += s; }
+      }
+      for (const O of obst) {
+        const ox = (A.w + O.w) / 2 + PAD - Math.abs(A.x - O.x), oy = (A.h + O.h) / 2 + PAD - Math.abs(A.y - O.y);
+        if (ox <= 0 || oy <= 0) continue;
+        // Obstacles don't move: step the balloon to the nearest side of it that is still inside the viewport.
+        const sx = (A.w + O.w) / 2 + PAD, sy = (A.h + O.h) / 2 + PAD;
+        let best = null, bd = Infinity;
+        for (const [x, y] of [[A.x, O.y - sy], [A.x, O.y + sy], [O.x - sx, A.y], [O.x + sx, A.y]]) {
+          if (x < A.w / 2 + M - 0.5 || x > W - A.w / 2 - M + 0.5 || y < A.h / 2 + M - 0.5 || y > H - A.h / 2 - M + 0.5) continue;
+          const d = Math.abs(x - A.x) + Math.abs(y - A.y);
+          if (d < bd) { bd = d; best = [x, y]; }
+        }
+        if (best) { A.x = best[0]; A.y = best[1]; moved = true; }
+      }
+    }
+    live.forEach(clampC);
+    if (!moved) break;
+  }
+  for (const c of live) {
+    c.el.style.transform = `translate(${(c.x - c.w / 2).toFixed(1)}px, ${(c.y - c.h / 2).toFixed(1)}px)`;
+    const ex = c.ax - c.x, ey = c.ay - c.y;
+    const s = Math.min((c.w / 2) / (Math.abs(ex) || 1e-6), (c.h / 2) / (Math.abs(ey) || 1e-6));
+    c.line.style.display = s >= 1 ? 'none' : '';
+    c.line.setAttribute('x1', c.ax.toFixed(1)); c.line.setAttribute('y1', c.ay.toFixed(1));
+    c.line.setAttribute('x2', (c.x + ex * s).toFixed(1)); c.line.setAttribute('y2', (c.y + ey * s).toFixed(1));
+    c.dot.setAttribute('cx', c.ax.toFixed(1)); c.dot.setAttribute('cy', c.ay.toFixed(1));
+  }
+}
+document.fonts?.ready.then(() => { measureAll = true; needsRender = true; });
+
+/* ---------------- dimensions ---------------- */
+const dims = new THREE.Group(); dims.visible = false; scene.add(dims);
+const dimMat = new THREE.LineBasicMaterial({ color: 0x0a8470, depthTest: false, transparent: true });
+const coneMat = new THREE.MeshBasicMaterial({ color: 0x0a8470, depthTest: false, transparent: true });
+function dim(a, b, e1, e2, text) {
+  const seg = (p, q) => { const g = new THREE.BufferGeometry().setFromPoints([p, q]); const l = new THREE.Line(g, dimMat); l.renderOrder = 997; dims.add(l); };
+  seg(a, b); seg(e1, a.clone().add(a.clone().sub(e1).setLength(3))); seg(e2, b.clone().add(b.clone().sub(e2).setLength(3)));
+  for (const [p, q] of [[a, b], [b, a]]) {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.3, 5, 12), coneMat);
+    cone.quaternion.copy(alongQ(p.clone().sub(q)));
+    cone.position.copy(p).addScaledVector(p.clone().sub(q).normalize(), -2.5);
+    cone.renderOrder = 997; dims.add(cone);
+  }
+  const el = document.createElement('div'); el.className = 'dimlabel'; el.textContent = text;
+  const lab = new CSS2DObject(el); lab.position.copy(a).lerp(b, 0.5); dims.add(lab);
+}
+dim(V(-70, 66, 0), V(70, 66, 0), V(-70, 20, 0), V(70, 20, 0), '140');
+dim(V(-36.5, 58, 2), V(36.5, 58, 2), V(-36.5, 52, 2), V(36.5, 52, 2), '73');
+dim(V(76, 36, -6), V(76, 36, -151), V(71, 15, -6), V(71, -11, -151), '145');
+dim(PW(-79.25, 40, 6), PW(79.3, 40, 6), PW(-79.25, 28, 5), PW(79.3, 28, 5), '159');
+
+/* ---------------- alert glow ---------------- */
+const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 64;
+{ const g = glowCanvas.getContext('2d'); const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,70,50,0.95)'); grd.addColorStop(0.35, 'rgba(255,60,40,0.45)'); grd.addColorStop(1, 'rgba(255,60,40,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64); }
+const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(glowCanvas), transparent: true, depthWrite: false, depthTest: true }));
+glow.scale.set(30, 30, 1); glow.visible = false; glow.renderOrder = 996; scene.add(glow);
+
+/* ---------------- axis gizmo ---------------- */
+const gizmoScene = new THREE.Scene();
+const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 20);
+for (const [name, color, dir] of [['X', 0xe0473e, V(1, 0, 0)], ['Y', 0x2fa84f, V(0, 1, 0)], ['Z', 0x2f6fe0, V(0, 0, 1)]]) {
+  gizmoScene.add(new THREE.ArrowHelper(dir, V(0, 0, 0), 1, color, 0.3, 0.17));
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'); g.fillStyle = '#' + color.toString(16).padStart(6, '0');
+  g.font = '600 44px ui-monospace, Consolas, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(name, 32, 34);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
+  sp.position.copy(dir).multiplyScalar(1.38); sp.scale.set(0.5, 0.5, 1); gizmoScene.add(sp);
+}
+
+/* ---------------- theme ---------------- */
+let grid = null;
+const accent = new THREE.Color();
+function applyTheme() {
+  scene.background = new THREE.Color(cssVar('--vp'));
+  edgeMat.color.set(cssVar('--vp-edge')); edgeMat.opacity = isDark() ? 0.26 : 0.4;
+  accent.set(cssVar('--accent'));
+  dimMat.color.copy(accent); coneMat.color.copy(accent);
+  ghostM.color.set(cssVar('--ghost')); ghostM.opacity = isDark() ? 0.14 : 0.16;
+  ghostM.emissive.set(cssVar('--ghost')).multiplyScalar(isDark() ? 0.5 : 0);
+  if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+  grid = new THREE.GridHelper(1000, 50, new THREE.Color(cssVar('--vp-grid-1')), new THREE.Color(cssVar('--vp-grid-2')));
+  grid.position.y = -372; grid.material.transparent = true; grid.material.opacity = 0.9; grid.material.depthWrite = false;
+  scene.add(grid);
+  setHot(hot);
+  needsRender = true;
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------------- highlight, explode, camera ---------------- */
+const rows = [...document.querySelectorAll('.row')];
+function setHot(item) {
+  hot = item;
+  const keys = item != null ? (ITEM_PARTS[item] || []) : [];
+  for (const [k, p] of Object.entries(parts)) {
+    const on = keys.includes(k);
+    p.mats.forEach((m) => { m.emissive.copy(on ? accent : new THREE.Color(0)); m.emissiveIntensity = on ? 0.55 : 1; });
+  }
+  callouts.forEach((c) => { c.el.classList.toggle('is-hot', c.item === item); c.line.classList.toggle('is-hot', c.item === item); });
+  rows.forEach((r) => r.classList.toggle('is-hot', Number(r.dataset.item) === item));
+  needsRender = true;
+}
+function applyExplode(t) {
+  explodeT = t;
+  for (const p of Object.values(parts)) {
+    p.group.position.copy(p.base).addScaledVector(p.explode, t);
+    if (p.fade) {
+      const o = Math.max(0, 1 - t / 0.3);
+      p.group.visible = o > 0.01;
+      p.mats.forEach((m) => {
+        const tr = o < 0.999 || m.userData.baseOpacity < 1;
+        if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+        m.opacity = o * m.userData.baseOpacity;
+      });
+    }
+  }
+  if (activeView) setView(activeView, true);
+  needsRender = true;
+}
+let tween = null, activeView = null;
+function tweenTo(pos, target, instant) {
+  if (instant || reduceMotion) { tween = null; camera.position.copy(pos); controls.target.copy(target); controls.update(); needsRender = true; return; }
+  tween = { p0: camera.position.clone(), q0: controls.target.clone(), p1: pos, q1: target, start: performance.now(), dur: 650 };
+}
+function boxOf(keys) {
+  const b = new THREE.Box3();
+  keys.forEach((k) => { const p = parts[k]; if (p) b.expandByObject(p.group); });
+  return b;
+}
+function frameBox(b, dir, minR, instant, k = 1) {
+  const s = b.getBoundingSphere(new THREE.Sphere());
+  const r = Math.max(s.radius, minR);
+  const vf = camera.fov * DEG, hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+  const dist = r / Math.sin(Math.min(vf, hf) / 2) * k;
+  tweenTo(s.center.clone().addScaledVector(dir.clone().normalize(), dist), s.center, instant);
+}
+const MAIN = Object.keys(parts).filter((k) => k !== 'usb');
+const VIEWS = {
+  iso: { dir: V(0.72, 0.4, 0.86), keys: MAIN },
+  front: { dir: V(0, 0.05, 1), keys: MAIN },
+  side: { dir: V(1, 0.05, -0.04), keys: MAIN },
+  top: { dir: V(0.02, 1, 0.16), keys: MAIN },
+  glasses: { dir: V(0.74, 0.42, 0.8), keys: WORN },
+};
+const pressView = (name) => document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+function setView(name, instant) {
+  const v = VIEWS[name];
+  activeView = name;
+  frameBox(boxOf(v.keys), v.dir, 20, instant);
+  pressView(name);
+}
+function focusItem(item) {
+  const keys = ITEM_PARTS[item];
+  if (!keys) return;
+  const b = boxOf(keys);
+  if (b.isEmpty()) return;
+  activeView = null;
+  frameBox(b, camera.position.clone().sub(controls.target), 36, false, 1.8);
+  pressView(null);
+}
+const wide = matchMedia('(min-width: 961px)');
+function selectItem(item, focus) {
+  selected = item;
+  setHot(item);
+  if (focus) {
+    focusItem(item);
+    const row = document.querySelector(`.row[data-item="${item}"]`);
+    if (row && wide.matches) row.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+}
+
+/* ---------------- alert simulation (T3 pattern, left side) ---------------- */
+let alertStart = -1;
+function runAlert() {
+  alertStart = performance.now();
+  activeView = null; pressView(null);
+  frameBox(boxOf(WORN), V(-0.62, 0.34, 0.9), 20);
+  toastEl.textContent = 'Smoke alarm on your left. The left sound sensor hears it louder, so the left LED flashes the three-beep pattern and the motor buzzes with it.';
+  toastEl.hidden = false;
+  needsRender = true;
+}
+function tickAlert(now) {
+  const t = (now - alertStart) / 1000;
+  const on = t < 2.5 && (t % 1) < 0.5;
+  const lm = ledMats.ledL;
+  lm.emissive.set(on ? 0xff2b1c : 0x000000); lm.emissiveIntensity = on ? 2.4 : 1;
+  parts.soundL.mats.forEach((m) => { m.emissive.copy(accent); m.emissiveIntensity = 0.5; });
+  const lp = parts.ledL;
+  glow.position.set(-56, 25, -21.4).addScaledVector(lp.explode, explodeT);
+  glow.visible = on;
+  const mp = parts.motor;
+  mp.group.position.copy(mp.base).addScaledVector(mp.explode, explodeT);
+  if (on) mp.group.position.add(V((Math.random() - 0.5) * 2.4, (Math.random() - 0.5) * 2.4, (Math.random() - 0.5) * 2.4));
+  if (t > 3.3) { alertStart = -1; glow.visible = false; toastEl.hidden = true; setHot(hot); }
+  needsRender = true;
+}
+
+/* ---------------- UI wiring ---------------- */
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+const explodeIn = document.getElementById('explode'), explodeOut = document.getElementById('explode-out');
+explodeIn.addEventListener('input', () => { const v = Number(explodeIn.value); explodeOut.value = explodeOut.textContent = `${Math.round(v)}%`; applyExplode(v / 100); });
+function toggle(id, fn) {
+  const b = document.getElementById(id);
+  b.addEventListener('click', () => { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); fn(on); needsRender = true; });
+}
+toggle('t-labels', (on) => { labelsOn = on; });
+toggle('t-dims', (on) => { dims.visible = on; });
+toggle('t-head', (on) => { head.visible = on; });
+document.getElementById('alert').addEventListener('click', runAlert);
+rows.forEach((r) => {
+  const item = Number(r.dataset.item);
+  r.addEventListener('pointerenter', () => setHot(item));
+  r.addEventListener('pointerleave', () => setHot(selected));
+  r.addEventListener('focus', () => setHot(item));
+  r.addEventListener('blur', () => setHot(selected));
+  r.addEventListener('click', () => selectItem(item, true));
+});
+
+/* ---------------- size + loop ---------------- */
+let W = 1, H = 1;
+function resize() {
+  const r = vpEl.getBoundingClientRect();
+  W = Math.max(1, Math.floor(r.width)); H = Math.max(1, Math.floor(r.height));
+  renderer.setSize(W, H); labelRenderer.setSize(W, H);
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+  if (activeView) setView(activeView, true);
+  needsRender = true;
+}
+function render() {
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H);
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+  layoutCallouts();
+  const s = 76, pad = 10;
+  renderer.autoClear = false;
+  renderer.setScissorTest(true);
+  renderer.setScissor(W - s - pad, pad, s, s);
+  renderer.setViewport(W - s - pad, pad, s, s);
+  renderer.clearDepth();
+  gizmoCam.position.copy(camera.position).sub(controls.target).setLength(5);
+  gizmoCam.quaternion.copy(camera.quaternion);
+  renderer.render(gizmoScene, gizmoCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H);
+  renderer.autoClear = true;
+}
+controls.addEventListener('change', () => { needsRender = true; });
+controls.addEventListener('start', () => { tween = null; activeView = null; pressView(null); });
+
+applyTheme();
+applyExplode(0);
+resize();
+setView('iso', true);
+new ResizeObserver(() => resize()).observe(vpEl);
+
+let first = true;
+renderer.setAnimationLoop((now) => {
+  if (tween) {
+    const k = Math.min(1, (now - tween.start) / tween.dur);
+    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(tween.p0, tween.p1, e);
+    controls.target.lerpVectors(tween.q0, tween.q1, e);
+    if (k >= 1) tween = null;
+    needsRender = true;
+  }
+  if (alertStart >= 0) tickAlert(now);
+  const moved = controls.update();
+  if (moved || needsRender) {
+    render();
+    needsRender = false;
+    if (first) { first = false; statusEl.hidden = true; window.__rigReady = true; }
+  }
+});
+</script>
