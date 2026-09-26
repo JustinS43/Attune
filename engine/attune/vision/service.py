@@ -91,6 +91,7 @@ class VisionService:
             self.s.reid_threshold,
         )
         self.paused = False
+        self.camera_on = True
         self.job: EnrollJob | None = None
         self._commands: queue.Queue = queue.Queue()
         self._rec_budget = TokenBucket(self.s.max_rec_per_s, 5)
@@ -229,10 +230,27 @@ class VisionService:
             for tr in self.tracker.active:
                 tr.data.pop("color", None)
                 tr.data["ident"].proposal = None
+        elif name == "camera.set" and isinstance(T.get(args, "on"), bool):
+            self._set_camera(bool(T.get(args, "on")))
         elif name == "_paused":
             self.paused = bool(T.get(args, "paused"))
         elif name == "_proposal":
             self._on_proposal(args, now)
+
+    def _set_camera(self, on: bool) -> None:
+        """Stop or restart the camera when the wearer turns it off or on from a page."""
+        if self.camera is None or on == self.camera_on:
+            return
+        self.camera_on = on
+        if on:
+            log.info("Camera turned on")
+            self.camera.start()
+        else:
+            log.info("Camera turned off")
+            self.camera.stop()
+            self.bus.publish(
+                T.STATUS_PART, T.StatusPart("camera", True, "off (turned off by the wearer)")
+            )
 
     def _on_proposal(self, ev: Any, now: float) -> None:
         tr = self._find(T.get(ev, "track_id"))
@@ -462,6 +480,8 @@ class VisionService:
                 ok=bool(cam is None or cam.connected),
                 detail="paused"
                 if self.paused
+                else "camera off"
+                if not self.camera_on
                 else ("" if cam is None or cam.connected else "camera lost"),
                 metrics={
                     "camera": cam.device_name if cam else None,

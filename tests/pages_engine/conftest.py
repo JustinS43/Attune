@@ -75,7 +75,9 @@ def recv(ws, timeout: float = 5.0) -> dict | bytes:
     return message["bytes"]
 
 
-def recv_type(ws, msg_type: str, timeout: float = 5.0, seen: list | None = None) -> dict:
+def recv_type(
+    ws, msg_type: str, timeout: float = 5.0, seen: list | None = None
+) -> dict:
     """Skip messages until one of `msg_type` arrives (frames and others go to `seen`)."""
     end = time.monotonic() + timeout
     while True:
@@ -98,11 +100,13 @@ def hub_env(tmp_path):
     (data / "reels" / "film" / "timeline.json").write_text('{"ok": true}')
     person = data / "people" / "sam-abc123"
     person.mkdir(parents=True)
-    (person / "meta.json").write_text('{"name": "Sam", "consent_t": "2026-09-26T10:00:00-04:00"}')
+    (person / "meta.json").write_text(
+        '{"name": "Sam", "consent_t": "2026-09-26T10:00:00-04:00"}'
+    )
     (person / "face.npy").write_bytes(b"not really a numpy file")
 
     bus = Bus()
-    rec = Recorder(bus, C.COMMAND, C.PAUSED, C.SESSION_FORGET)
+    rec = Recorder(bus, C.COMMAND, C.PAUSED, C.SESSION_FORGET, C.CAMERA_STATE)
     session_log = SessionLog(bus, data / "sessions", "test-session")
     router = CommandRouter(bus, session_log)
     router.connect()
