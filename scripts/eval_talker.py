@@ -8,14 +8,19 @@ Section 1 - Vision. TODO: V-22 (reusable for later two-person clips).
 
 Engine mode starts the whole engine in this process (`--port`, default 8007) on the
 clip, plays the WAV as the microphone, and records `caption`, `scene` and `status`
-over the WebSocket like a console page. The camera loops the video from when vision
-starts, so the WAV is started exactly on a loop boundary of the video (on the shared
-clock): lips and sound line up as they did when the clip was recorded. The engine's
-data folder is a temporary directory that is deleted afterwards, so nothing is stored.
+over the WebSocket like a console page (and each face's scores from the bus). The
+camera loops the video from when vision starts, so the WAV is started exactly on a
+loop boundary of the video (on the shared clock): lips and sound line up as they did
+when the clip was recorded. The engine's data folder is a temporary directory that is
+deleted afterwards, so nothing is stored. `--cpu` keeps the GPU free for a live engine
+(vision and Light-ASD on the CPU, no LLM, no sound alerts; `--set
+vision.asd_device="cuda"` puts Light-ASD alone back on the GPU); `--seconds` prints
+frames, scores and the lit speaker per second.
 
 Offline mode runs the face finder, the tracker and Light-ASD frame by frame outside
 the engine, and prints the per-second speaking score of each truth person (plus the
-V-08 lip score for comparison) and how well talking and silent seconds separate.
+lip score for comparison) and how well talking and silent seconds separate.
+`--crop-fps` replays the crops as a slower vision loop would deliver them.
 
 truth.json (times in clip seconds; `region` is where a person's face is, as fractions
 of the frame [x0, y0, x1, y1]; a person without one matches any face, which suits a
@@ -65,6 +70,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "engine"))
 
 log = logging.getLogger("eval_talker")
+
+
+def _lip_lines() -> tuple[float, float]:
+    """The fusion's lip-score lines (probable, talking) from its default settings."""
+    from attune.vision.settings import FusionSettings
+
+    s = FusionSettings()
+    return s.lip_uncertain, s.lip_talking
 
 
 # ============================================================================ truth
@@ -241,8 +254,9 @@ def offline(args, truth: Truth) -> None:
             asd_txt = f"ASD mean {sc.mean():5.2f} max {sc.max():5.2f} > 0 in {100 * np.mean(sc > 0):3.0f}%"
         else:
             asd_txt = "ASD -"
+        line = _lip_lines()[1]
         lip_txt = (
-            f"lip mean {lp.mean():.3f} >= 0.03 in {100 * np.mean(lp >= 0.03):3.0f}%"
+            f"lip mean {lp.mean():.3f} >= {line:g} in {100 * np.mean(lp >= line):3.0f}%"
             if len(lp)
             else "lip -"
         )
@@ -428,7 +442,7 @@ def _separation(name, series, person_of, who, truth: Truth) -> None:
     ranks = np.empty(len(order))
     ranks[order] = np.arange(1, len(order) + 1)
     auc = (ranks[: len(p)].sum() - len(p) * (len(p) + 1) / 2) / (len(p) * len(n))
-    cuts = (-0.5, 0.0, 0.5, 1.0) if name.startswith("ASD") else (0.015, 0.03)
+    cuts = (-0.5, 0.0, 0.5, 1.0) if name.startswith("ASD") else _lip_lines()
     rates = ", ".join(
         f"{c:+g}: {100 * np.mean(p > c):.0f}%/{100 * np.mean(n > c):.0f}%" for c in cuts
     )
@@ -668,10 +682,11 @@ def engine_run(args, truth: Truth) -> dict:
     os.chdir(ROOT)  # models/ and config/ resolve from the repo root
     engine = Engine(opts, config)
     if args.cpu:
-        # the LLM (Ollama) shares the GPU with a live engine, and it doesn't pick speakers
+        # Neither picks speakers: the LLM (Ollama) shares the GPU with a live engine, and
+        # the sound alerts' model takes CPU from vision
         steps = engine._steps
         engine._steps = lambda: [
-            (name, build) for name, build in steps() if name != "llm"
+            (name, build) for name, build in steps() if name not in ("llm", "alerts")
         ]
     player = AlignedPlayer(engine.bus, args.wav, n_frames, clock.now)
     track_rows = _record_tracks(engine.bus)
@@ -826,6 +841,7 @@ def metrics(run: dict, truth: Truth, label: str) -> dict:
             g["asd"].append(float(asd))
         if lip is not None:
             g["lip"].append(float(lip))
+    lip_line = _lip_lines()[1]
     out["face_scores"] = {
         k: {
             "frames": len(v["n"]),
@@ -835,7 +851,7 @@ def metrics(run: dict, truth: Truth, label: str) -> dict:
             if v["asd"]
             else None,
             "lip_mean": round(statistics.mean(v["lip"]), 3) if v["lip"] else None,
-            "lip_ge_0.03": sum(x >= 0.03 for x in v["lip"]) / len(v["lip"])
+            "lip_talking": sum(x >= lip_line for x in v["lip"]) / len(v["lip"])
             if v["lip"]
             else None,
         }
@@ -919,7 +935,7 @@ def report(m: dict) -> None:
         )
         print(
             f"  face scores while {who} talks ({f['frames']} face-frames): {asd}; "
-            f"lip mean {f['lip_mean']}, >=0.03 {pct(f['lip_ge_0.03'])}"
+            f"lip mean {f['lip_mean']}, >= lip_talking {pct(f['lip_talking'])}"
         )
     print(
         f"first-caption latency {m['first_caption_latency_s']} s, "

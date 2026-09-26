@@ -26,7 +26,7 @@ enroll_crops = 8
 enroll_min_crops = 5
 # Light-ASD (V-22): lips + sound decide who is talking. Weights: scripts/download_models.py light_asd
 asd_enabled = true              # false, or weights missing: the lip score decides alone
-asd_device = "cuda"             # "cpu" also works (~75-100 ms per face per round)
+asd_device = "cuda"             # ~25-80 ms a round; "cpu" is ~150 ms idle but ~600 ms in a busy engine
 asd_rate_hz = 5                 # scoring rounds per second, all faces in one batch
 asd_window_s = 1.5
 asd_min_face_px = 40

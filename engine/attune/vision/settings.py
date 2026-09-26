@@ -51,7 +51,7 @@ class VisionSettings:
     # it off, or its weights missing, tracks carry no asd_score and fusion uses the lip score.
     asd_enabled: bool = True
     asd_model: str = "models/light_asd/finetuning_TalkSet.model"
-    asd_device: str = "cuda"  # or "cpu": about 75-100 ms per face per round
+    asd_device: str = "cuda"  # "cpu" works, but in a busy engine its rounds are slow (~600 ms)
     asd_rate_hz: float = 5.0  # scoring rounds per second (all faces in one batch)
     asd_window_s: float = 1.5  # history each round looks at
     asd_score_s: float = 0.4  # the score is the mean over the newest part of the window
