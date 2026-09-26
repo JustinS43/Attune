@@ -137,6 +137,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
 
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
+- [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
 - [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
 
 ## Gates and end-to-end checks (whole team)
