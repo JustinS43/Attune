@@ -16,6 +16,8 @@ uv sync --project engine --extra audio --extra vision --extra dev --locked
 uv run --project engine --extra audio python -c 'import sherpa_onnx; print(sherpa_onnx.__version__)'
 ```
 
+The whole engine also needs `--extra hardware`: the Arduino's serial link and ElevenLabs.
+
 With permission to download the models, install the exact files used by the live speaker
 demo. The downloader pins the source revision, byte count, and SHA-256 of each file. It
 verifies a download before moving it into place and skips files already verified.
@@ -76,3 +78,18 @@ wrong hash, rerun its named download; the downloader replaces only the invalid f
 If CAM++ was replaced with a different export, existing voice prints made with that
 export will not match the new model. Re-enroll consenting people before testing saved
 names. No voice recordings or voice prints belong in Git.
+
+## Other models the engine uses
+
+`scripts/download_models.py` doesn't fetch these yet (P-14). The engine still starts
+without them: it logs what's missing and carries on as the last column says. Sizes are
+from the demo laptop.
+
+| Model | Installed path | Size | Without it |
+|---|---|---:|---|
+| Nemotron 3.5 streaming ASR, the sherpa-onnx INT8 export of `nvidia/nemotron-3.5-asr-streaming-0.6b` (560 ms chunks) | `models/nemotron/`: `tokens.txt`, `encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx` | 653 MB | Captions come from the Whisper model above, which is slower |
+| Kokoro multi-lang v1.0, the sherpa-onnx export | `models/tts/kokoro-multi-lang-v1_0/` | 384 MB | "Speak for me" works only with an ElevenLabs key |
+| EfficientAT mn10 sound tagger, exported locally from the upstream weights (see [docs/calibration.md](../docs/calibration.md)) | `models/efficientat-mn10-as.ts`, `models/audioset-labels.json` | 20 MB | Only the rhythm alerts (T3/T4 alarm patterns) run |
+| Qwen 3.5, managed by Ollama | installed with `ollama pull qwen3.5:4b` (fallback `qwen3.5:2b`) | | No reply suggestions, descriptions or translation |
+
+Silero VAD needs no file here: the `silero-vad` package includes its model.
