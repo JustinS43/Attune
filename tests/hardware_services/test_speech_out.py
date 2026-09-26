@@ -117,6 +117,53 @@ def test_no_key_uses_kokoro(bus, make):
     assert bus.of("reply.spoken")[0]["voice"] == "kokoro"
 
 
+def test_saved_credentials_apply_to_next_reply(bus, monkeypatch, tmp_path):
+    """Settings saved after startup must not leave the offline voice selected."""
+    from dotenv import set_key
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+    created = []
+
+    def from_env(_cls, _cfg):
+        key, voice = elevenlabs_tts.load_credentials()
+        if not key:
+            return None
+        result = FakeTTS("elevenlabs")
+        created.append((voice, result))
+        return result
+
+    monkeypatch.setattr(elevenlabs_tts.ElevenLabsTTS, "from_env", classmethod(from_env))
+    service = SpeechOutService(
+        bus,
+        {"clock": time.monotonic, "speech_out": {"fallback_after_s": 0.3}},
+        kokoro=FakeTTS("kokoro"),
+        player=FakePlayer(),
+    )
+    service.start()
+    try:
+        speak(bus, "before saving")
+        assert wait_for(lambda: len(bus.of("reply.spoken")) == 1)
+        assert bus.of("reply.spoken")[-1]["voice"] == "kokoro"
+
+        path = tmp_path / ".env"
+        set_key(path, "ELEVENLABS_API_KEY", "synthetic-key")
+        set_key(path, "ELEVENLABS_VOICE_ID", "voice-one")
+        speak(bus, "after saving")
+        assert wait_for(lambda: len(bus.of("reply.spoken")) == 2)
+        assert bus.of("reply.spoken")[-1]["voice"] == "elevenlabs"
+        assert created[-1][0] == "voice-one"
+
+        set_key(path, "ELEVENLABS_VOICE_ID", "voice-two")
+        speak(bus, "after changing voice")
+        assert wait_for(lambda: len(bus.of("reply.spoken")) == 3)
+        assert created[-1][0] == "voice-two"
+        assert len(created) == 2
+    finally:
+        service.stop()
+
+
 def test_stream_breaking_midway_does_not_repeat(bus, make):
     service = make(eleven=FakeTTS("elevenlabs", chunks=5, fail_after=2))
     speak(bus)
