@@ -1,12 +1,50 @@
-"""Voice activity (Silero VAD v6)
+"""Silero's 512-sample inference and hysteretic utterance segmentation."""
+from __future__ import annotations
+import numpy as np
 
-Section 2 - Audio & Language
-TODO: A-02
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Captions
 
-What to build:
-- Start > 0.5, end < 0.35, ignore blips < 250 ms, 400 ms silence ends an utterance.
+class SileroVAD:
+    """Load the installed Silero package's bundled model without downloading."""
+    def __init__(self):
+        from silero_vad import load_silero_vad
+        self.model = load_silero_vad(onnx=False)
 
-Placeholder only - no code yet (MLH: project code is written during the event).
-"""
+    def __call__(self, samples: np.ndarray) -> float:
+        import torch
+        with torch.inference_mode():
+            return float(self.model(torch.from_numpy(samples), 16000).item())
+
+    def reset(self) -> None:
+        self.model.reset_states()
+
+
+class Segmenter:
+    """Apply start/end hysteresis, minimum speech and trailing-silence rules."""
+    def __init__(self, config: dict):
+        self.config = config
+        self.reset()
+
+    def reset(self) -> None:
+        self.active = False
+        self.start = None
+        self.speech_s = 0.0
+        self.silence_s = 0.0
+        self.confirmed = False
+
+    def feed(self, t: float, prob: float, duration: float = 0.032) -> tuple[bool, bool, bool]:
+        """Return speech state, first confirmed frame, and utterance ending."""
+        if not self.active and prob > self.config["vad_start"]:
+            self.active = True
+        elif self.active and prob < self.config["vad_end"]:
+            self.active = False
+        if self.active:
+            if self.start is None:
+                self.start = t
+            self.speech_s += duration
+            self.silence_s = 0
+        elif self.start is not None:
+            self.silence_s += duration
+        began = not self.confirmed and self.speech_s >= self.config["min_speech_ms"] / 1000
+        self.confirmed |= began
+        ended = self.start is not None and self.silence_s >= self.config["end_silence_ms"] / 1000
+        return self.active, began, ended
