@@ -108,6 +108,7 @@ class VisionService:
         self.station = None  # attune.station.session.StationEnroller, once models are loaded
         self._station_tap: Callable[[int, float, np.ndarray], None] | None = None
         self._request_prints: dict[str, tuple[float, np.ndarray]] = {}  # save.request snapshots
+        self._heard: dict[int, deque[str]] = {}  # distinct recent finals per visible track
         self._commands: queue.Queue = queue.Queue()
         self._rec_budget = TokenBucket(self.s.max_rec_per_s, 5)
         self._enroll_budget = TokenBucket(8.0, 3)
@@ -175,8 +176,10 @@ class VisionService:
             T.PAUSED, lambda ev: put({"name": "_paused", "args": {"paused": T.get(ev, "paused")}})
         )
         self.bus.subscribe(T.NAME_PROPOSAL, lambda ev: put({"name": "_proposal", "args": ev}))
+        self.bus.subscribe(T.NAME_EVIDENCE, lambda ev: put({"name": "_name_evidence", "args": ev}))
         self.bus.subscribe(T.AUDIO_BLOCK, self._on_audio_block)
         self.bus.subscribe(T.SAVE_REQUEST, lambda ev: put({"name": "_save_request", "args": ev}))
+        self.bus.subscribe(T.CAPTION, lambda ev: put({"name": "_caption", "args": ev}))
 
     def _on_audio_block(self, ev: Any) -> None:
         """16 kHz PCM for Light-ASD; just copied into its ring, so the bus isn't held up."""
@@ -294,6 +297,8 @@ class VisionService:
             self._enroll_progress(now, force=True)
         elif name == "person.rename":
             person = self.gallery.rename(T.get(args, "person_id"), T.get(args, "name"))
+            if person and T.get(args, "tier") in {"close", "familiar", "other"}:
+                self.gallery.set_tier(person.person_id, T.get(args, "tier"))
             if person:
                 self.bus.publish(
                     T.PERSON_CHANGED, T.PersonChanged(person.person_id, person.name, "renamed")
@@ -309,6 +314,7 @@ class VisionService:
             if self.station is not None:
                 self.station.cancel("cancelled")
             self._request_prints.clear()
+            self._heard.clear()
             gone = set(self.gallery.forget_session())
             self._clear_identities(gone)
             self.tracker.lost.clear()
@@ -323,12 +329,70 @@ class VisionService:
                 self.station.cancel("paused")
         elif name == "_proposal":
             self._on_proposal(args, now)
+        elif name == "_name_evidence":
+            self._on_name_evidence(args)
         elif name == "enroll.station":
             self._station_command(dict(args) if isinstance(args, dict) else {}, now)
         elif name == "_save_request":
             self._snapshot_request(args, now)
         elif name == "_station_save":
             self._station_save(args, now)
+        elif name == "_caption":
+            self._remember_speaker(args, now)
+
+    def _remember_speaker(self, caption: Any, now: float) -> None:
+        """Persist a face only after fusion confidently linked speech to its track."""
+        if self.paused or not T.get(caption, "final", False):
+            return
+        speaker = T.get(caption, "speaker")
+        kind = T.get(speaker, "kind")
+        if kind not in {"face", "probable_face"}:
+            return
+        tr = self._find(T.get(speaker, "track_id"))
+        if tr is None or not tr.seen:
+            return
+        heard = self._heard.setdefault(tr.track_id, deque(maxlen=2))
+        utt_id = str(T.get(caption, "utt_id"))
+        if utt_id not in heard:
+            heard.append(utt_id)
+        if kind == "probable_face" and len(heard) < 2:
+            return
+        ident: Identity = tr.data["ident"]
+        if ident.person_id:
+            known = self.gallery.get(ident.person_id)
+            tier = known.tier if known else None
+            known = self.gallery.encounter(ident.person_id)
+            if known and known.tier != tier:
+                self.bus.publish(
+                    T.PERSON_CHANGED, T.PersonChanged(known.person_id, known.name, "renamed")
+                )
+            return
+        rows = list(tr.data.get("recent", []))
+        if len(rows) < 5 or now - tr.first_t < 1.0:
+            return
+        prints = np.stack(rows)
+        # A newly created track may still be waiting for its third recognition hit.
+        # Reuse a strong existing match instead of creating a duplicate profile.
+        probe = np.mean(prints, axis=0)
+        probe /= max(float(np.linalg.norm(probe)), 1e-9)
+        candidate, score, second = self.gallery.match(probe)
+        if candidate and score >= self.s.match_threshold and score - second >= self.s.match_margin:
+            self.rules.assign(ident, candidate, score, now)
+            self.gallery.encounter(candidate)
+            return
+        person, removed = self.gallery.remember_auto(prints)
+        if person is None:
+            return
+        if removed:
+            self._clear_identities({removed})
+            self.bus.publish(T.PERSON_CHANGED, T.PersonChanged(removed, "", "deleted"))
+        self.rules.assign(ident, person.person_id, 1.0, now)
+        self.bus.publish(
+            T.PERSON_CHANGED, T.PersonChanged(person.person_id, person.name, "enrolled")
+        )
+        self.bus.publish(
+            T.ENROLL_RESULT, T.EnrollResult(person.person_id, "face", True, "", tr.track_id, "auto")
+        )
 
     def _set_camera(self, on: bool) -> None:
         """Stop or restart the camera when the wearer turns it off or on from a page."""
@@ -357,12 +421,36 @@ class VisionService:
             prints = list(tr.data.get("recent", []))
             if tr.embedding is not None and not prints:
                 prints = [tr.embedding]
-            if prints and ident.person_id is None:
+            current = self.gallery.get(ident.person_id)
+            if current is not None and current.source == "auto":
+                self.gallery.rename(current.person_id, T.get(ev, "name"))
+                self.bus.publish(
+                    T.PERSON_CHANGED, T.PersonChanged(current.person_id, current.name, "renamed")
+                )
+            elif prints and ident.person_id is None:
                 person = self.gallery.add_session(T.get(ev, "name"), np.stack(prints))
                 self.rules.assign(ident, person.person_id, 1.0, now)
             ident.proposal = None
         else:  # rejected, expired
+            if state == "rejected":
+                person = self.gallery.get(ident.person_id)
+                if person is not None and person.source == "auto":
+                    self.gallery.reject_name(person.person_id, T.get(ev, "name"))
             ident.proposal = None
+
+    def _on_name_evidence(self, ev: Any) -> None:
+        """Keep only a candidate and count, never any conversation text."""
+        tr = self._find(T.get(ev, "track_id"))
+        claimed = T.get(ev, "person_id")
+        ident: Identity | None = tr.data["ident"] if tr is not None else None
+        pid = ident.person_id if ident is not None else claimed
+        if pid is None or (claimed is not None and claimed != pid):
+            return
+        if self.gallery.note_name(pid, T.get(ev, "name"), str(T.get(ev, "utt_id"))):
+            person = self.gallery.get(pid)
+            if ident is not None:
+                ident.proposal = None
+            self.bus.publish(T.PERSON_CHANGED, T.PersonChanged(pid, person.name, "renamed"))
 
     # ---------------- enrollment station (V-23) ----------------
     def _main_camera(self) -> tuple[str, bool]:
@@ -439,7 +527,7 @@ class VisionService:
     def _station_enroll(self, req: dict, now: float) -> dict:
         """Save a station enrollment's face prints, then name every glasses face that is them."""
         prints = np.asarray(req["prints"], dtype=np.float32)
-        person = self.gallery.enroll(req["name"], prints, str(req["consent_t"]))
+        person, reused = self._manual_person(req["name"], prints, str(req["consent_t"]))
         tid = req.get("track_id")
         tr = self._track_any(tid)
         replaced: set[str] = set()
@@ -447,7 +535,7 @@ class VisionService:
             # the glasses face the save started from (its identity check passed): its session
             # entry is replaced, as in _finish_enrollment
             before = self.gallery.get(tr.data["ident"].person_id)
-            if before is not None and not before.enrolled:
+            if before is not None and (not before.enrolled or before.source == "auto"):
                 self.gallery.delete(before.person_id)
                 replaced.add(before.person_id)
             self.rules.assign(tr.data["ident"], person.person_id, 1.0, now)
@@ -455,7 +543,7 @@ class VisionService:
         # margin, so neither would ever be named: the saved person supersedes it
         line = float(req.get("identity_match", 0.3))
         for other in list(self.gallery.people(enrolled_only=False)):
-            if other.enrolled or other.person_id == person.person_id:
+            if (other.enrolled and other.source != "auto") or other.person_id == person.person_id:
                 continue
             if identity_score(prints, other.prints) >= line:
                 self.gallery.delete(other.person_id)
@@ -464,6 +552,8 @@ class VisionService:
             ident = tr2.data.get("ident")
             if ident is not None and ident.person_id in replaced:
                 self.rules.assign(ident, person.person_id, 1.0, now)
+        for old_id in replaced:
+            self.bus.publish(T.PERSON_CHANGED, T.PersonChanged(old_id, "", "deleted"))
         self.bus.publish(
             T.ENROLL_RESULT,
             T.EnrollResult(
@@ -474,13 +564,35 @@ class VisionService:
             T.PERSON_CHANGED, T.PersonChanged(person.person_id, person.name, "enrolled")
         )
         log.info(
-            "Station: saved %s as %s with %d face prints%s",
+            "Station: %s %s as %s with %d face prints%s",
+            "updated" if reused else "saved",
             person.name,
             person.person_id,
             len(prints),
             f" (replaces {sorted(replaced)})" if replaced else "",
         )
         return {"person_id": person.person_id}
+
+    def _manual_person(self, name: str, prints: np.ndarray, consent_t: str):
+        """Reuse a strongly matching manual profile so a later voice retry keeps its identity."""
+        scored = sorted(
+            (
+                (identity_score(prints, p.prints), p)
+                for p in self.gallery.people()
+                if p.source == "manual"
+            ),
+            key=lambda row: -row[0],
+        )
+        if (
+            scored
+            and scored[0][0] >= self.s.match_threshold + self.s.match_margin
+            and (len(scored) == 1 or scored[0][0] - scored[1][0] >= self.s.match_margin)
+        ):
+            person = scored[0][1]
+            if person.name != name:
+                person = self.gallery.rename(person.person_id, name)
+            return person, True
+        return self.gallery.enroll(name, prints, consent_t), False
 
     def _clear_identities(self, person_ids: set[str]) -> None:
         for tr in self.tracker.active + self.tracker.lost:
@@ -509,6 +621,7 @@ class VisionService:
 
         upd = self.tracker.update(dets, t, image.shape[1])
         for tr in upd.lost:
+            self._heard.pop(tr.track_id, None)
             self.bus.publish(T.VISION_TRACK_LOST, T.TrackLost(tr.track_id, t, tr.exit_side))
             if self.job and self.job.track_id == tr.track_id:
                 self._finish_enrollment(t, lost=True)
@@ -608,16 +721,20 @@ class VisionService:
             )
             return
         self._enroll_progress(t, force=True, job=job, fraction=1.0)
-        person = self.gallery.enroll(job.name, prints, job.consent_t)
+        person, _ = self._manual_person(job.name, prints, job.consent_t)
         tr = self._find(job.track_id)
         if tr is not None:
             # A confirmed "Sam?" named this face for the session first (P-29: the double tap
             # confirms, then saves). Saving them replaces that session entry: two gallery people
             # with the same face never clear the match margin, so neither would ever match.
             before = self.gallery.get(tr.data["ident"].person_id)
-            if before is not None and not before.enrolled:
+            if before is not None and (not before.enrolled or before.source == "auto"):
                 self.gallery.delete(before.person_id)
                 self._clear_identities({before.person_id})
+                if before.enrolled:
+                    self.bus.publish(
+                        T.PERSON_CHANGED, T.PersonChanged(before.person_id, "", "deleted")
+                    )
             self.rules.assign(tr.data["ident"], person.person_id, 1.0, t)
         self.bus.publish(
             T.ENROLL_RESULT, T.EnrollResult(person.person_id, "face", True, "", job.track_id)

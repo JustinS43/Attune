@@ -37,7 +37,6 @@ from fastapi.staticfiles import StaticFiles
 from .speech_settings import create_router as speech_settings_router
 from .ws import Hub, host_of, is_loopback_host
 
-
 log = logging.getLogger(__name__)
 
 WEB_ROOT = Path(__file__).resolve().parents[3] / "web"

@@ -193,7 +193,8 @@ def test_only_prints_are_stored(tmp_path):
     assert files == ["sam-1/voice.json"]
     record = json.loads((st.people / "sam-1" / "voice.json").read_text())
     assert record["source"] == "station" and record["consent"] is True
-    assert set(record) == {"consent", "consent_t", "source", "embedding", "adapted"}
+    assert set(record) == {"consent", "consent_t", "source", "embedding", "adapted", "automatic"}
+    assert record["automatic"] is False
 
 
 def test_preview_goes_with_a_face_box_and_is_jpeg(tmp_path):
@@ -372,6 +373,28 @@ def test_silent_mic_says_it_did_not_start(tmp_path):
     st.send("cancel")
     st.wait_closed()
     assert st.rec.phases()[-1] == "done"  # the face stays saved
+
+
+def test_mic_open_error_keeps_the_voice_retry_available(tmp_path):
+    class FlakyMic(FakeMic):
+        starts = 0
+
+        def start(self):
+            self.starts += 1
+            if self.starts == 1:
+                raise OSError("device busy")
+            self.stopped = False
+            super().start()
+
+    st = Station(tmp_path, mic=FlakyMic(speech_like(6.0)))
+    st.start()
+    st.wait_phase("voice_failed")
+    assert "device busy" in st.rec[C.ENROLL_STATE][-1]["reason"]
+    assert st.rec[C.ENROLL_STATE][-1]["face_ok"]
+    st.send("retry")
+    st.wait_closed()
+    assert st.rec.phases()[-1] == "done"
+    assert st.rec[C.ENROLL_STATE][-1]["voice_ok"]
 
 
 class StoppingMic(FakeMic):

@@ -113,7 +113,7 @@ Then: `gh pr ready <n>`.
 
 **Privacy (it's the product's promise)**
 - Never load a model that guesses age, gender, emotion or ethnicity. Descriptions use only the word lists in `docs/contracts.md`.
-- Enroll only people who ticked consent themselves. Strangers exist only for the session, and "forget session" must wipe them everywhere.
+- Two ways to be saved. **Manual contacts** tick consent themselves at the enrollment station. **Automatic contacts** are people Attune clearly hears talking with the wearer (their speech is linked to their face): they are remembered on the laptop as face and voice prints only, as "New person" until their name is learned, at most 150 (the least-seen are replaced), and the wearer can delete any contact. People who are only seen exist only for the session, and "forget session" must wipe them everywhere.
 - Nothing leaves the laptop except the text the wearer types for ElevenLabs.
 - Never trigger a real alarm; use recordings.
 
