@@ -70,7 +70,7 @@ A service reports its health by publishing `status.part` about once per second. 
 
 **Shared types**
 
-- `Track`: `track_id, box, face_px, lip_score, person_id or None, name or None, match_score, status` (`unknown`, `proposed`, `named`, `enrolled`)
+- `Track`: `track_id, box, face_px, lip_score, person_id or None, name or None, match_score, status` (`unknown`, `proposed`, `named`, `enrolled`), `mouth_open=None, asd_score=None` (see "Active speaker score")
 - `Speaker`: `kind` (`you`, `you_typed`, `face`, `probable_face`, `offscreen`, `someone`), `track_id or None, person_id or None, label, side`
 - `FaceState`: `track_id, box, label, status, lip_score, is_speaker, dashed`
 - `Offscreen`: `person_id or None, label, side`
@@ -164,6 +164,17 @@ Descriptions may only use these words. Nothing about gender, age, body, skin or 
 | Models | `models/` (gitignored, see `models/README.md`) |
 | Runtime data | `data/` (gitignored): `people/`, `profiles/`, `sessions/`, `reels/` |
 | Secrets | `.env` (gitignored), copied from `.env.example` |
+
+## Section 1 integration additions
+
+**Active speaker score (V-22).** `Track.asd_score` is Light-ASD's speaking logit for
+that face: whether its mouth moves in time with the sound, over the last
+`[vision] asd_window_s` (1.5 s) and averaged over the newest `asd_score_s` (0.4 s).
+Above 0 means talking; it has no fixed range (typically -5 to +5). It is `None`
+whenever the face isn't scored: the model is off or missing, the face is under
+`[vision] asd_min_face_px`, it has too little history, or the latest score is older
+than `[vision] asd_max_age_s`. Consumers treat `None` as "can't tell" and fall back
+to `lip_score`. It is computed from local frames and PCM only; nothing is stored.
 
 ## Section 2 integration additions
 

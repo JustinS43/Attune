@@ -45,6 +45,7 @@ from ..vision.types import (
     VoiceHarvest,
     get,
 )
+from .asd_gate import AsdGate
 from .harvest import Harvester, voice_id
 from .sync import Envelope, in_time_score
 
@@ -215,6 +216,7 @@ def _merge_neighbours(groups: list[_Group]) -> list[_Group]:
 class SpeakerFusion:
     def __init__(self, settings: FusionSettings | None = None):
         self.s = settings or FusionSettings()
+        self.asd_gate = AsdGate(self.s)  # V-22: Light-ASD decides for the faces it scores
         self.tracks: dict[int, _TrackInfo] = {}
         self.frame_no = 0
         self.frame_t = 0.0
@@ -242,6 +244,7 @@ class SpeakerFusion:
 
     # ---------------- inputs ----------------
     def on_tracks(self, ev) -> None:
+        self.asd_gate.on_tracks(ev)
         t = float(get(ev, "t"))
         self.frame_no = int(get(ev, "frame_no", 0))
         self.frame_t = t
@@ -661,7 +664,7 @@ class SpeakerFusion:
 
     # ---------------- tick ----------------
     def tick(self, now: float) -> tuple[Scene, list[Caption], VoiceHarvest | None]:
-        spk, r = self.decide(now)
+        spk, r = self.asd_gate.decide(self, now)
         if not _same(spk, self.current):
             self._current_since = now
         self.current = spk

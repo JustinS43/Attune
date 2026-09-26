@@ -220,6 +220,8 @@ class Track:
     match_score: float
     status: str  # unknown, proposed, named, enrolled
     mouth_open: float | None = None
+    # Light-ASD speaking logit (V-22): > 0 talking in time with the sound; None = not scored
+    asd_score: float | None = None
 
 
 @dataclass
