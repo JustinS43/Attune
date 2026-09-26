@@ -64,9 +64,10 @@ Nothing is downloaded or installed.
 | `hardware` | simulated Arduino: READY, CFG, heartbeat rate, every pattern as `PAT` with its `ACK`, a test pattern stops by itself after one cycle, touches (tap, hold, double, triple), the 2 s safety stop (LOST) and relink, a board reset (brown-out) is noticed and the link recovers, PAUSE icon |
 | `camera_pause` | camera off/on and pause/resume reach every page (and pages that connect later); frames stop and come back; captions keep running with the camera off and stop while paused |
 | `pages` | demo (5 views, `` ` ``, Alt+1..5, Alt+C, hidden panes out of the tab order), lens (colour, mono, corner, Glass placement, keys M [ ] G H ? P C V F), POV (Closer/Everything, looks, Esc), glasses guide ("Try" buttons), phone (every screen at 390x844 and 360x740, both palettes, history search, speak-for-me, presets, switches, camera off/on, pause, forget, dark theme, tab bar), panels; no console errors or failed requests; layout (overflow, overlaps, tiny or cut-off text), WCAG AA contrast, visible keyboard focus, screen-reader names |
+| `speech_settings` | the phone's ElevenLabs form (Settings → Speak for me) with dummy keys against the test engine's own temporary `.env`: a saved key is never shown back (page, fields, storage, URL, WebSocket, API answers, engine log), other origins, DNS rebinding and origin-less posts are refused, bad input gets 400/415, it works inside the demo page's phone frame, the `?demo` phone never calls it, and the checkout's `.env` is never touched |
 | `save` | D on the glasses (the double tap) reaches the phone's consent sheet in all three looks; Save stays off until the person ticks consent; Cancel enrolls nothing |
 | `reconnect` | stop and restart the engine: every page shows it lost the link and recovers by itself; a reply typed offline is spoken after reconnecting |
-| `privacy` | forget session wipes strangers' lines from this session's history and any names heard; no photos, audio or prints written; the session log has no caption text; the engine process opens no outside connection all the time it runs (checked every 10 s, with the host name from the DNS cache) |
+| `privacy` | forget session wipes strangers' lines from this session's history and any names heard; no photos, audio or prints written; the session log has no caption text; the engine process opens no outside connection all the time it runs (checked every 10 s, with the host name from the DNS cache; too few successful looks fails the check, since not measured is not clean) |
 | `captions` | a 6-sentence script with known text: on the lens (messages, the drawn captions and the screen-reader line) and the phone (messages and the live view): every sentence, in order, no duplicates, word error rate |
 | `first_words` | speech that starts right after start-up keeps its first words |
 | `alerts` | T3 and T4 recordings: the right alert and side on the glasses and phone, `PAT T3`/`PAT T4` to the rig on that side, "Got it" acknowledges everywhere and stops the rig |
@@ -81,4 +82,4 @@ and the screenshot for each. A few checks fail on purpose until another stream f
 Files: `harness.py` (engines, GPU lock, WebSocket pages, fixtures, scoring), `run_e2e.py`
 (scenarios and the table), `test_e2e.py` (pytest), `lib.mjs` (browser helpers and audits),
 `pages.mjs`, `captions.mjs`, `alerts.mjs`, `save.mjs`, `reconnect.mjs`, `soak.mjs`,
-`station.mjs`.
+`station.mjs`, `settings.mjs`.

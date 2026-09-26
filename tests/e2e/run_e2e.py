@@ -1051,16 +1051,18 @@ def scen_privacy(run: Run) -> list[Check]:
             )
     seen = dict(e.remote_seen)
     names = h.dns_names(list(seen))
+    watch = e.net_watch_summary()
     out.append(
         check(
             "privacy: engine talks only to 127.0.0.1 (no outside connections while it ran)",
-            not seen,
+            not seen and watch["enough"],
             {
                 "remote": {
                     k: {"first_seen_s": v, "host": names.get(k.rsplit(":", 1)[0])}
                     for k, v in seen.items()
                 },
                 "open_now": len(conns),
+                "watch": watch,  # too few looks is a failure: not measured is not clean
             },
         )
     )
@@ -1365,13 +1367,17 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
         out.append(check(f"soak: engine alive after {minutes:.0f} min", alive))
         seen = dict(e.remote_seen)
         names = h.dns_names(list(seen))
+        watch = e.net_watch_summary()
         out.append(
             check(
                 "soak: no outside connections",
-                not seen,
+                not seen and watch["enough"],
                 {
-                    k: {"first_seen_s": v, "host": names.get(k.rsplit(":", 1)[0])}
-                    for k, v in seen.items()
+                    "remote": {
+                        k: {"first_seen_s": v, "host": names.get(k.rsplit(":", 1)[0])}
+                        for k, v in seen.items()
+                    },
+                    "watch": watch,
                 },
             )
         )
@@ -1442,6 +1448,184 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
         e.stop()
         run.copy_log(e, "soak")
         e.root.cleanup()
+    return out
+
+
+# the phone's ElevenLabs settings (P-41) write the engine's working-folder .env: the suite's
+# engines run in a temporary folder, so only that folder's .env is touched. Dummy keys only.
+DUMMY_KEY = "e2e_dummy_key_0000_not_a_real_key"
+ATTACKER_KEY = "e2e_attacker_key"
+
+
+def scen_speech_settings(run: Run) -> list[Check]:
+    from dotenv import dotenv_values
+
+    e = run.main_engine()
+    out: list[Check] = []
+    env_file = e.root.path / ".env"
+    if env_file.resolve().parent != e.root.path.resolve() or not str(
+        e.root.path.resolve()
+    ).startswith(str(h.out_root().resolve())):
+        return [
+            check(
+                "settings: the engine runs in a temporary folder",
+                False,
+                str(e.root.path),
+            )
+        ]
+    canary = env_file.read_bytes() if env_file.is_file() else b""
+    old_key = (
+        (dotenv_values(env_file).get("ELEVENLABS_API_KEY") or "") if canary else ""
+    )
+    repo_env = h.REPO / ".env"
+    repo_before = repo_env.stat().st_mtime_ns if repo_env.is_file() else None
+    api = "/api/settings/elevenlabs"
+    own = {"Origin": e.base}
+    try:
+        status, body = e.http(api, headers=own)
+        out.append(
+            check(
+                "settings: the laptop's own page reads the settings; the key is never in the answer",
+                status == 200
+                and b'"key_configured":true' in body.replace(b" ", b"")
+                and (not old_key or old_key.encode() not in body),
+                {"status": status, "body": body[:200].decode(errors="replace")},
+            )
+        )
+        attack = {"api_key": ATTACKER_KEY}
+        other = f"http://localhost:{e.port}"
+        tries = {
+            "GET, Origin evil.example": e.http(
+                api, headers={"Origin": "http://evil.example"}
+            )[0],
+            "POST, Origin evil.example": e.http(
+                api, "POST", attack, headers={"Origin": "http://evil.example"}
+            )[0],
+            "POST, Origin localhost (another origin)": e.http(
+                api, "POST", attack, headers={"Origin": other}
+            )[0],
+            "POST, no Origin": e.http(api, "POST", attack)[0],
+            "POST, own Origin but Sec-Fetch-Site cross-site": e.http(
+                api, "POST", attack, headers={**own, "Sec-Fetch-Site": "cross-site"}
+            )[0],
+            "GET, Host evil.example (DNS rebinding)": e.http(
+                api, headers={"Host": "evil.example"}
+            )[0],
+        }
+        out.append(
+            check(
+                "settings: other origins, rebinding and origin-less posts are refused",
+                all(s in (400, 403) for s in tries.values()),
+                tries,
+            )
+        )
+        bad = {
+            "text/plain body": e.http(
+                api, "POST", None, headers={**own, "Content-Type": "text/plain"}
+            )[0],
+            "a key with spaces": e.http(
+                api, "POST", {"api_key": "bad key!"}, headers=own
+            )[0],
+            "an unknown field": e.http(
+                api, "POST", {"api_key": "x", "url": "http://x"}, headers=own
+            )[0],
+        }
+        out.append(
+            check(
+                "settings: bad requests from the own page are refused (415/400)",
+                bad["text/plain body"] == 415
+                and bad["a key with spaces"] == 400
+                and bad["an unknown field"] == 400,
+                bad,
+            )
+        )
+        now = env_file.read_bytes() if env_file.is_file() else b""
+        out.append(
+            check(
+                "settings: nothing was written by the refused requests",
+                now == canary,
+                "unchanged" if now == canary else "the .env changed",
+            )
+        )
+        res = h.run_node(
+            "settings.mjs",
+            {
+                "base": e.base,
+                "other": other,
+                "key": DUMMY_KEY,
+                "old": old_key or "CANARY-KEY",
+                "voice": "e2eVoice123",
+                "frameVoice": "e2eVoiceFrame456",
+                "out": str(run.out / "shots"),
+            },
+            timeout=300,
+        )
+        out.extend(
+            res.get("checks")
+            or [
+                check(
+                    "settings: browser script ran",
+                    False,
+                    res.get("error") or res.get("_stderr", "")[-600:],
+                )
+            ]
+        )
+        values = dotenv_values(env_file) if env_file.is_file() else {}
+        text = env_file.read_text(encoding="utf-8") if env_file.is_file() else ""
+        out.append(
+            check(
+                "settings: the key went into the engine's own (temporary) .env, the voice from the demo frame too",
+                values.get("ELEVENLABS_API_KEY") == DUMMY_KEY
+                and values.get("ELEVENLABS_VOICE_ID") == "e2eVoiceFrame456",
+                {
+                    "file": str(env_file),
+                    "key_saved": values.get("ELEVENLABS_API_KEY") == DUMMY_KEY,
+                    "voice": values.get("ELEVENLABS_VOICE_ID"),
+                },
+            )
+        )
+        out.append(
+            check(
+                "settings: the other origin's key never landed",
+                ATTACKER_KEY not in text,
+                "not in .env" if ATTACKER_KEY not in text else "FOUND in .env",
+            )
+        )
+        repo_after = repo_env.stat().st_mtime_ns if repo_env.is_file() else None
+        out.append(
+            check(
+                "settings: the checkout's own .env was not touched",
+                repo_after == repo_before,
+                {"exists": repo_env.is_file(), "changed": repo_after != repo_before},
+            )
+        )
+        status, body = e.http(api, headers=own)
+        log = (
+            e.log_path.read_text(encoding="utf-8", errors="replace")
+            if e.log_path.is_file()
+            else ""
+        )
+        out.append(
+            check(
+                "settings: the key is not in the settings answer or the engine log",
+                DUMMY_KEY.encode() not in body and DUMMY_KEY not in log,
+                {"answer": DUMMY_KEY.encode() in body, "log": DUMMY_KEY in log},
+            )
+        )
+        leftovers = sorted(p.name for p in e.root.path.glob(".env.settings-*"))
+        out.append(
+            check(
+                "settings: no temporary settings files left", not leftovers, leftovers
+            )
+        )
+    finally:
+        # put the canary back so the other scenarios see the same engine folder
+        if canary:
+            env_file.write_bytes(canary)
+        else:
+            env_file.unlink(missing_ok=True)
+        for p in e.root.path.glob(".env.settings-*"):
+            p.unlink(missing_ok=True)
     return out
 
 
@@ -1561,6 +1745,7 @@ SCENARIOS: dict[str, Callable[[Run], list[Check]]] = {
     "hardware": scen_hardware,
     "camera_pause": scen_camera_pause,
     "pages": scen_pages,
+    "speech_settings": scen_speech_settings,
     "save": scen_save,
     "reconnect": scen_reconnect,
     "privacy": scen_privacy,
@@ -1575,6 +1760,7 @@ USES_MAIN = {
     "hardware",
     "camera_pause",
     "pages",
+    "speech_settings",
     "save",
     "reconnect",
     "privacy",

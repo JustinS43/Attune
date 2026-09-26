@@ -311,7 +311,13 @@ class RunRoot:
     ):
         stamp = dt.datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
         self.path = out_root() / f"run-{stamp}-{name}"
-        self.path.mkdir(parents=True, exist_ok=True)
+        n = 1
+        while (
+            self.path.exists()
+        ):  # two engines of the same name in one second: never share
+            n += 1
+            self.path = out_root() / f"run-{stamp}-{name}-{n}"
+        self.path.mkdir(parents=True)
         (self.path / "config").mkdir(exist_ok=True)
         (self.path / "data").mkdir(exist_ok=True)
         self.config_path = self.path / "config" / "attune.toml"
@@ -390,6 +396,13 @@ class Engine:
         default_factory=dict
     )  # "ip:port" -> first seen
     _watch: threading.Thread | None = None
+    _watch_wanted: bool = False
+    _watch_proc: subprocess.Popen | None = None  # the engine run being watched
+    net_samples: int = (
+        0  # looks the watcher managed (a look can time out on a busy laptop)
+    )
+    net_errors: int = 0
+    net_since: float = 0.0  # monotonic time the watching started
 
     @property
     def base(self) -> str:
@@ -438,6 +451,7 @@ class Engine:
         env["PYTHONIOENCODING"] = "utf-8"
         # never talk to ElevenLabs from a test, even if a key is in the environment
         env.pop("ELEVENLABS_API_KEY", None)
+        env.pop("ELEVENLABS_VOICE_ID", None)
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if WINDOWS else 0
         self._log = open(self.log_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
         self.proc = subprocess.Popen(
@@ -452,6 +466,8 @@ class Engine:
         )
         if wait:
             self.wait_ready(timeout)
+        if self._watch_wanted:
+            self.watch_network()
         return self
 
     def wait_ready(self, timeout: float = 180.0) -> None:
@@ -470,6 +486,17 @@ class Engine:
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
+
+    def net_watch_summary(self, every: float = 10.0) -> dict:
+        """How well the network watcher covered the engine's run (for the checks)."""
+        ran = time.monotonic() - self.net_since if self.net_since else 0.0
+        return {
+            "looks": self.net_samples,
+            "failed_looks": self.net_errors,
+            "watched_s": round(ran),
+            # at least a third of the expected looks, and never fewer than 3
+            "enough": self.net_samples >= max(3, int(ran / every / 3)),
+        }
 
     def server_pid(self) -> int | None:
         """The process that really runs the engine: the one listening on its port.
@@ -500,22 +527,30 @@ class Engine:
 
         A connection can be short (a telemetry upload lasts about a minute), so one look at
         the end is not enough."""
-        if not WINDOWS or (self._watch and self._watch.is_alive()):
+        self._watch_wanted = True  # start() watches again after a restart
+        proc = self.proc
+        if not WINDOWS or proc is None or self._watch_proc is proc:
             return
+        self._watch_proc = proc
         t0 = time.monotonic()
+        self.net_since = self.net_since or t0
 
         def run() -> None:
             pid = None
-            while self.alive():
-                pid = pid or self.server_pid()
-                if pid:
-                    for c in remote_connections(pid):
-                        addr = str(c.get("RemoteAddress"))
-                        if addr not in LOOPBACK_ADDRS:
-                            key = f"{addr}:{c.get('RemotePort')}"
-                            self.remote_seen.setdefault(
-                                key, round(time.monotonic() - t0, 1)
-                            )
+            while self.proc is proc and proc.poll() is None:  # this run of the engine
+                try:  # a look that fails (busy laptop) must not end the watching
+                    pid = pid or self.server_pid()
+                    if pid:
+                        for c in remote_connections(pid):
+                            addr = str(c.get("RemoteAddress"))
+                            if addr not in LOOPBACK_ADDRS:
+                                key = f"{addr}:{c.get('RemotePort')}"
+                                self.remote_seen.setdefault(
+                                    key, round(time.monotonic() - t0, 1)
+                                )
+                        self.net_samples += 1
+                except Exception:  # noqa: BLE001 - counted and reported by the checks
+                    self.net_errors += 1
                 time.sleep(every)
 
         self._watch = threading.Thread(target=run, name="e2e-net-watch", daemon=True)
