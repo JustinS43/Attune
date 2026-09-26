@@ -33,7 +33,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-15 Live dev runner: `devview --all` runs vision, fusion, audio, alerts and LLM together on one bus and clock, with `--audio-file` replay (#15)
 - [x] V-16 Keep a sentence in one caption when the speaker decision flickers (short and "Someone" pieces join their neighbour) (#22, #23)
 - [x] V-17 Camera on/off from a page: `camera.set` stops or restarts the webcam (#30)
-- [x] V-18 Stable caption attribution: one speaker per segment across drafts, retract dropped segments, no re-labelling when a face leaves (#PR)
+- [x] V-18 Stable caption attribution: one speaker per segment across drafts, retract dropped segments, no re-labelling when a face leaves (#40)
 
 ## Section 2 – Audio & Language
 
