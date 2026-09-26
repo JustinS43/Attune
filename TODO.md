@@ -68,7 +68,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
 - [x] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it (#62)
 - [x] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions (#62)
-- [ ] A-25 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2
+- [x] A-25 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2 (#77)
 
 ## Section 3 – Hardware & Services
 
