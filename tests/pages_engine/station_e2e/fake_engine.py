@@ -185,9 +185,10 @@ def main() -> int:
         "enroll": {
             "source": "station",
             "face_s": 2.0,
-            "face_timeout_s": 20,
-            "open_timeout_s": 2.0,
-            "voice_timeout_s": 25,
+            # generous limits: on a busy laptop the drawn frames come slower (P-37)
+            "face_timeout_s": 45,
+            "open_timeout_s": 5.0,
+            "voice_timeout_s": 45,
             "decision_timeout_s": 60,
         },
     }

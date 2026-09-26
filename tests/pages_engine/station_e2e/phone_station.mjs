@@ -10,6 +10,10 @@
 //  3. Double tap on Sam -> saved, linked to the glasses face.
 //  4. The laptop camera doesn't start -> the fallback screen, then Escape cancels a save.
 // Exit code 1 on the first failure.
+//
+// Load-tolerant (P-37): every wait is ATTUNE_E2E_SLOW times (default 3) what an idle laptop
+// needs, a failure screen ends a wait at once with what it says, and short-lived states (the
+// hints, the green face box, the level meter) are recorded as they happen instead of polled.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +23,17 @@ const shots = process.argv[3] || '';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_CORE || 'playwright-core');
 if (shots) fs.mkdirSync(shots, { recursive: true });
+
+const SLOW = Math.max(1, Number(process.env.ATTUNE_E2E_SLOW) || 3);
+const T = (ms) => Math.round(ms * SLOW);
+// what the station says when a save can't go on; a wait for anything else stops on these
+const FAIL_TITLES = [
+  "We couldn't see your face clearly",
+  "We didn't hear enough",
+  "Can't use the laptop camera",
+  'Nothing was saved',
+  "The laptop didn't answer",
+];
 
 let step = 0;
 const log = (...a) => console.log(`[${String(++step).padStart(2, '0')}]`, ...a);
@@ -35,7 +50,16 @@ page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const shot = async (name) => { if (shots) await page.screenshot({ path: path.join(shots, `${name}.png`) }); };
 const title = () => page.locator('#st-title').textContent();
-const waitTitle = (text, timeout = 30000) => page.waitForFunction((t) => document.querySelector('#st-title')?.textContent.includes(t), text, { timeout });
+async function waitTitle(text, timeout = 30000) {
+  const handle = await page.waitForFunction(({ want, bad }) => {
+    const t = document.querySelector('#st-title')?.textContent || '';
+    if (t.includes(want)) return { ok: true, t };
+    const stop = bad.find((b) => t.includes(b) && !b.includes(want) && !want.includes(b));
+    return stop ? { ok: false, t } : false;
+  }, { want: text, bad: FAIL_TITLES }, { timeout: T(timeout) });
+  const got = await handle.jsonValue();
+  if (!got.ok) throw new Error(`FAILED: waiting for "${text}", the screen says "${got.t}"`);
+}
 const dialogOpen = () => page.evaluate(() => { const d = document.querySelector('.st-overlay'); return !!d && !d.hidden; });
 
 /** A console page's WebSocket, to press "save this person" like key D on the lens does. */
@@ -53,7 +77,7 @@ function saveStart(trackId) {
 
 async function keyboardConsentAndSave() {
   // the person ticks consent themselves; keyboard: focus the box, Space, then Save
-  await page.waitForSelector('#save-consent', { state: 'visible', timeout: 10000 });
+  await page.waitForSelector('#save-consent', { state: 'visible', timeout: T(10000) });
   await page.focus('#save-consent');
   await page.keyboard.press('Space');
   await page.focus('#save-ok');
@@ -62,17 +86,27 @@ async function keyboardConsentAndSave() {
 
 try {
   await page.goto(`${base}/phone/?palette=apricot`);
-  await page.waitForFunction(() => document.querySelector('#app')?.dataset.link === 'live', null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('#app')?.dataset.link === 'live', null, { timeout: T(15000) });
   check(true, 'phone connected to the fake engine');
-  // every hint shown, however briefly (the fake camera's face moves into place in ~2 s)
+  // every hint, the green face box and the level meter, however briefly they show (the fake
+  // camera's face moves into place in ~2 s; on a busy laptop a state can pass between polls)
   await page.evaluate(() => {
-    window.__hints = [];
+    const seen = (window.__seen = { hints: [], ok: false, box: false, mirrored: '', meterMax: 0 });
     new MutationObserver(() => {
       const t = document.querySelector('.st-hint')?.textContent;
-      if (t && window.__hints[window.__hints.length - 1] !== t) window.__hints.push(t);
-    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+      if (t && seen.hints[seen.hints.length - 1] !== t) seen.hints.push(t);
+      if (document.querySelector('.st-cam.ok')) {
+        seen.ok = true;
+        const b = document.querySelector('.st-box');
+        if (b && !b.hidden && parseFloat(b.style.width) > 20) seen.box = true;
+        const m = document.querySelector('.st-mirror');
+        if (m && !seen.mirrored) seen.mirrored = getComputedStyle(m).transform;
+      }
+      const level = Number(document.querySelector('.st-meter')?.getAttribute('aria-valuenow'));
+      if (level > seen.meterMax) seen.meterMax = level;
+    }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-valuenow'] });
   });
-  const sawHint = (re, timeout = 15000) => page.waitForFunction((src) => window.__hints.some((h) => new RegExp(src, 'i').test(h)), re, { timeout });
+  const sawHint = (re, timeout = 15000) => page.waitForFunction((src) => window.__seen.hints.some((h) => new RegExp(src, 'i').test(h)), re, { timeout: T(timeout) });
 
   // ---------------------------------------------------------------- 1. Enroll tab
   await page.click('[data-nav="enroll"]');
@@ -95,19 +129,18 @@ try {
   });
   check(a11y.role === 'dialog' && a11y.modal === 'true' && a11y.label === 'st-title' && a11y.live, 'dialog semantics and a polite live region');
   await waitTitle('Look at the laptop camera');
-  await page.waitForFunction(() => document.activeElement?.id === 'st-title', null, { timeout: 3000 });
+  await page.waitForFunction(() => document.activeElement?.id === 'st-title', null, { timeout: T(3000) });
   check(true, 'focus moves to the new heading');
-  await page.waitForSelector('.st-cam.has-image', { timeout: 10000 });
+  await page.waitForSelector('.st-cam.has-image', { timeout: T(10000) });
   check(true, 'the live preview shows a picture');
   await sawHint('middle');
   check(true, 'hint: move to the middle');
   await shot('02-face');
   await sawHint('closer');
   check(true, 'hint: come closer');
-  await page.waitForSelector('.st-cam.ok', { timeout: 10000 });
-  const box = await page.evaluate(() => { const b = document.querySelector('.st-box'); return !b.hidden && parseFloat(b.style.width) > 20; });
-  check(box, 'the face box is drawn on the preview');
-  const mirrored = await page.evaluate(() => getComputedStyle(document.querySelector('.st-mirror')).transform);
+  await page.waitForFunction(() => window.__seen.ok && window.__seen.box, null, { timeout: T(10000) });
+  check(true, 'the face box is drawn on the preview');
+  const mirrored = await page.evaluate(() => window.__seen.mirrored);
   check(mirrored.startsWith('matrix(-1'), 'the preview is mirrored like a selfie camera');
   await shot('03-face-good');
   // Tab stays inside the dialog
@@ -116,7 +149,7 @@ try {
   await waitTitle('Read this sentence');
   const sentence = await page.locator('.st-sentence').textContent();
   check(sentence.split(' ').length >= 12, `the sentence is shown (${sentence.slice(0, 40)}...)`);
-  await page.waitForFunction(() => Number(document.querySelector('.st-meter')?.getAttribute('aria-valuenow')) > 30, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__seen.meterMax > 30, null, { timeout: T(10000) });
   check(true, 'the level meter moves');
   await shot('04-voice');
   await waitTitle('Alex is saved');
@@ -125,7 +158,7 @@ try {
   await shot('05-saved');
   await page.keyboard.press('Tab');
   await page.keyboard.press('Enter'); // Done
-  await page.waitForFunction(() => document.querySelector('.st-overlay').hidden, null, { timeout: 3000 });
+  await page.waitForFunction(() => document.querySelector('.st-overlay').hidden, null, { timeout: T(3000) });
   check(true, 'Done closes the screen');
 
   // ---------------------------------------------------------------- 2. mismatch

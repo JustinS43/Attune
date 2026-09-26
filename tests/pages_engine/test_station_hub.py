@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import dataclasses
 import json
+import time
 
 import pytest
 from attune.core import contracts as C
@@ -15,7 +16,7 @@ from attune.core.bus import Bus
 from attune.core.save_flow import SaveFlow
 from attune.server.ws import Client, Hub
 
-from .conftest import CONFIG, Recorder, recv_type, wait_for
+from .conftest import CONFIG, Recorder, recv, recv_type, wait_for
 from .test_save_flow import Clock, double_tap, face, scene
 from .test_ws_hub import page
 
@@ -41,6 +42,19 @@ def preview(sid="station-1", cid=None):
 
 def client_ids(hub):
     return {c.role: cid for cid, c in hub.clients.items()}
+
+
+def recv_types(ws, types, timeout=10.0):
+    """The first message of each of `types`, in whatever order they arrive."""
+    got, end = {}, time.monotonic() + timeout
+    while len(got) < len(types):
+        left = end - time.monotonic()
+        if left <= 0:
+            raise TimeoutError(f"got {sorted(got)} of {sorted(types)}")
+        msg = recv(ws, left)
+        if isinstance(msg, dict) and msg.get("type") in types:
+            got.setdefault(msg["type"], msg)
+    return got
 
 
 # ------------------------------------------------------------------ contracts
@@ -107,11 +121,14 @@ def test_preview_and_state_only_to_the_page_that_started_it(hub_env):
                 "hint": "",
             },
         )
-        got = recv_type(phone, "enroll_state")
-        assert got["phase"] == "face" and "client_id" not in got
-        pv = recv_type(phone, "enroll_preview")
+        # the hub sends queued messages before the newest preview, so on a busy laptop the
+        # level can come before the preview: take the three in whatever order they come
+        got = recv_types(phone, ("enroll_state", "enroll_preview", "enroll_level"))
+        state_msg = got["enroll_state"]
+        assert state_msg["phase"] == "face" and "client_id" not in state_msg
+        pv = got["enroll_preview"]
         assert base64.b64decode(pv["jpeg_b64"]) == JPEG and "jpeg" not in pv
-        assert recv_type(phone, "enroll_level")["level"] == 0.5
+        assert got["enroll_level"]["level"] == 0.5
         # the other phone gets none of it: a caption sent afterwards arrives first
         hub_env.bus.publish(
             C.CAPTION,

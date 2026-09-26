@@ -4,16 +4,23 @@ Starts tests/pages_engine/station_e2e/fake_engine.py (the real hub, save flow an
 fake devices and models) and runs station_e2e/phone_station.mjs against it. Skipped when
 node, playwright-core or Edge isn't there. playwright-core: set PLAYWRIGHT_CORE to its folder
 (default: the attune-video render tools next to the main checkout, if present).
+
+Load-tolerant (P-37): the fake engine's output is read all the time (a full pipe used to be able
+to freeze it mid-run), its start may take a minute, and the browser script's waits scale with
+ATTUNE_E2E_SLOW (see phone_station.mjs). A failure shows the end of the fake engine's log.
 """
 
 from __future__ import annotations
 
 import os
+import queue
 import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import pytest
@@ -57,16 +64,33 @@ def test_phone_station_screens(tmp_path):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
+    # read the engine's output all the time: nobody reading a full pipe blocks its logging
+    tail: deque[str] = deque(maxlen=60)
+    lines: queue.Queue[str | None] = queue.Queue()
+
+    def pump() -> None:
+        for line in engine.stdout:
+            tail.append(line.rstrip())
+            lines.put(line)
+        lines.put(None)
+
+    threading.Thread(target=pump, name="fake-engine-output", daemon=True).start()
     try:
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 60
         ready = False
-        while time.monotonic() < deadline and not ready:
-            line = engine.stdout.readline()
-            if not line and engine.poll() is not None:
+        while not ready and time.monotonic() < deadline:
+            try:
+                line = lines.get(timeout=max(0.1, deadline - time.monotonic()))
+            except queue.Empty:
+                break
+            if line is None:
                 break
             ready = line.startswith("READY")
-        assert ready, "the fake engine did not start"
+        assert ready, "the fake engine did not start:\n" + "\n".join(tail)
         env = {**os.environ, "PLAYWRIGHT_CORE": str(PW)}
         shots = os.environ.get("ATTUNE_E2E_SHOTS", "")  # a folder to keep screenshots in
         run = subprocess.run(
@@ -74,12 +98,13 @@ def test_phone_station_screens(tmp_path):
             env=env,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=600,
             check=False,
         )
         print(run.stdout)
-        assert run.returncode == 0, run.stdout + run.stderr
-        assert "PASS phone station screens" in run.stdout
+        engine_log = "\n--- fake engine (last lines) ---\n" + "\n".join(tail)
+        assert run.returncode == 0, run.stdout + run.stderr + engine_log
+        assert "PASS phone station screens" in run.stdout, run.stdout + engine_log
     finally:
         engine.terminate()
         try:

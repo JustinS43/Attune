@@ -50,18 +50,32 @@ def _write_clip(path, frames=45, fps=30):
 
 
 def test_file_source_plays_at_its_own_rate_and_loops(tmp_path):
+    """A file plays paced at its own 30 fps, never as fast as it decodes, and loops.
+
+    Load-tolerant: it waits for the frames instead of counting them in a fixed 1.2 s (a busy
+    CPU only makes playback slower, which gave 12-27 frames). Pacing is checked from the
+    frames' own times: never faster than the clip, and a loose floor that still catches a
+    wrong frame period."""
     path = str(tmp_path / "clip.mp4")
     _write_clip(path, frames=15)
     got = []
     cam = Camera(source=path, on_frame=lambda n, t, img: got.append((n, t, img.shape)))
     cam.start()
-    time.sleep(1.2)
+    deadline = time.monotonic() + 20
+    while len(got) < 31 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    connected = cam.connected
     cam.stop()
-    assert cam.connected
-    assert 28 <= len(got) <= 40  # ~30 fps, looping past the 15-frame clip
-    assert got[0][2] == (360, 640, 3)
-    ts = [t for _, t, _ in got]
+    frames = list(got)
+    assert connected
+    assert len(frames) >= 31, f"{len(frames)} frames in 20 s"  # looped past the 15 frames twice
+    assert frames[0][2] == (360, 640, 3)
+    ts = [t for _, t, _ in frames]
     assert all(b > a for a, b in itertools.pairwise(ts))
+    fps = (len(ts) - 1) / (ts[-1] - ts[0])
+    assert fps <= 30 * 1.25, f"played at {fps:.0f} fps, faster than the clip's 30"
+    gaps = sorted(b - a for a, b in itertools.pairwise(ts))
+    assert gaps[len(gaps) // 2] < 0.2, f"median frame gap {gaps[len(gaps) // 2] * 1000:.0f} ms"
 
 
 def test_missing_camera_reports_lost_and_keeps_retrying(monkeypatch):
