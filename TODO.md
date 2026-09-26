@@ -93,6 +93,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-17 Demo page (/demo/): glasses view and phone app side by side, or either one full size · M3 (#26)
 - [x] P-18 Demo: glasses guide tab (Colour / Mono / Corner and the glasses that use each) · M3 (#29)
 - [x] P-19 Demo: camera on/off switch (engine really stops the webcam; captions keep running) · M3 (#30)
+- [x] P-20 Demo: Glasses POV view (what the wearer sees, true size, per device) · M3 (#34)
 - [x] P-21 Three glasses looks match real devices: Colour = Meta Orion class, Mono = Even Realities G1 band with 9 heights, Corner = Meta Ray-Ban Display right-eye square (+ docs/glasses-realism.md) · M3 (#28)
 - [x] P-22 Film source in the lens: two-decoder player with a watchdog (no more black footage), chrome that scales with the window · M2 (#25, #28)
 - [x] P-23 Phone app: Ryan's logo designs, colorways and the Apricot Studio palette (`?palette=apricot`), kept working with the live engine · M3 (#24)
