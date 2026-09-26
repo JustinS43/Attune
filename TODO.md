@@ -72,11 +72,11 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 4 – Pages, Engine & Demo
 
-- [ ] P-01 `core/contracts.py` from docs/contracts.md (do this first, it unblocks everyone) · H1
-- [ ] P-02 Bus, clock, ring buffers, config loader, `main.py` and `python -m attune` · M0
-- [ ] P-03 FastAPI app, static pages, WebSocket hub with sequence numbers and frame dropping; `web/shared/ws.js` · M0
-- [ ] P-04 Command handling (`server/commands.py`) · M1
-- [ ] P-05 Status aggregation and the status strip · M0
+- [x] P-01 `core/contracts.py` from docs/contracts.md (do this first, it unblocks everyone) · H1 (#20)
+- [x] P-02 Bus, clock, ring buffers, config loader, `main.py` and `python -m attune` · M0 (#20)
+- [x] P-03 FastAPI app, static pages, WebSocket hub with sequence numbers and frame dropping; `web/shared/ws.js` · M0 (#20)
+- [x] P-04 Command handling (`server/commands.py`) · M1 (#20)
+- [x] P-05 Status aggregation and the status strip · M0 (#20)
 - [ ] P-06 Lens view: video canvas, face tags, dots under 40 px, HUD theme · M0 (video) / M1 (tags)
 - [ ] P-07 Speech bubbles: tails, dashed tails, off-screen docking, "You" bar, drafts, fade, push apart, ES tag · M1
 - [ ] P-08 Alert banners, name proposals ("Sam? tap to confirm"), paused state · M2
@@ -84,10 +84,10 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-10 Speak panel (S): text box, presets 1–5, suggestions 7–9 · M2 (#18)
 - [x] P-11 History panel (Y): sessions, timeline, search, person filter, sounds you missed, talk-time chart · M2 (#18)
 - [ ] P-12 Keyboard shortcuts (C S Y H E F P, 1–9) · M1
-- [ ] P-13 Session log, reel recorder and replay mode · M1
+- [ ] P-13 Session log, reel recorder and replay mode · M1 — session log and WAV player done (#20); reel recorder and replay mode left
 - [ ] P-14 Setup: docs/setup.md, check_setup.py, download_models.py, start script with auto-restart · M3
 - [ ] P-15 OBS setup, demo script, backup video, Devpost write-up and slides · M3 – M4
-- [ ] P-16 Tests in tests/pages_engine (bus, WebSocket hub, commands) · M2
+- [x] P-16 Tests in tests/pages_engine (bus, WebSocket hub, commands) · M2 (#20)
 
 ## Gates and end-to-end checks (whole team)
 
