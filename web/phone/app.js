@@ -11,6 +11,7 @@
 
 import { connect } from '../shared/ws.js';
 import { createSaveSheet } from './save.js';
+import { createStation } from './station.js';
 import {listContacts, saveContact, deleteContact, photoFromFile} from './contacts.js';
 import {portraitCrop} from './portrait.js';
 
@@ -356,6 +357,13 @@ function enrollLine(name) {
 }
 
 function renderEnroll() {
+  if (station.enabled()) { // P-35: people are saved at the laptop's own camera and mic
+    content.append(brand());
+    heading('Remember me', 'Save your face and voice at the laptop so the glasses recognize you.', 'A familiar face, a familiar voice');
+    content.append(pill());
+    station.renderStart(content, {connected: state.live && state.connected});
+    return;
+  }
   const enrollment = state.enroll;
   content.append(brand());
   heading('Remember me', 'Save your face so Attune can recognize you. Voice is optional.', 'A familiar face, a familiar voice');
@@ -490,7 +498,7 @@ async function updatePortrait(frame) {
 }
 
 function syncEnrollmentFeed() {
-  if (state.screen === 'enroll' && state.live && state.connected && !enrollmentFeed) {
+  if (state.screen === 'enroll' && state.live && state.connected && !enrollmentFeed && !station.enabled()) {
     enrollmentFeed = connect({role: 'console', frames: true, onFrame: updatePortrait, onMessage(msg) {
       if (msg.type === 'scene') {
         latestFaceBoxes = new Map((msg.faces || []).filter(face => Number.isInteger(face.track_id) && Array.isArray(face.box)).map(face => [face.track_id, face.box]));
@@ -505,7 +513,7 @@ function syncEnrollmentFeed() {
         else updateEnrollPreview();
       }
     }});
-  } else if ((state.screen !== 'enroll' || !state.connected) && enrollmentFeed) {
+  } else if ((state.screen !== 'enroll' || !state.connected || station.enabled()) && enrollmentFeed) {
     enrollmentFeed.close(); enrollmentFeed = null; state.faces.clear(); latestFaceBoxes.clear(); portraitReady = false; lastPortraitFrameAt = 0;
   }
 }
@@ -961,11 +969,13 @@ function showCaptions() {
 
 function onMessage(msg) {
   saveSheet.onMessage(msg); // P-29: the "Save this person?" sheet over any screen
+  station.onMessage(msg); // P-35: saving at the laptop camera and mic, over any screen
   switch (msg.type) {
     case 'welcome':
       state.sessionId = msg.session_id ?? state.sessionId;
       state.paused = !!msg.paused;
       if (Array.isArray(msg.config?.presets)) state.presets = msg.config.presets;
+      station.configure(msg.config?.enroll);
       refresh();
       break;
     case 'paused':
@@ -1080,7 +1090,9 @@ function onMessage(msg) {
   }
 }
 
-const saveSheet = createSaveSheet({host: app, send: (name, args) => link.send(name, args)});
+// With the enrollment station on, the sheet's consent starts a save at the laptop (P-35)
+const saveSheet = createSaveSheet({host: app, send: (name, args) => station.route(name, args)});
+const station = createStation({host: app, send: (name, args) => link.send(name, args), onStarted: () => saveSheet.dismiss()});
 const noopLink = {send() {}, connected: false};
 const link = params.has('demo') ? noopLink : connect({
   role: 'phone',

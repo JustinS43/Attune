@@ -93,6 +93,7 @@ class AudioService:
                 self.config["fusion"]["voice_match"],
                 voice["enroll_s"],
                 voice["match_s"],
+                options=voice,  # A-21: station threshold and the glasses-mic refinement
             )
         # The 32 kHz stream is for the sound alerts: keep it out of this inbox.
         self.worker.subscribe("audio.block", accept=_is_16k)
@@ -229,7 +230,7 @@ class AudioService:
         elif topic == "voice.harvest" and not self.paused and self.clock() >= self.muted_until:
             audio = self._speech_span(e["t0"], e["t1"])
             if generation == self.worker.generation:
-                self.voices.harvest(e["person_id"], audio)
+                self.voices.harvest(e["person_id"], audio, e.get("talkers", 1))
         elif topic == "command":
             name, args = e["name"], e.get("args", {})
             if name == "enroll.start":
@@ -259,6 +260,10 @@ class AudioService:
                 self._reset()
                 with self._asr_lock:
                     self.language, self.asr, self.languages = language, asr, langs
+        elif topic == "enroll.result" and e["part"] == "voice" and e.get("source") == "station":
+            # A-21: the enrollment station saved this print from the laptop mic; load it
+            if e.get("ok") and e.get("person_id"):
+                self.voices.load(e["person_id"])
         elif topic == "enroll.result" and e["part"] == "face":
             if (
                 self.pending_consent

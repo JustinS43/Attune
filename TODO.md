@@ -38,6 +38,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-20 Prefer any connected USB webcam on macOS instead of matching a camera model name (#56)
 - [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
 - [x] V-22 Light-ASD active speaker model decides who is talking (#58)
+- [x] V-23 Enrollment station: save a face at the laptop camera (OV02E10) with a live phone preview, the glasses' quality gate and 8-most-varied rule, an identity check against the glasses face, and frame sharing when the main camera holds the laptop camera (#60)
 - [ ] V-24 Attribution without waiting: the first words of an utterance are held back (up to 300 ms) only while a mouth on screen is moving or a known voice may still be matched, otherwise shown at once — in progress
 
 ## Section 2 – Audio & Language
@@ -62,6 +63,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
 - [x] A-19 Hot-plug recovery: re-initialise PortAudio after a mic loss, fall back, return to `[audio] device_name` between utterances; camera returns to `[vision] camera_name` after replug (Vision file) · M2 — unit-tested with fake devices; a real unplug/replug is still to check on the rig (#52)
 - [x] A-20 Make Windows capture simulation tests portable across macOS and Linux (#55)
+- [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
 - [ ] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it — in progress
 - [ ] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions — in progress
 
@@ -120,6 +122,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-32 System debug: phone enrollment and console fixes, full-suite findings handed to owners (#51)
 - [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
+- [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
 - [ ] P-36 Captions on the lens and phone survive a reconnect (the hub replays recent captions on hello) and the phone drops retracted segments — in progress
 
 ## Gates and end-to-end checks (whole team)

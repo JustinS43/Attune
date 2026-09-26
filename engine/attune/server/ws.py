@@ -16,6 +16,11 @@ Threads and the event loop:
 Every JSON message is `{"type": ..., "seq": n, ...}` with `seq` counting up per page.
 Binary frames: LE uint64 frame_no, LE float64 capture t, then a JPEG (1280x720).
 
+Enrollment station (V-23): `enroll.station` commands get the sending page's `client_id`, and
+`enroll_state`, `enroll_preview`, `enroll_level` and `enroll_mismatch` go only to that page
+(if it reconnects, the next phone to say hello takes the save over). Previews use a one-slot
+buffer like frames, so a slow phone skips them instead of queueing.
+
 A page that says hello (first time or after a reconnect) gets the recent captions again
 (A-22), so nothing said while it was away is lost: the phone and console get every caption
 the hub remembers, the lens only those still on screen (`bubble_fade_s` + 3 s).
@@ -130,6 +135,7 @@ class Client:
         self.seq = 0
         self.queue: deque[str] = deque()
         self.frame: bytes | None = None
+        self.preview: str | None = None  # the newest enroll_preview (V-23), droppable
         self.wake = asyncio.Event()
         self.frames_sent = 0
         self.frames_skipped = 0
@@ -141,6 +147,14 @@ class Client:
         self.seq += 1
         body = {k: v for k, v in body.items() if k not in ("type", "seq")}
         self.queue.append(json.dumps({"type": msg_type, "seq": self.seq, **body}))
+        self.wake.set()
+
+    def push_preview(self, body: dict[str, Any]) -> None:
+        """Enrollment station preview: only the newest one waits to be sent."""
+        if self.closed:
+            return
+        self.seq += 1
+        self.preview = json.dumps({"type": C.WS_ENROLL_PREVIEW, "seq": self.seq, **body})
         self.wake.set()
 
     def push_frame(self, data: bytes) -> None:
@@ -183,6 +197,13 @@ class Hub:
             "bubble_fade_s": pages.get("bubble_fade_s", 4),
             "presets": list((config.get("speech_out") or {}).get("presets", [])),
         }
+        enroll = config.get("enroll")
+        if isinstance(enroll, dict):
+            # V-23: where people are saved; the phone picks its screens from this
+            self.welcome_config["enroll"] = {
+                "source": enroll.get("source", "station"),
+                "sentence": enroll.get("sentence", ""),
+            }
         data = Path(data_dir) if data_dir else Path(engine.get("data_dir", "data"))
         self.people_dir = data / "people"
 
@@ -200,6 +221,9 @@ class Hub:
         self._hw_connected: bool | None = None
         self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
         self.save_pending: dict | None = None  # the save request waiting for consent (P-29)
+        self.station_session: str | None = None  # the station save in progress (V-23)
+        self.station_client: int | None = None  # the page following it
+        self.station_state: dict | None = None  # its latest enroll_state
 
         # shared with the encoder thread
         self._frame: Any = None
@@ -241,6 +265,10 @@ class Hub:
             C.STATUS_PART: lambda ev: post(self._on_status_part, ev),
             C.SESSION_FORGET: lambda ev: post(self._on_forget, ev),
             C.COMMAND: lambda ev: post(self._on_command_event, ev),
+            C.ENROLL_STATE: lambda ev: post(self._on_station, C.ENROLL_STATE, ev),
+            C.ENROLL_PREVIEW: lambda ev: post(self._on_station, C.ENROLL_PREVIEW, ev),
+            C.ENROLL_LEVEL: lambda ev: post(self._on_station, C.ENROLL_LEVEL, ev),
+            C.ENROLL_MISMATCH: lambda ev: post(self._on_station, C.ENROLL_MISMATCH, ev),
         }
         self._unsubs = [self.bus.subscribe(topic, cb) for topic, cb in subs.items()]
 
@@ -415,6 +443,52 @@ class Hub:
                 self.save_pending = None
             self._log_event(f"Save {body.get('name') or 'request'}: {body.get('reason')}")
 
+    def _on_station(self, topic: str, ev: Any) -> None:
+        """Enrollment station messages, only for the page that started the save (V-23)."""
+        preview = topic == C.ENROLL_PREVIEW
+        jpeg = get(ev, "jpeg") if preview else None
+        body = to_jsonable(ev)
+        if preview:
+            if not isinstance(jpeg, (bytes, bytearray)):
+                return
+            body["jpeg_b64"] = base64.b64encode(bytes(jpeg)).decode("ascii")
+        cid = body.pop("client_id", None)
+        sid = body.get("session_id")
+        if cid is not None and cid in self.clients:
+            target = cid
+        elif (
+            sid is not None and sid == self.station_session and self.station_client in self.clients
+        ):
+            target = self.station_client  # its page reconnected and said hello again
+        elif cid is None:
+            target = None  # started without a page (tests, the bus): every phone and console
+        else:
+            target = -1  # its page is gone and nobody has taken the save over yet
+        if topic == C.ENROLL_STATE:
+            if body.get("phase") in ("done", "cancelled", "fallback"):
+                if sid == self.station_session:
+                    self.station_session = self.station_state = self.station_client = None
+                self._log_event(f"Station save: {body.get('phase')}")
+            else:
+                self.station_session, self.station_state = sid, body
+                if target is not None and target != -1:
+                    self.station_client = target
+        if target != -1:
+            self._station_send(target, topic, body, preview)
+
+    def _station_send(self, target: int | None, topic: str, body: dict, preview: bool) -> None:
+        if target is None:
+            clients = [c for c in self.clients.values() if c.role in ("phone", "console")]
+        elif target in self.clients:
+            clients = [self.clients[target]]
+        else:
+            return
+        for client in clients:
+            if preview:
+                client.push_preview(body)
+            else:
+                self._push(client, C.WS_STATION[topic], body)
+
     def _on_alert(self, ev: Any) -> None:
         body = to_jsonable(ev)
         self.broadcast(C.WS_ALERT, body)
@@ -505,9 +579,10 @@ class Hub:
         args = get(ev, "args") or {}
         pending = self.save_pending
         if (
-            get(ev, "name") == "enroll.start"
+            get(ev, "name") in ("enroll.start", "enroll.station")
             and pending
             and isinstance(args, dict)
+            and args.get("action", "start") == "start"
             and args.get("request_id") == pending.get("request_id")
         ):
             self.save_pending = None  # consent given; the enrollment reports from here
@@ -545,6 +620,9 @@ class Hub:
             self.hello(client, msg)
         elif kind == C.WS_COMMAND:
             name, args = msg.get("name"), msg.get("args") or {}
+            if name == "enroll.station" and isinstance(args, dict):
+                # V-23: the station's preview and meter go back to this page only
+                args = {**args, "client_id": client.id}
             if self.router is not None:
                 try:
                     self._commands.submit(self._run_command, name, args)
@@ -589,6 +667,11 @@ class Hub:
         pending = self.save_pending
         if pending is not None and self.clock() < float(pending.get("expires_t") or 0):
             client.push(C.WS_SAVE_REQUEST, pending)  # a page that opens late can still consent
+        state = self.station_state
+        if role == "phone" and state is not None and self.station_client not in self.clients:
+            # the phone following a station save reconnected (or another took over): resume it
+            self.station_client = client.id
+            client.push(C.WS_ENROLL_STATE, state)
         if role == "console":
             if self.latest_status is not None:
                 client.push(C.WS_STATUS, self.latest_status)
@@ -617,6 +700,10 @@ class Hub:
                 client.wake.clear()
                 while client.queue and not client.closed:
                     await ws.send_text(client.queue.popleft())
+                preview = client.preview
+                if preview is not None and not client.closed:
+                    client.preview = None
+                    await ws.send_text(preview)
                 frame = client.frame
                 if frame is not None and not client.closed:
                     client.frame = None

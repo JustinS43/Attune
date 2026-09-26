@@ -56,7 +56,7 @@ flowchart LR
 
 | # | Section | Owns (folders) | Main features | Owner |
 |---|---|---|---|---|
-| 1 | **Vision** | `engine/attune/vision/`, `engine/attune/fusion/`, `tests/vision/` | Camera, face finding, tracking, face naming, enrollment (face), lip motion, who's talking, instant colour labels | _name_ |
+| 1 | **Vision** | `engine/attune/vision/`, `engine/attune/fusion/`, `engine/attune/station/`, `tests/vision/` | Camera, face finding, tracking, face naming, enrollment (face; the laptop enrollment station), lip motion, who's talking, instant colour labels | _name_ |
 | 2 | **Audio & Language** | `engine/attune/audio/`, `alerts/`, `llm/`, `calibration/`, `tests/audio_language/`, `docs/calibration.md`, `scripts/make_test_tones.py` | Mic, voice activity, captions, voice prints, sound alerts, name learning, translation, garment descriptions, suggested replies, calibration | _name_ |
 | 3 | **Hardware & Services** | `firmware/`, `engine/attune/hardware/`, `speech_out/`, `history/`, `tests/hardware_services/`, `docs/hardware/` | The rig, Arduino firmware, serial link, touch rules, ElevenLabs "speak for me" with Kokoro fallback, conversation history (SQLite, deleted after 24 h) | _name_ |
 | 4 | **Pages, Engine & Demo** | `engine/attune/core/`, `server/`, `replay/`, `main.py`, `config.py`, `web/`, `scripts/` (except test tones), `tests/pages_engine/`, `docs/setup.md`, `docs/demo-script.md` | Bus, contracts code, config, web server, lens view, console/speak/history panels, keyboard, status, replay, setup, OBS, demo and write-up | _name_ |
@@ -73,6 +73,7 @@ Each feature lists its TODO IDs, the gate it's needed by, and what it depends on
 | Camera capture | V-01, V-02 | M0 | core.clock, bus (4) | `vision.frame` |
 | Find, track and name faces | V-03 – V-06 | M1 | — | `vision.tracks`, `vision.track_lost` |
 | Enrollment with consent (face part) | V-07 | M1 | `enroll.start` command (4); voice part (2) | `enroll.result`, `person.changed` |
+| Enrollment station: save a person at the laptop camera and mic (`engine/attune/station/`) | V-23, A-21, P-35 | M2 | `enroll.station` command, phone screens (4); voice prints (2) | `enroll.state`, `enroll.preview`, `enroll.level`, `enroll.mismatch`, `enroll.result` |
 | Lip motion | V-08 | M1 | — | lip scores in `vision.tracks` |
 | Who's talking + scene | V-09, V-10 | M1 / M2 | `audio.transcript`, `audio.vad`, `audio.voice_match` (2); `sensors.levels` (3) | `caption`, `scene` |
 | Voice-print harvesting | V-11 | M2 | voice prints (2) | `voice.harvest` |
