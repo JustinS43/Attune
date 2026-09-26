@@ -99,7 +99,8 @@ can't use them):
 
 `tests/e2e/` starts real engines in replay mode on port 8013 and drives every page in a
 headless Microsoft Edge: captions in order on the glasses and the phone, alerts to the
-rig, camera and pause, reconnects, privacy, bad setups and a soak. See
+rig, camera and pause, reconnects, privacy, bad setups, the laptop station's phone screens
+and a soak. See
 [tests/e2e/README.md](../tests/e2e/README.md):
 
 ```bash
