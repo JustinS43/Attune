@@ -1,12 +1,8 @@
-"""Conversation history package (local SQLite, deleted after 24 h)
+"""Conversation history package: local SQLite, rows deleted after 24 h (TODO H-10..H-12).
 
-Section 3 - Hardware & Services
-TODO: H-10
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Conversation history
-
-What to build:
-- Package marker.
-
-Placeholder only - no code yet (MLH: project code is written during the event).
+Stores text only: never audio, video, face prints or voice prints.
 """
+
+from .service import HistoryService
+
+__all__ = ["HistoryService"]
