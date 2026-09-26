@@ -160,6 +160,8 @@ export function createSaveSheet({ host, send }) {
 
   return {
     state: model.get,
+    /** Close the sheet (the enrollment station took the save over, P-35). */
+    dismiss: () => model.dismiss(),
     /** Every engine message; returns true when it was about a save request. */
     onMessage: (msg) => model.apply(msg),
   };

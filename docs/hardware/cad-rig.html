@@ -321,7 +321,7 @@ ol.steps li b { font-weight: 600; color: var(--ink); }
           <li><div><b>Servo tapper [5].</b> Push the single-arm horn on loosely (you'll set it in step 18) and fold a small bump of tape onto its tip. Tape the servo body to the outside of the right temple tip, shaft pointing down, so the horn swings under the arm and the bump reaches the skin behind your ear.</div></li>
           <li><div><b>Route the cables.</b> Run every cable along the arms with a strip of tape every few centimetres, then let them drop behind your ears to the chest. Tape the servo lead with the right-side cables.</div></li>
           <li><div><b>Grove cables into the shield [7, 9].</b> Plug each labelled cable into the shield port with the same name: A0, A1, D2, D5, D6. The plugs only fit one way round.</div></li>
-          <li><div><b>Breadboard and servo [8, 10].</b> Jumper the shield's <b>5V</b> pin to the breadboard <b>+</b> rail (red) and a <b>GND</b> pin to the <b>−</b> rail (black). Plug the servo lead into the breadboard, then run brown to <b>−</b>, red to <b>+</b>, and orange to the shield's <b>D9</b> header socket with the <span class="tag">SERVO D9</span> jumper. Keep the optional capacitor [15] ready for step 17.</div></li>
+          <li><div><b>Breadboard and servo [8, 10].</b> Jumper the shield's <b>5V</b> pin to the breadboard <b>+</b> rail (red) and a <b>GND</b> pin to the <b>−</b> rail (black). The servo's plug has three holes, so it doesn't go into the breadboard: push one male to male jumper into each hole instead. Run the jumper from the brown hole to <b>−</b>, the one from red to <b>+</b>, and the one from orange to the shield's <b>D9</b> header socket; that's the <span class="tag">SERVO D9</span> jumper. Wrap tape around the plug so the jumpers can't pull out. Keep the optional capacitor [15] ready for step 17.</div></li>
           <li><div><b>Check before power.</b> Read every label against the pin map, and make sure no bare jumper end touches another. Then tape the UNO, shield and breadboard together and tape the pack to your shirt at chest height, leaving slack in the cables so a head turn can't pull them out.</div></li>
         </ol>
       </div>
@@ -710,12 +710,14 @@ wires(GC, [V(75.2, 10, -95.2), V(74.4, 11, -100), ...drop(1, 2, intoPort(PORT.D2
 const plugM = mat(0xf7f6f0, { r: 0.55 });
 for (const [x, y] of [PORT.D2, PORT.D5, PORT.D6, PORT.A0, PORT.A1]) mesh(GC, box(9.4, 4.6, 6.5), plugM, PW(x, y, SZ + 0.8 + 7.2 + 3.25), packT.quaternion);
 
-// Servo lead: brown / red / orange, down the right arm to a 3-pin plug in the breadboard.
+// Servo lead: brown / red / orange, down the right arm to its 3-hole (female) plug, which hangs
+// above the breadboard on three jumpers; it can't go into the breadboard itself.
 const SL = part('servoLeads', [0, 0, 0], { fade: true });
 const svCol = BB.col(7);
-wires(SL, [SW(SV.x, -8, 11.6), SW(SV.x - 1.5, -3, 15.5), ...drop(1, 3, [PW(svCol, 62, 52), PW(svCol, BB.plugY + 9, 32), PW(svCol, BB.plugY, 17)]).slice(1)],
+const SV_PLUG_Z = 20.5; // bottom of the plug, where the jumpers go in
+wires(SL, [SW(SV.x, -8, 11.6), SW(SV.x - 1.5, -3, 15.5), ...drop(1, 3, [PW(svCol, 62, 60), PW(svCol, BB.plugY + 9, 44), PW(svCol, BB.plugY, SV_PLUG_Z + 12)]).slice(1)],
   [WIRE.n, WIRE.r, WIRE.o], matCache({ r: 0.5 }), 0.5, 1.05);
-mesh(SL, box(7.6, 2.6, 12), mat(0x16181b, { r: 0.55 }), PW(svCol, BB.plugY, 4.3 + 6.2), packT.quaternion);
+mesh(SL, box(7.6, 2.6, 12), mat(0x16181b, { r: 0.55 }), PW(svCol, BB.plugY, SV_PLUG_Z + 6), packT.quaternion);
 
 const US = part('usb', [0, 0, 0], { fade: true });
 const uMat = matCache({ r: 0.5 });
@@ -740,9 +742,10 @@ const jump = (a, b, col, lift = 13) => {
 const BBZ = 4.3;
 jump([PIN.V5, HDR_Y.pwr, SHT], [BB.col(1), BB.plus, BBZ], WIRE.r, 16);
 jump([PIN.GND, HDR_Y.pwr, SHT], [BB.col(2), BB.minus, BBZ], WIRE.k, 12);
-jump([BB.col(6), BB.jmpY, BBZ], [BB.col(4), BB.minus, BBZ], WIRE.n, 9);
-jump([BB.col(7), BB.jmpY, BBZ], [BB.col(9), BB.plus, BBZ], WIRE.r, 9);
-jump([BB.col(8), BB.jmpY, BBZ], [PIN.D9, HDR_Y.dig, SHT], WIRE.o, 34);
+// The servo's three jumpers start in the holes of its plug (brown, red, orange from left to right).
+jump([svCol - P, BB.plugY, SV_PLUG_Z], [BB.col(4), BB.minus, BBZ], WIRE.n, 4);
+jump([svCol, BB.plugY, SV_PLUG_Z], [BB.col(9), BB.plus, BBZ], WIRE.r, 4);
+jump([svCol + P, BB.plugY, SV_PLUG_Z], [PIN.D9, HDR_Y.dig, SHT], WIRE.o, 22);
 
 /* ---------------- tape (yours) ---------------- */
 const TP = part('tape', [0, 0, 0], { fade: true });

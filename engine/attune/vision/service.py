@@ -16,6 +16,11 @@ enrollment in progress gets its own budget.
 Light-ASD (V-22, asd.py) runs on its own thread: the vision thread only adds each
 face's mouth crop, the 16 kHz `audio.block` stream feeds it from the bus, and each
 `Track` carries the face's latest `asd_score`.
+
+The enrollment station (V-23, attune/station/) runs on its own thread with this service's
+face finder and face printer. The vision thread hands it the command (with the glasses
+face's prints, for the identity check) and later saves its prints into the gallery, naming
+every glasses track with that face at once.
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ from .asd import ActiveSpeakerDetector, LightASD, asd_crop
 from .camera import Camera
 from .detector import FaceDetector
 from .embedder import FaceEmbedder, align, crop_quality
-from .enrollment import EnrollJob, finish, hint, progress, validate_request
+from .enrollment import EnrollJob, finish, hint, identity_score, progress, validate_request
 from .gallery import Gallery, Identity, IdentityRules
 from .mouth import LipHistory, MouthMeter
 from .settings import load_settings
@@ -72,6 +77,7 @@ class VisionService:
     ):
         self.bus = bus
         self.clock = clock
+        self.config = config or {}
         self.s, _ = load_settings(config)
         self.source = source
         self.root = root or os.getcwd()
@@ -99,6 +105,9 @@ class VisionService:
         self.paused = False
         self.camera_on = True
         self.job: EnrollJob | None = None
+        self.station = None  # attune.station.session.StationEnroller, once models are loaded
+        self._station_tap: Callable[[int, float, np.ndarray], None] | None = None
+        self._request_prints: dict[str, tuple[float, np.ndarray]] = {}  # save.request snapshots
         self._commands: queue.Queue = queue.Queue()
         self._rec_budget = TokenBucket(self.s.max_rec_per_s, 5)
         self._enroll_budget = TokenBucket(8.0, 3)
@@ -167,6 +176,7 @@ class VisionService:
         )
         self.bus.subscribe(T.NAME_PROPOSAL, lambda ev: put({"name": "_proposal", "args": ev}))
         self.bus.subscribe(T.AUDIO_BLOCK, self._on_audio_block)
+        self.bus.subscribe(T.SAVE_REQUEST, lambda ev: put({"name": "_save_request", "args": ev}))
 
     def _on_audio_block(self, ev: Any) -> None:
         """16 kHz PCM for Light-ASD; just copied into its ring, so the bus isn't held up."""
@@ -192,12 +202,34 @@ class VisionService:
             on_status=self._on_camera_status,
         )
         self.camera.start()
+        self._start_station()
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="vision", daemon=True)
         self._thread.start()
 
+    def _start_station(self) -> None:
+        """The enrollment station (V-23) shares this service's face models."""
+        try:
+            from ..station.session import StationEnroller, VisionHooks
+
+            hooks = VisionHooks(self._main_camera, self._share_frames, self._station_save_wait)
+            self.station = StationEnroller(
+                self.bus,
+                self.config,
+                self.detector,
+                self.embedder,
+                hooks,
+                self.clock,
+                root=self.root,
+            )
+        except Exception as exc:  # noqa: BLE001 - saving at the glasses still works without it
+            log.error("Enrollment station disabled: %s", exc)
+            self.station = None
+
     def stop(self) -> None:
         self._stop.set()
+        if self.station is not None:
+            self.station.stop()
         if self.camera:
             self.camera.stop()
         if self._thread:
@@ -209,6 +241,9 @@ class VisionService:
 
     def _on_frame(self, frame_no: int, t: float, image: np.ndarray) -> None:
         self.bus.publish(T.VISION_FRAME, T.Frame(frame_no, t, image))
+        tap = self._station_tap
+        if tap is not None:  # the station shares this camera (it is the laptop camera)
+            tap(frame_no, t, image)
 
     def _on_camera_status(self, ok: bool, detail: str) -> None:
         self.bus.publish(T.STATUS_PART, T.StatusPart("camera", ok, detail))
@@ -271,6 +306,9 @@ class VisionService:
                     T.PERSON_CHANGED, T.PersonChanged(person.person_id, person.name, "deleted")
                 )
         elif name == "session.forget":
+            if self.station is not None:
+                self.station.cancel("cancelled")
+            self._request_prints.clear()
             gone = set(self.gallery.forget_session())
             self._clear_identities(gone)
             self.tracker.lost.clear()
@@ -281,8 +319,16 @@ class VisionService:
             self._set_camera(bool(T.get(args, "on")))
         elif name == "_paused":
             self.paused = bool(T.get(args, "paused"))
+            if self.paused and self.station is not None:
+                self.station.cancel("paused")
         elif name == "_proposal":
             self._on_proposal(args, now)
+        elif name == "enroll.station":
+            self._station_command(dict(args) if isinstance(args, dict) else {}, now)
+        elif name == "_save_request":
+            self._snapshot_request(args, now)
+        elif name == "_station_save":
+            self._station_save(args, now)
 
     def _set_camera(self, on: bool) -> None:
         """Stop or restart the camera when the wearer turns it off or on from a page."""
@@ -317,6 +363,124 @@ class VisionService:
             ident.proposal = None
         else:  # rejected, expired
             ident.proposal = None
+
+    # ---------------- enrollment station (V-23) ----------------
+    def _main_camera(self) -> tuple[str, bool]:
+        cam = self.camera
+        if cam is None or not self.camera_on:
+            return "", False
+        return cam.device_name, bool(cam.connected)
+
+    def _share_frames(self, tap) -> None:
+        self._station_tap = tap
+
+    def _track_any(self, track_id) -> FaceTrack | None:
+        """An active track, or one on the lost list (it may have just turned away)."""
+        if not isinstance(track_id, (int, float)) or isinstance(track_id, bool):
+            return None
+        tracks = self.tracker.active + self.tracker.lost
+        return next((tr for tr in tracks if tr.track_id == int(track_id)), None)
+
+    def _track_prints(self, tr: FaceTrack | None) -> list[np.ndarray]:
+        """A glasses face's prints: its recent ones and its session person's."""
+        if tr is None:
+            return []
+        rows = list(tr.data.get("recent", []))
+        if tr.embedding is not None:
+            rows.append(tr.embedding)
+        ident = tr.data.get("ident")
+        person = self.gallery.get(ident.person_id) if ident is not None else None
+        if person is not None and not person.enrolled:
+            rows.extend(person.prints)
+        return rows
+
+    def _snapshot_request(self, ev, now: float) -> None:
+        """A double tap asked to save a face: keep its prints for the station's identity
+        check, in case the face turns away before the person gives consent."""
+        rid, tid = T.get(ev, "request_id"), T.get(ev, "track_id")
+        for key in [k for k, (t, _) in self._request_prints.items() if now - t > 180.0]:
+            del self._request_prints[key]
+        rows = self._track_prints(self._track_any(tid))
+        if rid and rows:
+            self._request_prints[str(rid)] = (now, np.stack(rows))
+
+    def _station_command(self, args: dict, now: float) -> None:
+        if self.station is None:
+            return
+        glasses = None
+        if args.get("action", "start") == "start":
+            rows = self._track_prints(self._track_any(args.get("track_id")))
+            snap = self._request_prints.pop(str(args.get("request_id")), None)
+            if snap is not None:
+                rows.extend(snap[1])
+            glasses = np.stack(rows) if rows else None
+        self.station.command(args, glasses)
+
+    def _station_save_wait(self, req: dict, timeout: float = 10.0) -> dict:
+        """Called on the station's thread: the gallery is changed on the vision thread."""
+        done = threading.Event()
+        box: dict = {}
+        self._commands.put({"name": "_station_save", "args": {**req, "_done": done, "_box": box}})
+        if not done.wait(timeout):
+            raise TimeoutError("the vision thread didn't save the face in time")
+        if "error" in box:
+            raise box["error"]
+        return box["result"]
+
+    def _station_save(self, req: dict, now: float) -> None:
+        box = req["_box"]
+        try:
+            box["result"] = self._station_enroll(req, now)
+        except Exception as exc:  # noqa: BLE001 - handed back to the station thread
+            box["error"] = exc
+        finally:
+            req["_done"].set()
+
+    def _station_enroll(self, req: dict, now: float) -> dict:
+        """Save a station enrollment's face prints, then name every glasses face that is them."""
+        prints = np.asarray(req["prints"], dtype=np.float32)
+        person = self.gallery.enroll(req["name"], prints, str(req["consent_t"]))
+        tid = req.get("track_id")
+        tr = self._track_any(tid)
+        replaced: set[str] = set()
+        if tr is not None:
+            # the glasses face the save started from (its identity check passed): its session
+            # entry is replaced, as in _finish_enrollment
+            before = self.gallery.get(tr.data["ident"].person_id)
+            if before is not None and not before.enrolled:
+                self.gallery.delete(before.person_id)
+                replaced.add(before.person_id)
+            self.rules.assign(tr.data["ident"], person.person_id, 1.0, now)
+        # any other session entry with this face would tie with the saved one on the match
+        # margin, so neither would ever be named: the saved person supersedes it
+        line = float(req.get("identity_match", 0.3))
+        for other in list(self.gallery.people(enrolled_only=False)):
+            if other.enrolled or other.person_id == person.person_id:
+                continue
+            if identity_score(prints, other.prints) >= line:
+                self.gallery.delete(other.person_id)
+                replaced.add(other.person_id)
+        for tr2 in self.tracker.active + self.tracker.lost:
+            ident = tr2.data.get("ident")
+            if ident is not None and ident.person_id in replaced:
+                self.rules.assign(ident, person.person_id, 1.0, now)
+        self.bus.publish(
+            T.ENROLL_RESULT,
+            T.EnrollResult(
+                person.person_id, "face", True, "", tid, "station", req.get("session_id")
+            ),
+        )
+        self.bus.publish(
+            T.PERSON_CHANGED, T.PersonChanged(person.person_id, person.name, "enrolled")
+        )
+        log.info(
+            "Station: saved %s as %s with %d face prints%s",
+            person.name,
+            person.person_id,
+            len(prints),
+            f" (replaces {sorted(replaced)})" if replaced else "",
+        )
+        return {"person_id": person.person_id}
 
     def _clear_identities(self, person_ids: set[str]) -> None:
         for tr in self.tracker.active + self.tracker.lost:
