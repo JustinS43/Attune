@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import load_config, section
+from .config import ConfigError, load_config, section
 from .core import clock
 from .core.bus import Bus
 from .core.contracts import STATUS_PART
@@ -98,6 +98,11 @@ def parse_args(argv: list[str] | None = None) -> Options:
     source: str | int | None = a.source
     if isinstance(source, str) and source.isdigit():
         source = int(source)
+    elif isinstance(source, str) and "://" not in source and not os.path.isfile(source):
+        # a typo must not quietly fall back to whatever webcam is plugged in
+        ap.error(f"--source {source}: no such video file (a camera index is a number)")
+    if a.audio_file and not os.path.isfile(a.audio_file):
+        ap.error(f"--audio-file {a.audio_file}: no such WAV file")
     return Options(
         config=a.config,
         source=source,
@@ -248,7 +253,7 @@ class Engine:
             self._fail("audio_file", f"could not play: {exc}")
 
     def _start_server(self) -> None:
-        from .server.app import WebServer, create_app
+        from .server.app import WebServer, create_app, local_hosts
 
         history_router = None
         api = _load_module("attune.history.api")
@@ -257,7 +262,18 @@ class Engine:
             if history_router is None:
                 log.info("attune.history.api.router is not built yet; no /api/history")
         try:
-            app = create_app(self.hub, history_router=history_router)
+            extra = section(self.config, "engine").get("allowed_hosts") or []
+            allowed = local_hosts(self.host, [str(h) for h in extra])
+            if allowed is None:
+                log.warning(
+                    "Listening on %s: any device on this network can open the pages", self.host
+                )
+            app = create_app(
+                self.hub,
+                history_router=history_router,
+                sim_routes=self.simulating_hardware,
+                allowed_hosts=allowed,
+            )
             self.hub.start()
             web = WebServer(app, self.host, self.port)
             web.start()
@@ -296,6 +312,16 @@ class Engine:
         while not self.stop_event.wait(0.25):
             if end is not None and time.monotonic() >= end:
                 break
+
+    @property
+    def simulating_hardware(self) -> bool:
+        """The simulated Arduino runs (--simulate-hardware, [hardware] simulate or the env)."""
+        env = os.environ.get("ATTUNE_SIMULATE_HARDWARE", "").strip().lower()
+        if env in ("1", "true", "yes", "on"):
+            return True
+        if env in ("0", "false", "no", "off"):
+            return False
+        return bool(section(self.config, "hardware").get("simulate", False))
 
     @property
     def lens_url(self) -> str:
@@ -368,7 +394,12 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname).1s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    code = run(parse_args(argv))
+    opts = parse_args(argv)
+    try:
+        code = run(opts)
+    except ConfigError as exc:
+        log.error("Config error: %s", exc)
+        code = 2
     logging.shutdown()
     # Model runtimes (onnxruntime, torch, PortAudio) can leave non-daemon threads behind;
     # don't let them hold the terminal after a clean stop.
