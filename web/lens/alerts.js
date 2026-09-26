@@ -9,11 +9,13 @@
  *   toward the source, and a haptic chip. Acknowledged alerts calm down, then fade.
  * - Name proposals for a face that is not in view: "Is this Sam?" with Y / N keycaps.
  * - Paused: the video dims (lens.css) and a pause chip explains that nothing is recognised.
+ * - Calm while people talk: the status pill, sound chips and their arrows stand still. Only the
+ *   smoke / CO card keeps its T3 flash, a deliberate safety signal.
  */
 
 import {
   FD, FT, MINT, AMBER, RED, ACCENT, font, clamp, easeOut, hexA, rrect, textW, glass, icon, eqBars,
-  logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX, REGION,
+  logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX, REGION, REDUCED_MOTION,
 } from './hud.js';
 
 const SIDE_WORD = { left: 'Left', right: 'Right', behind: 'Behind', none: 'Nearby' };
@@ -28,6 +30,19 @@ export function t3Flash(age) {
 }
 
 // ---------------------------------------------------------------- status pill (top-left of the display)
+// The speech glyph is still: it rises or settles (about 0.2 s) only when speech starts or stops,
+// held through pauses shorter than 0.6 s, so a busy room does not make it flicker.
+const statusSpeech = { on: 0, at: null, t: null };
+function speechLevel(on, anim) {
+  const s = statusSpeech;
+  if (on) s.at = anim;
+  const want = s.at != null && anim - s.at >= 0 && anim - s.at < 0.6 ? 1 : 0;
+  const dt = s.t == null ? 1 : clamp(anim - s.t, 0, 0.1);
+  s.t = anim;
+  s.on = REDUCED_MOTION ? want : s.on + (want - s.on) * (1 - Math.exp(-dt * 16));
+  return s.on;
+}
+
 export function drawStatus(ctx, blur, view, anim, a = 1) {
   const x = REGION.x + 26;
   const y = REGION.y + 22;
@@ -50,8 +65,6 @@ export function drawStatus(ctx, blur, view, anim, a = 1) {
   ctx.fillText('Attune', x + 54, y + h / 2 + 1);
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.fillRect(x + 146, y + 15, 1.5, h - 30);
-  const pulse = view.status === 'paused' ? 1 : 0.6 + 0.4 * Math.sin(anim * 4);
-  ctx.globalAlpha = a * pulse;
   if (view.status === 'paused') {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.fillRect(x + 161, y + h / 2 - 6, 3.5, 12);
@@ -62,17 +75,18 @@ export function drawStatus(ctx, blur, view, anim, a = 1) {
     ctx.arc(x + 166, y + h / 2, 5, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.globalAlpha = a;
   ctx.font = lf;
   ctx.fillStyle = 'rgba(255,255,255,0.86)';
   ctx.fillText(label, x + 180, y + h / 2 + 1);
-  eqBars(ctx, barsX, y + h / 2, 'rgba(255,255,255,0.8)', anim, view.status === 'paused' ? 0 : view.speaking ? 1 : 0.25, 16);
+  const speech = speechLevel(view.status !== 'paused' && !!view.speaking, anim);
+  eqBars(ctx, barsX, y + h / 2, 'rgba(255,255,255,0.8)', 0.6, view.status === 'paused' ? 0 : 0.25 + 0.75 * speech, 16);
   icon(ctx, 'lock', lockX, y + h / 2 - 9, 18, 'rgba(255,255,255,0.7)', 2.2);
   ctx.restore();
 }
 
 // ---------------------------------------------------------------- alerts
-function directionChip(ctx, cx, cy, r, side, color, anim, a = 1) {
+/** A round chip with an arrow toward `side`. Still, unless `nudge` (the smoke / CO card only). */
+function directionChip(ctx, cx, cy, r, side, color, anim, a = 1, nudge = false) {
   ctx.save();
   ctx.globalAlpha *= a;
   ctx.fillStyle = hexA(color, 0.16);
@@ -83,8 +97,8 @@ function directionChip(ctx, cx, cy, r, side, color, anim, a = 1) {
   ctx.fill();
   ctx.stroke();
   const ang = SIDE_ANGLE[side] ?? -Math.PI / 2;
-  const nudge = Math.sin(anim * 6) * r * 0.1;
-  arrow(ctx, cx + Math.cos(ang) * nudge, cy + Math.sin(ang) * nudge, r * 1.05, ang, color, r * 0.13);
+  const off = nudge ? Math.sin(anim * 6) * r * 0.1 : 0;
+  arrow(ctx, cx + Math.cos(ang) * off, cy + Math.sin(ang) * off, r * 1.05, ang, color, r * 0.13);
   ctx.restore();
 }
 
@@ -134,7 +148,7 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
   ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.fillText(al.acked ? 'Acknowledged' : al.detail, x + 152, yy + 102);
   // direction block
-  directionChip(ctx, x + w - 78, yy + h / 2 - 12, 32, al.side, color, anim);
+  directionChip(ctx, x + w - 78, yy + h / 2 - 12, 32, al.side, color, anim, 1, !al.acked); // safety: keeps moving
   ctx.font = font(600, 18, FT);
   ctx.textAlign = 'center';
   ctx.fillStyle = hexA(color, 0.95);
@@ -157,7 +171,7 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
 function chipAlert(ctx, blur, al, y, anim, dim) {
   const a = al.alpha * dim;
   const color = al.acked ? MINT : al.color;
-  if (!al.acked && !al.watch) edgeGlow(ctx, al.side, color, a * (0.65 + 0.35 * Math.sin(al.age * 7)), 560);
+  if (!al.acked && !al.watch) edgeGlow(ctx, al.side, color, a * 0.6, 560); // steady
   const h = al.watch ? 56 : 72;
   const parts = [
     { icon: al.acked ? 'check' : al.icon, color: '#141414', bg: color },
