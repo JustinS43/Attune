@@ -31,6 +31,12 @@ export function normSide(side) {
 
 const NAMED = new Set(['named', 'enrolled']);
 
+/** 'en-US' -> 'en'; missing or undetermined ('und', 'unk', '') counts as the wearer's language. */
+export function normLang(lang) {
+  const l = String(lang ?? '').toLowerCase().split(/[-_]/)[0];
+  return !l || l === 'und' || l === 'unk' || l === 'xx' || l === 'auto' ? 'en' : l;
+}
+
 export function createStore() {
   const s = {
     clock: 0, // source clock (engine/wall seconds for Live, film seconds for Film)
@@ -108,7 +114,7 @@ export function createStore() {
           speaker: msg.speaker ?? { kind: 'someone', label: 'Someone' },
           text: String(msg.text ?? ''),
           final: !!msg.final,
-          lang: (msg.lang || 'en').toLowerCase(),
+          lang: normLang(msg.lang),
           translation: msg.translation || null,
           words: msg.words,
           tFirst: prev?.tFirst ?? s.clock,
@@ -236,7 +242,7 @@ export function createViewBuilder(store) {
         my: Array.isArray(f.mouth) ? f.mouth[1] * K : (by + bh * 0.78) * K,
       };
       let sm = smooth.get(f.track_id);
-      if (!sm || anim - sm.seen > 0.6) {
+      if (!sm || anim - sm.seen > 1.5) {
         sm = { ...tgt, born: anim, seen: anim };
         smooth.set(f.track_id, sm);
       } else {

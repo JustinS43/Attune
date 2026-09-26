@@ -93,6 +93,7 @@ function layout() {
   const sw = Math.min(vw, (vh * 16) / 9);
   const sh = (sw * 9) / 16;
   Object.assign(stage.style, { left: `${(vw - sw) / 2}px`, top: `${(vh - sh) / 2}px`, width: `${sw}px`, height: `${sh}px` });
+  $('app').style.setProperty('--u', String(Math.min(1.3, Math.max(0.85, vw / 1440))));
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const cw = Math.round(sw * dpr);
   const ch = Math.round(sh * dpr);

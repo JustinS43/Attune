@@ -15,6 +15,8 @@ import { t3Flash } from '../alerts.js';
 import { inView, primaryCaption } from './common.js';
 
 const G = PHOSPHOR;
+// a darker intensity of the same green, drawn under every glyph so text holds over bright scenes
+const KEYLINE = 'rgba(3, 26, 10, 0.72)';
 const VW = 640;
 const VH = 200;
 const S = 1.42; // virtual px -> design px
@@ -39,6 +41,13 @@ function text(ctx, str, x, y, f, a = 1, align = 'left', spacing = 0) {
   ctx.textAlign = align;
   ctx.letterSpacing = `${spacing}px`;
   ctx.globalAlpha = a;
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = KEYLINE;
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.strokeText(str, x, y);
+  ctx.restore();
   ctx.fillStyle = G;
   ctx.fillText(str, x, y);
   ctx.letterSpacing = '0px';
@@ -48,24 +57,37 @@ function text(ctx, str, x, y, f, a = 1, align = 'left', spacing = 0) {
 function edgeChevrons(ctx, side, anim, strong) {
   const a = strong ? 0.55 + 0.45 * Math.sin(anim * 7) : 0.85;
   ctx.globalAlpha = 1;
-  if (side === 'left') chevrons(ctx, 22, VH / 2 + 8, -1, G, 13, 3, strong ? 2 : 1, a);
-  else if (side === 'right') chevrons(ctx, VW - 22, VH / 2 + 8, 1, G, 13, 3, strong ? 2 : 1, a);
-  else if (side === 'behind') {
+  const n = strong ? 2 : 1;
+  for (const [col, lw] of [[KEYLINE, 6.5], [G, 3]]) {
     ctx.save();
-    ctx.translate(VW / 2, VH - 8);
-    ctx.rotate(Math.PI / 2);
-    chevrons(ctx, 0, 0, 1, G, 10, 2.6, strong ? 2 : 1, a);
+    if (col === KEYLINE) ctx.shadowBlur = 0;
+    if (side === 'left') chevrons(ctx, 22, VH / 2 + 8, -1, col, 13, lw, n, a);
+    else if (side === 'right') chevrons(ctx, VW - 22, VH / 2 + 8, 1, col, 13, lw, n, a);
+    else if (side === 'behind') {
+      ctx.translate(VW / 2, VH - 8);
+      ctx.rotate(Math.PI / 2);
+      chevrons(ctx, 0, 0, 1, col, 10, lw - 0.4, n, a);
+    }
     ctx.restore();
   }
 }
 
+/** A stroked icon with the same dark keyline under it. */
+function monoIcon(ctx, name, x, y, size, lw = 2.2) {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  icon(ctx, name, x, y, size, KEYLINE, lw + 2.6);
+  ctx.restore();
+  icon(ctx, name, x, y, size, G, lw);
+}
+
 function checkMark(ctx, x, y, size, a) {
   ctx.globalAlpha = a;
-  icon(ctx, 'check', x, y - size / 2, size, G, 2.4);
+  monoIcon(ctx, 'check', x, y - size / 2, size, 2.4);
 }
 function crossMark(ctx, x, y, size, a) {
   ctx.globalAlpha = a;
-  icon(ctx, 'cross', x, y - size / 2, size, G, 2.4);
+  monoIcon(ctx, 'cross', x, y - size / 2, size, 2.4);
 }
 
 export function createMonoMode() {
@@ -121,7 +143,7 @@ export function createMonoMode() {
         // an urgent alarm takes the whole band
         const flash = urgent.acked ? 1 : 0.35 + 0.65 * t3Flash(urgent.age);
         ctx.globalAlpha = flash;
-        icon(ctx, urgent.acked ? 'check' : 'warn', VW / 2 - 186, 50, 40, G, 2.4);
+        monoIcon(ctx, urgent.acked ? 'check' : 'warn', VW / 2 - 186, 50, 40, 2.4);
         text(ctx, urgent.label.toUpperCase(), VW / 2 - 132, 84, F.big, flash, 'left', 3);
         text(ctx, urgent.acked ? 'ACKNOWLEDGED' : urgent.detail.toUpperCase(), VW / 2, 124, F.mid, 0.85, 'center', 2);
         if (!urgent.acked) {
@@ -134,9 +156,9 @@ export function createMonoMode() {
         if (chip) {
           const w = `${chip.label.toUpperCase()}${chip.count > 1 ? ` ×${chip.count}` : ''}`;
           ctx.globalAlpha = 1;
-          icon(ctx, chip.acked ? 'check' : chip.icon, LINE_X - 2, 13, 22, G, 2.2);
+          monoIcon(ctx, chip.acked ? 'check' : chip.icon, LINE_X - 2, 13, 22, 2.2);
           text(ctx, w, LINE_X + 28, 31, F.head, 1, 'left', 2);
-          text(ctx, chip.acked ? 'OK' : chip.detail.toUpperCase(), VW - LINE_X, 31, F.small, 0.7, 'right', 2);
+          if (cap) text(ctx, chip.acked ? 'OK' : chip.detail.toUpperCase(), VW - LINE_X, 31, F.small, 0.7, 'right', 2);
           edgeChevrons(ctx, chip.side, anim, !chip.acked);
         } else if (cap) {
           const name = cap.name.toUpperCase();
@@ -175,6 +197,12 @@ export function createMonoMode() {
           const a = cap.alpha * (cap.final ? 1 : 0.62);
           shown.forEach((ln, i) => text(ctx, (i === 0 && lines.length > maxLines ? '… ' : '') + ln, LINE_X, 82 + i * LH, F.body, a));
           if (!chip && cap.dir && cap.dir.side !== 'ahead') edgeChevrons(ctx, cap.dir.side, anim, !!cap.dir.off);
+        } else if (chip) {
+          // nobody talking: the band has room to spell the sound out
+          const more = view.alerts.filter((x) => x !== chip && !x.watch && x.level !== 'urgent');
+          text(ctx, chip.acked ? 'ACKNOWLEDGED' : chip.detail, LINE_X, 82, F.body, 0.95);
+          if (more[0]) text(ctx, `+ ${more[0].label} · ${more[0].detail}`, LINE_X, 82 + LH, F.body, 0.7);
+          if (!chip.acked && !footer) text(ctx, 'A  ACKNOWLEDGE', VW - LINE_X, 182, F.small, 0.55, 'right', 2.5);
         }
         if (prop) {
           const label = `${prop.name.toUpperCase()}?`;

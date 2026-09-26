@@ -20,6 +20,9 @@ body {
   position: fixed;
   inset: 0;
   background: #030405;
+  /* the demo chrome scales with the window (lens.js sets --u: 1 at 1440 px wide, 0.85-1.3) */
+  --u: 1;
+  font-size: calc(13px * var(--u));
 }
 
 /* ------------------------------------------------------------ stage */
@@ -112,9 +115,9 @@ body {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  min-width: 380px;
-  max-width: 560px;
-  padding: 30px 38px 28px;
+  min-width: calc(400px * var(--u));
+  max-width: calc(620px * var(--u));
+  padding: calc(30px * var(--u)) calc(40px * var(--u)) calc(28px * var(--u));
   border-radius: 28px;
   text-align: center;
   animation: notice-in 420ms var(--attune-ease) both;
@@ -132,10 +135,10 @@ body {
 }
 
 .notice-mark {
-  width: 64px;
-  height: 64px;
+  width: calc(64px * var(--u));
+  height: calc(64px * var(--u));
   display: block;
-  margin: 0 auto 14px;
+  margin: 0 auto calc(14px * var(--u));
 }
 
 .notice-mark .ring {
@@ -168,23 +171,24 @@ body {
 }
 
 .notice-title {
-  font: 650 22px/1.25 var(--attune-font-display);
+  font: 650 calc(22px * var(--u))/1.25 var(--attune-font-display);
 }
 
 .notice-detail {
   margin-top: 6px;
-  font: 450 14px/1.45 var(--attune-font-text);
+  font: 450 calc(14px * var(--u))/1.45 var(--attune-font-text);
   color: var(--attune-text-2);
 }
 
-.notice-detail code {
-  font: 500 13px var(--attune-font-mono);
+.notice-detail code,
+.notice-hint code {
+  font: 500 0.95em var(--attune-font-mono);
   color: var(--attune-accent);
 }
 
 .notice-hint {
   margin-top: 14px;
-  font: 450 13px/1.4 var(--attune-font-text);
+  font: 450 calc(13px * var(--u))/1.5 var(--attune-font-text);
   color: var(--attune-text-3);
 }
 
@@ -215,20 +219,20 @@ body.chrome-hidden {
 
 .mode-label {
   position: absolute;
-  left: 20px;
-  bottom: 20px;
+  left: calc(20px * var(--u));
+  bottom: calc(20px * var(--u));
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px 10px 12px;
+  gap: calc(12px * var(--u));
+  padding: calc(10px * var(--u)) calc(16px * var(--u)) calc(10px * var(--u)) calc(12px * var(--u));
   border-radius: 16px;
   pointer-events: auto;
 }
 
 .mode-swatch {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: calc(30px * var(--u));
+  height: calc(30px * var(--u));
+  border-radius: calc(9px * var(--u));
   flex: none;
   background: var(--attune-brand);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
@@ -248,20 +252,20 @@ body.chrome-hidden {
 }
 
 .mode-name {
-  font: 650 15px/1.2 var(--attune-font-display);
+  font: 650 calc(15px * var(--u))/1.2 var(--attune-font-display);
   letter-spacing: 0.01em;
 }
 
 .mode-device {
   margin-top: 2px;
-  font: 450 12px/1.3 var(--attune-font-text);
+  font: 450 calc(12px * var(--u))/1.3 var(--attune-font-text);
   color: var(--attune-text-2);
 }
 
 .dock {
   position: absolute;
-  right: 20px;
-  bottom: 20px;
+  right: calc(20px * var(--u));
+  bottom: calc(20px * var(--u));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -302,7 +306,7 @@ body.chrome-hidden {
   margin: 0;
   background: transparent;
   color: var(--attune-text-2);
-  font: 560 12.5px/1 var(--attune-font-text);
+  font: 560 calc(12.5px * var(--u))/1 var(--attune-font-text);
   letter-spacing: 0.01em;
   cursor: pointer;
   transition:
@@ -311,7 +315,7 @@ body.chrome-hidden {
 }
 
 .seg button {
-  padding: 7px 11px;
+  padding: calc(7px * var(--u)) calc(11px * var(--u));
   border-radius: 8px;
 }
 
@@ -328,16 +332,16 @@ body.chrome-hidden {
 }
 
 .help-btn {
-  width: 30px;
-  height: 30px;
+  width: calc(30px * var(--u));
+  height: calc(30px * var(--u));
   border-radius: 9px;
-  font: 650 14px/1 var(--attune-font-text);
+  font: 650 calc(14px * var(--u))/1 var(--attune-font-text);
   background: rgba(255, 255, 255, 0.06);
 }
 
 .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: calc(30px * var(--u));
+  height: calc(30px * var(--u));
   border-radius: 9px;
   display: grid;
   place-items: center;
@@ -375,12 +379,12 @@ body.chrome-hidden {
 }
 
 .scene {
-  width: 210px;
+  width: calc(210px * var(--u));
   padding: 0 8px;
 }
 
 .scene-name {
-  font: 560 12.5px/1.2 var(--attune-font-text);
+  font: 560 calc(12.5px * var(--u))/1.2 var(--attune-font-text);
   color: var(--attune-text);
   white-space: nowrap;
   overflow: hidden;
@@ -404,7 +408,7 @@ body.chrome-hidden {
 }
 
 .scene-count {
-  font: 500 11.5px/1 var(--attune-font-text);
+  font: 500 calc(11.5px * var(--u))/1 var(--attune-font-text);
   color: var(--attune-text-3);
   font-variant-numeric: tabular-nums;
   min-width: 34px;

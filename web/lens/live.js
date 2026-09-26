@@ -24,6 +24,7 @@ export function createLiveSource({ canvas, emit, setConnected, onFrameCount }) {
       bmp.close();
       frames++;
       lastFrameAt = performance.now();
+      if (frames === 1) canvas.classList.add('live-on');
       onFrameCount?.(frames);
     } catch {
       // a corrupt frame: skip it
@@ -56,7 +57,7 @@ export function createLiveSource({ canvas, emit, setConnected, onFrameCount }) {
     },
     start() {
       if (link) return;
-      canvas.classList.add('live-on');
+      if (frames) canvas.classList.add('live-on');
       link = connect({
         role: 'lens',
         frames: true,

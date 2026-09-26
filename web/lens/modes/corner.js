@@ -169,7 +169,8 @@ export function createCornerMode() {
           ctx.fillStyle = '#FFFFFF';
           ctx.fillText(cap.name, DX + PAD + 28, ny + 1);
           let hx = DX + PAD + 28 + textW(ctx, cap.name, F.name) + 12;
-          const sub = cap.translated ? `${cap.lang.toUpperCase()} → EN` : cap.relation;
+          const offWord = cap.dir?.off ? { left: 'On your left', right: 'On your right', behind: 'Behind you' }[cap.dir.side] : null;
+          const sub = cap.translated ? `${cap.lang.toUpperCase()} → EN` : offWord ?? cap.relation;
           if (sub) {
             ctx.font = F.sub;
             ctx.fillStyle = cap.translated ? ACCENT : 'rgba(255,255,255,0.58)';
