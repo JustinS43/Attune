@@ -9,7 +9,8 @@ person's voice print for the session. Later, when the same person talks
 off-screen, their voice matches and case 4 can name them - strangers too.
 
 Strangers have no person_id, so they're harvested under "track-<id>";
-Section 2 echoes that id back in `audio.voice_match`.
+Section 2 echoes that id back in `audio.voice_match`. Voices heard while every
+visible face is still are harvested under "offscreen-<n>" (V-19, see speaker.py).
 """
 
 from __future__ import annotations
