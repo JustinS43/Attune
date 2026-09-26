@@ -80,6 +80,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
 - [x] H-15 CAD rig page matches the real kit: UNO R3, servo tapper, no motor driver (#43)
 - [x] H-16 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
+- [ ] H-17 Test patterns stop after one cycle; board restarts (brown-out) noticed and logged; heartbeat kept within 0.1–1 s; simulator reboot/heartbeat/sound controls; speech_out device "none" (#61)
 
 ## Section 4 – Pages, Engine & Demo
 
@@ -117,6 +118,10 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-32 System debug: phone enrollment and console fixes, full-suite findings handed to owners (#51)
 - [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
+- [ ] P-37 End-to-end suite (tests/e2e): real engines in replay mode, every page in headless Edge; captions, alerts, camera/pause, reconnect, privacy, robustness, soak (#61)
+- [ ] P-38 Only the laptop's own pages reach the engine: WebSocket origin check, Host guard (DNS rebinding), no API schema (#61)
+- [ ] P-39 Phone and demo fixes from the e2e run: tab bar indicator, camera switch and state, no "UND" tag, hidden demo panes out of the tab order (#61)
+- [ ] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
 
 ## Gates and end-to-end checks (whole team)
 
