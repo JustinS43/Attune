@@ -6,6 +6,7 @@ code also runs on laptops without an NVIDIA GPU (slower).
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 
@@ -19,6 +20,15 @@ def _preload_cuda_dlls() -> None:
     if _dlls_loaded:
         return
     _dlls_loaded = True
+    # With the audio extra, torch (CUDA 12.8) shares a process with onnxruntime-gpu
+    # (CUDA 13). Both ship cuDNN 9 DLLs under the same names, and Windows keeps the
+    # first one loaded: if ours comes first, `import torch` later fails (WinError 127).
+    # Loading torch first lets both use its cuDNN, which the CUDA provider accepts.
+    if importlib.util.find_spec("torch") is not None:
+        try:
+            import torch  # noqa: F401
+        except Exception as exc:  # noqa: BLE001 - vision works without it
+            log.warning("Could not load torch before onnxruntime: %s", exc)
     import onnxruntime as ort
 
     preload = getattr(ort, "preload_dlls", None)
