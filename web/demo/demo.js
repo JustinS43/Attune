@@ -15,6 +15,7 @@
  */
 
 import { mountGuide } from './guide.js';
+import { connect } from '../shared/ws.js';
 
 const VIEWS = ['split', 'lens', 'phone', 'guide'];
 const STORE = 'attune.demo.view';
@@ -104,6 +105,12 @@ function onKeydown(e) {
     setView(VIEWS[Number(e.code.slice(-1)) - 1]);
     return;
   }
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyC') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!camBtn.disabled) setCamera(!cameraOn);
+    return;
+  }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '`') {
     e.preventDefault();
@@ -172,3 +179,38 @@ function tryLook(mode, variant = 'rayban') {
 mountGuide(guide, { onTry: tryLook });
 
 setView(view);
+
+// ------------------------------------------------------------------ camera on / off
+// The engine really stops using the webcam (command camera.set); captions and sound alerts keep
+// running from the microphone. Every page hears the new state (message `camera`).
+const camBtn = document.querySelector('#cam-toggle');
+const camLabel = camBtn.querySelector('.cam-label');
+const camCard = document.querySelector('#cam-off-card');
+let cameraOn = true;
+
+function showCamera(on) {
+  cameraOn = on;
+  camBtn.setAttribute('aria-pressed', String(on));
+  camLabel.textContent = on ? 'Camera on' : 'Camera off';
+  camBtn.title = `${on ? 'Turn the camera off' : 'Turn the camera on'} (Alt+C)`;
+  camCard.hidden = on;
+}
+
+const link = connect({
+  role: 'console',
+  onState: (up) => {
+    camBtn.disabled = !up;
+  },
+  onMessage: (msg) => {
+    if (msg.type === 'welcome' && typeof msg.camera_on === 'boolean') showCamera(msg.camera_on);
+    else if (msg.type === 'camera') showCamera(Boolean(msg.on));
+  },
+});
+
+function setCamera(on) {
+  showCamera(on); // shown at once; the engine confirms with a `camera` message
+  link.send('camera.set', { on });
+}
+
+camBtn.addEventListener('click', () => setCamera(!cameraOn));
+document.querySelector('#cam-on-btn').addEventListener('click', () => setCamera(true));

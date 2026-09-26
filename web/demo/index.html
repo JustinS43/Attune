@@ -37,12 +37,25 @@
         <span>Glasses guide</span>
       </button>
     </div>
-    <div class="hint"><kbd>`</kbd> switch view</div>
+    <div class="tools">
+      <button type="button" class="cam-toggle" id="cam-toggle" aria-pressed="true" title="Turn the camera off or on (Alt+C)" disabled>
+        <svg class="cam-on" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6.5" width="13" height="11" rx="2.2"/><path d="m15.5 10.5 5-3v9l-5-3"/></svg>
+        <svg class="cam-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 13.5v2a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1M9 6.5h4.5a2 2 0 0 1 2 2v2l5-3v9"/><path d="M3 3l18 18"/></svg>
+        <span class="cam-label">Camera on</span>
+      </button>
+      <div class="hint"><kbd>`</kbd> switch view</div>
+    </div>
   </header>
 
   <main class="stage">
     <section class="pane lens-pane" aria-label="Glasses view">
       <iframe id="lens" title="Attune glasses view" allow="autoplay; fullscreen"></iframe>
+      <div class="cam-off-card" id="cam-off-card" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 13.5v2a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1M9 6.5h4.5a2 2 0 0 1 2 2v2l5-3v9"/><path d="M3 3l18 18"/></svg>
+        <h2>Camera off</h2>
+        <p>Attune isn't looking. Captions and sound alerts keep working from the microphone.</p>
+        <button type="button" id="cam-on-btn">Turn camera on</button>
+      </div>
     </section>
     <section class="pane phone-pane" aria-label="Phone app">
       <div class="phone-fit">

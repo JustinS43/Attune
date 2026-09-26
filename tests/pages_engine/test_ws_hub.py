@@ -341,6 +341,25 @@ def test_pause_toggle_publishes_and_broadcasts(hub_env):
             assert wait_for(lambda: hub_env.rec[C.PAUSED][-1] == {"paused": False})
 
 
+def test_camera_set_publishes_and_broadcasts(hub_env):
+    with (
+        page(hub_env.client, "lens") as (lens, welcome),
+        page(hub_env.client, "phone") as (phone, _),
+    ):
+        assert welcome["camera_on"] is True
+        lens.send_json({"type": "command", "name": "camera.set", "args": {"on": False}})
+        assert recv_type(lens, "camera")["on"] is False
+        assert recv_type(phone, "camera")["on"] is False
+        assert wait_for(lambda: hub_env.rec[C.CAMERA_STATE] == [{"on": False}])
+        # a new page is told the camera is off; a missing value is ignored
+        with page(hub_env.client, "console") as (_other, welcome2):
+            assert welcome2["camera_on"] is False
+        lens.send_json({"type": "command", "name": "camera.set", "args": {}})
+        lens.send_json({"type": "command", "name": "camera.set", "args": {"on": True}})
+        assert recv_type(lens, "camera")["on"] is True
+        assert hub_env.rec[C.CAMERA_STATE] == [{"on": False}, {"on": True}]
+
+
 def test_bus_pause_command_toggles_once(hub_env):
     """Section 3's touch router publishes touch.action AND command pause.toggle: one flip."""
     with page(hub_env.client, "lens") as (lens, _):

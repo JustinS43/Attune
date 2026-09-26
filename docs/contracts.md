@@ -60,6 +60,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `person.changed` | 1 Vision | `person_id, name, action` (`enrolled`, `renamed`, `deleted`) | Everyone updates their caches |
 | `session.forget` | 4 Pages & Engine | — | Every section wipes session-only data |
 | `paused` | 4 Pages & Engine | `paused` (bool) | All recognition pauses |
+| `camera.state` | 4 Pages & Engine | `on` (bool) | 1 Vision stops or restarts the camera; captions and alerts keep running |
 | `command` | 4 Pages & Engine | `Command` (section 4) | From the pages |
 | `status.part` | every service | `part, ok, detail, metrics: {}` | ~1/s |
 
@@ -99,6 +100,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `person.delete` | person_id | 1 Vision + 2 Audio & Lang (delete every file) |
 | `session.forget` | — | 4 Pages & Engine publishes `session.forget` |
 | `pause.toggle` | — | 4 Pages & Engine publishes `paused` |
+| `camera.set` | on (bool) | 4 Pages & Engine publishes `camera.state` |
 | `switch.set` | key (`translation`, `alerts`, `debug`), value | owning section |
 | `languages.set` | langs, e.g. ["en", "es"] | 2 Audio & Lang |
 | `pattern.test` | name, side | 3 Hardware |
@@ -191,8 +193,9 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 
 | type | Sent to | Fields |
 |---|---|---|
-| `welcome` | the page that said hello | `session_id, paused, config: {bubble_chars, bubble_lines, bubble_fade_s, presets}` |
+| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, presets}` |
 | `paused` | all | `paused` (bool), sent on every change |
+| `camera` | all | `on` (bool), sent on every change |
 | `enroll_result` | console, phone | as the bus event `enroll.result` |
 | `person_changed` | console, phone | as the bus event `person.changed` |
 | `hw_link` | console, phone | as the bus event `hw.link` |

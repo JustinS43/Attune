@@ -11,9 +11,13 @@ from attune.core import contracts as C
 
 
 def test_parse_args():
-    o = M.parse_args(["--source", "2", "--audio-file", "x.wav", "--port", "8001", "--no-browser"])
+    o = M.parse_args(
+        ["--source", "2", "--audio-file", "x.wav", "--port", "8001", "--no-browser"]
+    )
     assert o.source == 2 and o.no_mic is True and o.port == 8001 and o.no_browser
-    o = M.parse_args(["--source", "data/reels/film/cafe_friends.mp4", "--repeat-audio", "4"])
+    o = M.parse_args(
+        ["--source", "data/reels/film/cafe_friends.mp4", "--repeat-audio", "4"]
+    )
     assert o.source == "data/reels/film/cafe_friends.mp4" and o.repeat_audio == 4.0
     assert o.no_mic is False and o.simulate_hardware is False
     o = M.parse_args(["--simulate-hardware", "--no-mic"])
@@ -30,7 +34,9 @@ class Good:
 
     def start(self):
         Good.started += 1
-        self.bus.publish(C.STATUS_PART, {"part": "good", "ok": True, "detail": "", "metrics": {}})
+        self.bus.publish(
+            C.STATUS_PART, {"part": "good", "ok": True, "detail": "", "metrics": {}}
+        )
 
     def stop(self):
         Good.stopped += 1

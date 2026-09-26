@@ -223,6 +223,7 @@ class Hub:
             C.REPLY_SUGGESTIONS: lambda ev: post(self._on_relay, C.WS_REPLY_SUGGESTIONS, ev),
             C.REPLY_SPOKEN: lambda ev: post(self._on_reply_spoken, ev),
             C.PAUSED: self._on_paused_bus,
+            C.CAMERA_STATE: lambda ev: post(self._on_camera, ev),
             C.ENROLL_RESULT: lambda ev: post(self._on_enroll_result, ev),
             C.PERSON_CHANGED: lambda ev: post(self._on_person_changed, ev),
             C.HW_LINK: self._on_hw_link_bus,
@@ -263,6 +264,10 @@ class Hub:
         for client in list(self.clients.values()):
             client.closed = True
             client.wake.set()
+
+    @property
+    def camera_on(self) -> bool:
+        return bool(self.router.camera_on) if self.router is not None else True
 
     @property
     def paused(self) -> bool:
@@ -385,6 +390,11 @@ class Hub:
         body = to_jsonable(ev)
         self.broadcast(C.WS_REPLY_SPOKEN, body)
         self._log_event(f"Spoke a reply ({body.get('voice')})")
+
+    def _on_camera(self, ev: Any) -> None:
+        on = bool(get(ev, "on", True))
+        self.broadcast(C.WS_CAMERA, {"on": on})
+        self._log_event("Camera on" if on else "Camera off")
 
     def _on_paused(self, ev: Any) -> None:
         paused = bool(get(ev, "paused", False))
@@ -521,6 +531,7 @@ class Hub:
             {
                 "session_id": self.session_id,
                 "paused": self.paused,
+                "camera_on": self.camera_on,
                 "config": self.welcome_config,
             },
         )

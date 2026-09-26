@@ -6,13 +6,14 @@ Every valid `{"type": "command", name, args}` from a page is published as the bu
 event `command` = {name, args}; the owning section picks it up there. Unknown
 command names are logged and ignored.
 
-The engine owns three commands and handles them from the bus `command` topic, so
+The engine owns four commands and handles them from the bus `command` topic, so
 they work the same whoever sends them (a page, or Section 3's touch router, which
 publishes `command` pause.toggle on a double tap):
 
 - `pause.toggle`: flips the pause state and publishes `paused` {paused}.
 - `session.forget`: publishes `session.forget` {} so every section wipes session data.
 - `mark`: writes the note to the session log.
+- `camera.set` {on}: publishes `camera.state` {on}; Section 1 stops or restarts the camera.
 
 Handling never publishes `command` again, so there is no loop.
 """
@@ -24,7 +25,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from ..core.contracts import COMMAND, COMMAND_NAMES, PAUSED, SESSION_FORGET, get
+from ..core.contracts import CAMERA_STATE, COMMAND, COMMAND_NAMES, PAUSED, SESSION_FORGET, get
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class CommandRouter:
         self.session_log = session_log
         self._lock = threading.Lock()
         self.paused = False
+        self.camera_on = True
         self.handled = 0
         self.ignored = 0
         self._unsubs: list[Callable[[], None]] = []
@@ -77,6 +79,15 @@ class CommandRouter:
         elif name == "session.forget":
             log.info("Forgetting the session")
             self.bus.publish(SESSION_FORGET, {})
+        elif name == "camera.set":
+            on = args.get("on") if isinstance(args, dict) else None
+            if not isinstance(on, bool):
+                log.info("camera.set needs {on: true|false}; ignoring %r", args)
+                return
+            with self._lock:
+                self.camera_on = on
+            log.info("Camera turned %s from a page", "on" if on else "off")
+            self.bus.publish(CAMERA_STATE, {"on": on})
         elif name == "mark" and self.session_log is not None:
             note = args.get("note", "") if isinstance(args, dict) else ""
             self.session_log.mark(note if isinstance(note, str) else str(note))

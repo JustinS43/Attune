@@ -90,6 +90,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-16 Tests in tests/pages_engine (bus, WebSocket hub, commands) · M2 (#20)
 - [x] P-17 Demo page (/demo/): glasses view and phone app side by side, or either one full size · M3 (#26)
 - [x] P-18 Demo: glasses guide tab (Colour / Mono / Corner and the glasses that use each) · M3 (#29)
+- [x] P-19 Demo: camera on/off switch (engine really stops the webcam; captions keep running) · M3 (#30)
 
 ## Gates and end-to-end checks (whole team)
 

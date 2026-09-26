@@ -52,7 +52,13 @@ def test_bus_isolates_subscriber_exceptions(caplog):
     assert got == [0, 1, 2, 3, 4]
     assert bus.errors == 5
     # rate-limited: one log line, not five
-    assert sum("boom" in (r.exc_text or "") or "failed" in r.message for r in caplog.records) == 1
+    assert (
+        sum(
+            "boom" in (r.exc_text or "") or "failed" in r.message
+            for r in caplog.records
+        )
+        == 1
+    )
 
 
 def test_bus_subscribe_all_sees_every_topic():
@@ -190,7 +196,7 @@ def test_contracts_match_vision_types():
 
 def test_contract_names():
     assert "pause.toggle" in C.COMMAND_NAMES and "mark" in C.COMMAND_NAMES
-    assert len(C.COMMAND_NAMES) == 13
+    assert len(C.COMMAND_NAMES) == 14
     assert C.WS_AUDIENCE[C.WS_STATUS] == {"console"}
     assert C.WS_AUDIENCE[C.WS_CAPTION] == {"lens", "console", "phone"}
     assert C.EnrollResult(None, "face", False).reason == ""
@@ -217,7 +223,9 @@ def test_status_aggregates_parts_and_levels():
     out = []
     bus.subscribe(C.STATUS, out.append)
     bus.publish(C.STATUS_PART, C.StatusPart("vision", True, "", {"vision_fps": 29.5}))
-    bus.publish(C.STATUS_PART, {"part": "llm", "ok": False, "detail": "warming", "metrics": {}})
+    bus.publish(
+        C.STATUS_PART, {"part": "llm", "ok": False, "detail": "warming", "metrics": {}}
+    )
     bus.publish(C.HW_LINK, {"connected": True, "firmware": "1.0", "driver": "TB6612"})
     t = np.arange(16000) / 16000
     sine = (0.1 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
@@ -226,7 +234,9 @@ def test_status_aggregates_parts_and_levels():
             C.AUDIO_BLOCK,
             {"t": now[0], "sample_rate": 16000, "samples": sine[i : i + 160]},
         )
-    bus.publish(C.AUDIO_BLOCK, {"t": now[0], "sample_rate": 32000, "samples": np.ones(320)})
+    bus.publish(
+        C.AUDIO_BLOCK, {"t": now[0], "sample_rate": 32000, "samples": np.ones(320)}
+    )
     bus.publish(
         C.CAPTION,
         {
@@ -239,7 +249,9 @@ def test_status_aggregates_parts_and_levels():
     assert snap["fps"] == 29.5
     assert snap["arduino"] == {"connected": True, "firmware": "1.0", "driver": "TB6612"}
     assert snap["ollama"] == {"ok": False, "detail": "warming", "warm": None}
-    assert snap["mic_level"] == pytest.approx(20 * math.log10(0.1 / math.sqrt(2)), abs=0.3)
+    assert snap["mic_level"] == pytest.approx(
+        20 * math.log10(0.1 / math.sqrt(2)), abs=0.3
+    )
     assert snap["caption_delay"] == pytest.approx(0.5, abs=1e-6)
     assert snap["parts"]["vision"]["ok"] is True and snap["parts"]["llm"]["ok"] is False
     assert snap["on_battery"] in (True, False, None)
@@ -266,8 +278,12 @@ def test_session_log_is_privacy_safe(tmp_path):
     log = SessionLog(bus, tmp_path, "s1")
     log.start()
     speaker = C.Speaker("face", 3, "sam-1", "Sam", "left")
-    bus.publish(C.CAPTION, C.Caption("u1", speaker, "secret words here", False, "en", []))
-    bus.publish(C.CAPTION, C.Caption("u1", speaker, "secret words here", True, "en", []))
+    bus.publish(
+        C.CAPTION, C.Caption("u1", speaker, "secret words here", False, "en", [])
+    )
+    bus.publish(
+        C.CAPTION, C.Caption("u1", speaker, "secret words here", True, "en", [])
+    )
     bus.publish(
         C.CAPTION_TRANSLATION,
         {"utt_id": "u1", "source_lang": "es", "text_en": "hidden"},
@@ -303,7 +319,9 @@ def test_session_log_is_privacy_safe(tmp_path):
 
 def test_file_player_publishes_both_rates_on_the_clock(tmp_path):
     path = tmp_path / "tone.wav"
-    samples = (0.2 * np.sin(np.arange(9600) / 10) * 32767).astype(np.int16)  # 0.2 s at 48 kHz
+    samples = (0.2 * np.sin(np.arange(9600) / 10) * 32767).astype(
+        np.int16
+    )  # 0.2 s at 48 kHz
     with wave.open(str(path), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
