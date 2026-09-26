@@ -578,12 +578,15 @@ def test_whisper_final_preserves_non_latin_spacing_and_clamps_word_times():
 
 
 def test_voice_enrollment_progress_and_failures(config, bus, tmp_path):
-    """P-28: voice progress for the glasses, and a reason when it cannot finish."""
+    """P-29: voice progress for the glasses, and a reason when it cannot finish."""
     voices = VoicePrints(tmp_path, lambda pcm: [1.0, 0.0], 0.5, 5, 1)
     service = AudioService(bus, config, voices=voices, vad=lambda pcm: 0.0)
     now = [0.0]
     service.clock = lambda: now[0]
-    start = {"name": "enroll.start", "args": {"track_id": 1, "consent": True, "consent_t": 0}}
+    start = {
+        "name": "enroll.start",
+        "args": {"track_id": 1, "consent": True, "consent_t": 0},
+    }
     face_ok = {"part": "face", "person_id": "sam", "track_id": 1, "ok": True}
     service._handle("command", start, 0)
     service._handle("enroll.result", face_ok, 0)
@@ -617,7 +620,50 @@ def test_voice_enrollment_progress_and_failures(config, bus, tmp_path):
     service._handle("command", start, 0)
     service._handle("enroll.result", face_ok, 0)
     now[0] = 31.0
-    service._handle("audio.block", {"t": 31.0, "sample_rate": 16000, "samples": np.zeros(512)}, 0)
+    service._handle(
+        "audio.block", {"t": 31.0, "sample_rate": 16000, "samples": np.zeros(512)}, 0
+    )
     result = [e for t, e in bus.events if t == "enroll.result"][-1]
     assert (result["ok"], result["reason"]) == (False, "not enough speech")
     assert service.enrollment is None and not voices.enrolled
+
+
+def test_voice_enrollment_starts_through_a_busy_worker(config, bus, tmp_path):
+    """P-29: vision's face result starts the voice step even when the audio inbox is full and
+    person.changed "enrolled" arrives right behind it (it used to invalidate the result)."""
+    import time
+
+    voices = VoicePrints(tmp_path, lambda pcm: [1.0, 0.0], 0.5, 5, 1)
+    service = AudioService(bus, config, voices=voices, vad=lambda pcm: 0.0, mic=False)
+    service.clock = lambda: 0.0  # start() would set it (and load the speech models)
+    for topic in ("enroll.result", "command", "person.changed", "caption"):
+        service.worker.subscribe(topic)
+    # the worker is behind: its inbox is full before the enrollment starts
+    for i in range(300):
+        bus.publish("caption", {"utt_id": f"u{i}", "final": False, "speaker": {}})
+    args = {"track_id": 1, "name": "Sam", "consent": True, "consent_t": 1.0}
+    bus.publish("command", {"name": "enroll.start", "args": args})
+    bus.publish(
+        "enroll.result",
+        {"person_id": "sam", "part": "face", "ok": True, "reason": "", "track_id": 1},
+    )
+    bus.publish(
+        "person.changed", {"action": "enrolled", "person_id": "sam", "name": "Sam"}
+    )
+    service.worker.start()
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not any(
+            t == "enroll.progress" for t, _ in bus.events
+        ):
+            time.sleep(0.01)
+        progress = [e for t, e in bus.events if t == "enroll.progress"]
+        assert (
+            progress
+            and progress[0]["part"] == "voice"
+            and progress[0]["hint"] == "keep talking"
+        )
+        assert service.enrollment and service.enrollment["person_id"] == "sam"
+    finally:
+        service.worker.closed.set()
+        service.worker.thread.join(2)

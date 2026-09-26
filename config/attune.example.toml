@@ -110,7 +110,7 @@ bubble_chars = 42
 bubble_lines = 2
 bubble_fade_s = 4
 
-# Save a person with a double tap (P-28, engine/attune/core/save_flow.py)
+# Save a person with a double tap (P-29, engine/attune/core/save_flow.py)
 [save]
 consent_timeout_s = 60           # the phone's consent sheet waits this long, then save.cancel
 proposal_grace_s = 5             # a name confirmed this recently still counts as "this person"

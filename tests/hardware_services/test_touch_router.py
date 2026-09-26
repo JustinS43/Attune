@@ -64,7 +64,12 @@ def test_gesture_map():
     targets = {}
     for g in ("tap", "hold", "double", "triple", "swipe"):
         router.on_proposal(
-            {"proposal_id": g, "name": "Sam", "state": "proposed", "expires_t": clock.t + 9}
+            {
+                "proposal_id": g,
+                "name": "Sam",
+                "state": "proposed",
+                "expires_t": clock.t + 9,
+            }
         )
         out = router.route(g)
         targets[g] = [(e["target"], e["accept"]) for t, e in out if t == "touch.action"]

@@ -135,7 +135,7 @@ Plain text lines, 115200 baud, `\n` endings. Found by USB ID; opened without tog
 |---|---|---|
 | Arduino → laptop | `READY <version> <driver>` | driver = `TB6612`, `L298`, or `NONE` |
 | Arduino → laptop | `LV <ms> <left> <right> <motor 0/1>` | every 50 ms |
-| Arduino → laptop | `TOUCH TAP` / `TOUCH HOLD` / `TOUCH DOUBLE` / `TOUCH TRIPLE` | gestures (each tap within `tap_ms` of the last; TRIPLE added for P-28) |
+| Arduino → laptop | `TOUCH TAP` / `TOUCH HOLD` / `TOUCH DOUBLE` / `TOUCH TRIPLE` | gestures (each tap within `tap_ms` of the last; TRIPLE added for P-29) |
 | Arduino → laptop | `HB <ms>` | every 1 s |
 | Arduino → laptop | `ACK <n>` / `ERR <text>` | command n done / fault |
 | laptop → Arduino | `PAT <n> <L/R/B> <name>` | play pattern (T3, T4, BELL, NAME, OK, NO) |
@@ -201,7 +201,7 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 | `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, presets}` |
 | `paused` | all | `paused` (bool), sent on every change |
 | `camera` | all | `on` (bool), sent on every change |
-| `enroll_result` | all (the lens since P-28) | as the bus event `enroll.result` |
+| `enroll_result` | all (the lens since P-29) | as the bus event `enroll.result` |
 | `enroll_progress` | all | as the bus event `enroll.progress` |
 | `save_request` | all | as the bus event `save.request`; also sent to a page that says hello while one waits |
 | `save_cancel` | all | as the bus event `save.cancel` |
@@ -212,7 +212,7 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 `caption` with its `translation` field filled in. Times (`t`, `t_start`, word times)
 are engine-clock seconds; pages only compare them with each other.
 
-## Save a person (P-28)
+## Save a person (P-29)
 
 A double tap on the side of the glasses saves the person in front of the wearer, with that
 person's consent. Gestures: tap = yes (acknowledge an alert, else confirm a name proposal),
@@ -240,3 +240,8 @@ Y / N / P are tap / hold / pause and D (or Y twice quickly) is the double tap.
    `voice.enroll_s`. `enroll.result` keeps its meaning; audio also reports a failed voice
    result when their face leaves ("stay in view") or `voice.enroll_timeout_s` passes ("not
    enough speech"). As before, only prints are stored, never photos or audio.
+5. Once the face part succeeds the person is saved: a later voice failure leaves them saved
+   with their face only (every page says so, "voice later"). The saved person replaces the
+   session-only entry the confirmed name made for the same face (vision drops it), so they are
+   recognised as saved from then on. Audio handles `enroll.result` ahead of its audio backlog,
+   and `person.changed` {action: `enrolled`} no longer invalidates it.

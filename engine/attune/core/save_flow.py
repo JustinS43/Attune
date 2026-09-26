@@ -1,6 +1,6 @@
 """Save a person with a double tap: pick who, ask them for consent, time out.
 
-Section 4 - Pages, Engine & Demo. TODO: P-28. Contracts: docs/contracts.md (2, 3, 4 and
+Section 4 - Pages, Engine & Demo. TODO: P-29. Contracts: docs/contracts.md (2, 3, 4 and
 "Save a person").
 
 1. A double tap on the side of the glasses (the touch router's `touch.action` {target: save,

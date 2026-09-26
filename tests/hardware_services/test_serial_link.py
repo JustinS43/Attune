@@ -90,7 +90,11 @@ def test_double_tap_asks_to_save(rig):
     assert rig.service.simulate_touch("double")
     assert wait_for(lambda: rig.bus.of("touch.action"))
     assert rig.bus.of("sensors.touch")[-1]["gesture"] == "double"
-    assert rig.bus.of("touch.action")[-1] == {"target": "save", "id": None, "accept": True}
+    assert rig.bus.of("touch.action")[-1] == {
+        "target": "save",
+        "id": None,
+        "accept": True,
+    }
     assert not rig.bus.of("command")  # a double tap no longer pauses
 
 

@@ -400,6 +400,13 @@ class VisionService:
         person = self.gallery.enroll(job.name, prints, job.consent_t)
         tr = self._find(job.track_id)
         if tr is not None:
+            # A confirmed "Sam?" named this face for the session first (P-29: the double tap
+            # confirms, then saves). Saving them replaces that session entry: two gallery people
+            # with the same face never clear the match margin, so neither would ever match.
+            before = self.gallery.get(tr.data["ident"].person_id)
+            if before is not None and not before.enrolled:
+                self.gallery.delete(before.person_id)
+                self._clear_identities({before.person_id})
             self.rules.assign(tr.data["ident"], person.person_id, 1.0, t)
         self.bus.publish(
             T.ENROLL_RESULT, T.EnrollResult(person.person_id, "face", True, "", job.track_id)
@@ -418,7 +425,7 @@ class VisionService:
         job: EnrollJob | None = None,
         fraction: float | None = None,
     ) -> None:
-        """`enroll.progress` for the face part, at most 5 times a second (P-28)."""
+        """`enroll.progress` for the face part, at most 5 times a second (P-29)."""
         job = job or self.job
         if job is None or (not force and t - job.last_progress_t < 0.2):
             return

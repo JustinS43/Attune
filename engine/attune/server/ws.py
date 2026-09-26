@@ -194,7 +194,7 @@ class Hub:
         self._part_ok: dict[str, bool] = {}
         self._hw_connected: bool | None = None
         self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
-        self.save_pending: dict | None = None  # the save request waiting for consent (P-28)
+        self.save_pending: dict | None = None  # the save request waiting for consent (P-29)
 
         # shared with the encoder thread
         self._frame: Any = None
@@ -385,7 +385,7 @@ class Hub:
             self._log_event(f"Name {body.get('name')}: {body.get('state')}")
 
     def _on_save(self, msg_type: str, ev: Any) -> None:
-        """Save a person (P-28): the consent request and its end go to every page."""
+        """Save a person (P-29): the consent request and its end go to every page."""
         body = to_jsonable(ev)
         self.broadcast(msg_type, body)
         if msg_type == C.WS_SAVE_REQUEST:

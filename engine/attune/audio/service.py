@@ -2,7 +2,7 @@
 
 Voice enrollment (after a consented face result) reports `enroll.progress` {part: voice,
 fraction = seconds of their speech collected / voice.enroll_s} as their captions arrive
-(TODO P-28), and ends with a failed `enroll.result` when their face leaves the view ("stay in
+(TODO P-29), and ends with a failed `enroll.result` when their face leaves the view ("stay in
 view") or `voice.enroll_timeout_s` passes without enough speech ("not enough speech").
 """
 

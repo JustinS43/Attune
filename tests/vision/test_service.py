@@ -136,7 +136,7 @@ def test_vision_end_to_end(tmp_path, two_people):
     assert b.status == "unknown"
     saved = np.load(tmp_path / "people" / pid / "face.npy")
     assert saved.shape == (8, 512)
-    # P-28: the glasses got face progress from 0 to 1 for that track while it ran
+    # P-29: the glasses got face progress from 0 to 1 for that track while it ran
     prog = [e for e in bus.published[T.ENROLL_PROGRESS] if e["track_id"] == a.track_id]
     fractions = [e["fraction"] for e in prog]
     assert fractions[0] == 0.0 and fractions[-1] == 1.0 and len(prog) >= 10

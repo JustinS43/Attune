@@ -45,7 +45,7 @@ HW_LINK = "hw.link"
 SPEECH_OUT_PLAYING = "speech_out.playing"
 REPLY_SPOKEN = "reply.spoken"
 ENROLL_RESULT = "enroll.result"
-# Save a person (double tap, P-28): progress of a running enrollment, and the consent request
+# Save a person (double tap, P-29): progress of a running enrollment, and the consent request
 # the engine sends to the phone and console after a double tap (and its cancellation).
 ENROLL_PROGRESS = "enroll.progress"
 SAVE_REQUEST = "save.request"
@@ -142,7 +142,7 @@ WS_AUDIENCE: dict[str, frozenset[str]] = {
     WS_PEOPLE: frozenset({"console", "phone"}),
     WS_THUMBNAILS: frozenset({"console"}),
     WS_EVENT_LOG: frozenset({"console"}),
-    # the lens shows the save flow's result too (P-28), so enroll results go to every page
+    # the lens shows the save flow's result too (P-29), so enroll results go to every page
     WS_ENROLL_RESULT: _ALL,
     WS_PERSON_CHANGED: frozenset({"console", "phone"}),
     WS_HW_LINK: frozenset({"console", "phone"}),

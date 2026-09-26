@@ -9,7 +9,7 @@ prints; with fewer than `enroll_min_crops` (5) it refuses and says why.
 Nothing is stored unless consent is true and carries a time.
 
 While it runs, the service publishes `enroll.progress` {track_id, part: face, fraction, hint}
-(TODO P-28): `progress()` is the smaller of good crops / `enroll_crops` and elapsed /
+(TODO P-29): `progress()` is the smaller of good crops / `enroll_crops` and elapsed /
 `enroll_s`, so the glasses' ring fills over the capture window and stalls while no usable
 crop arrives; `hint()` names what is wrong with the latest crops ("more light").
 """

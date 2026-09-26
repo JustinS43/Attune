@@ -1,6 +1,6 @@
 """Decides what a touch on the side of the glasses means right now (plan section 05, 'Touch priority').
 
-Gesture map (TODO H-06, P-28):
+Gesture map (TODO H-06, P-29):
 - tap = yes: acknowledge the active alert, else confirm the newest pending name proposal.
 - hold = no: the same targets, answered no (dismiss / reject).
 - double tap = save this person: ``touch.action`` {target: save, id: <proposal_id or None>}.
