@@ -1,7 +1,7 @@
 # Firmware for the Attune rig (Arduino UNO R3 or UNO R4 WiFi)
 
 **Owner:** Section 3 - Hardware & Services
-**TODO:** H-01 - H-04, H-15 (UNO R3 + servo)
+**TODO:** H-01 - H-04, H-16 (UNO R3 + servo)
 **Plan:** section 04 "What the Arduino does", "Light and buzz patterns", "Messages over USB"
 
 The sketch measures, reports and plays patterns with exact timing. It makes no decisions

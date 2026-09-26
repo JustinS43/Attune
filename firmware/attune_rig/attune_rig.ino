@@ -1,6 +1,6 @@
 /*
  * Attune rig firmware - Arduino UNO R3 (servo tapper, LED 13) or UNO R4 WiFi (motor, matrix)
- * (TODO H-01 .. H-04, H-15).
+ * (TODO H-01 .. H-04, H-16).
  *
  * Measures, reports and plays patterns; makes no decisions about people or sounds.
  *  - READY <version> <driver>: the I2C motor driver found (0x14 TB6612, 0x0F L298), or NONE

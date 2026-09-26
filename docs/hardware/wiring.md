@@ -1,7 +1,7 @@
 # Rig wiring and bench-test log
 
 **Owner:** Section 3 - Hardware & Services
-**TODO:** H-13 (assembly + bench tests), H-01 - H-05 (firmware and link they exercise), H-15 (UNO R3 + servo)
+**TODO:** H-13 (assembly + bench tests), H-01 - H-05 (firmware and link they exercise), H-15 (CAD for the UNO R3 kit), H-16 (UNO R3 + servo firmware)
 **Plan:** section 04 "Wiring", "Power", "What the Arduino does"; test IDs T-H1 - T-H8
 
 **3D CAD view of the rig:** [cad-rig.html](cad-rig.html) (open it in a browser: orbit the model, explode view, click parts; bill of materials, pin map, signal flow and assembly steps). Its pin map matches `firmware/attune_rig/rig_config.h`. Needs internet for three.js and fonts.
