@@ -89,7 +89,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] P-15 OBS setup, demo script, backup video, Devpost write-up and slides · M3 – M4
 - [x] P-16 Tests in tests/pages_engine (bus, WebSocket hub, commands) · M2 (#20)
 - [x] P-17 Demo page (/demo/): glasses view and phone app side by side, or either one full size · M3 (#26)
-- [x] P-18 Demo: glasses guide tab (Colour / Mono / Corner and the glasses that use each) · M3 (#PR)
+- [x] P-18 Demo: glasses guide tab (Colour / Mono / Corner and the glasses that use each) · M3 (#29)
 
 ## Gates and end-to-end checks (whole team)
 
