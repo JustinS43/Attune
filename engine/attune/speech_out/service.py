@@ -150,7 +150,10 @@ class SpeechOutService:
             except queue.Empty:
                 job = None
             if job is not None:
-                self.cancel.clear()
+                # Old network producers retain their cancelled event after a new reply starts.
+                self.cancel = threading.Event()
+                if self._stop.is_set():
+                    self.cancel.set()
                 try:
                     self.speak(job["text"], job.get("lang"))
                 except Exception as exc:
@@ -185,6 +188,9 @@ class SpeechOutService:
         try:
             self.player.play(itertools.chain([first], rest), rate, cancel, on_start)
         finally:
+            close = getattr(rest, "close", None)
+            if callable(close):
+                close()
             if started["t"] is not None:
                 self.speaking = False
                 self.bus.publish("speech_out.playing", {"state": "end", "t": self.clock()})
@@ -229,9 +235,21 @@ class SpeechOutService:
                 chunks.put(_END)
 
         threading.Thread(target=produce, name="elevenlabs-stream", daemon=True).start()
-        try:
-            first = chunks.get(timeout=self.fallback_after_s)
-        except queue.Empty:
+        deadline = time.monotonic() + self.fallback_after_s
+        first = _END
+        while not cancel.is_set() and not self._stop.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                first = chunks.get(timeout=min(0.05, remaining))
+                break
+            except queue.Empty:
+                continue
+        else:
+            abandon.set()
+            return None
+        if first is _END and time.monotonic() >= deadline:
             abandon.set()
             logger.warning(
                 "speech_out: no ElevenLabs audio within %.1f s; using Kokoro", self.fallback_after_s
@@ -247,17 +265,22 @@ class SpeechOutService:
             return None
 
         def rest() -> Iterator:
-            while True:
-                item = chunks.get()
-                if item is _END:
-                    return
-                if isinstance(item, Exception):
-                    logger.warning("speech_out: ElevenLabs stream broke (%s)", type(item).__name__)
-                    return
-                if cancel.is_set():
-                    abandon.set()
-                    return
-                yield item
+            try:
+                while not cancel.is_set() and not self._stop.is_set():
+                    try:
+                        item = chunks.get(timeout=0.05)
+                    except queue.Empty:
+                        continue
+                    if item is _END:
+                        return
+                    if isinstance(item, Exception):
+                        logger.warning(
+                            "speech_out: ElevenLabs stream broke (%s)", type(item).__name__
+                        )
+                        return
+                    yield item
+            finally:
+                abandon.set()
 
         return first, rest(), "elevenlabs", int(getattr(tts, "sample_rate", 24000))
 
