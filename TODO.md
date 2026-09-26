@@ -34,21 +34,21 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 2 – Audio & Language
 
-- [ ] A-01 Mic reader: WASAPI 48 kHz, 10 ms blocks, 16 kHz + 32 kHz streams, ring buffer, laptop-mic fallback · M0 — capture timestamps, WASAPI fallback/reconnect, overflow handling, resampling, health and bounded ring retention/restart tested; real Windows device acceptance pending; (#6)
-- [ ] A-02 Silero VAD with the plan's thresholds; publishes `audio.vad` · M1 — implemented and deterministic tests pass; local Silero acceptance and PR pending
-- [ ] A-03 Captions: Nemotron via sherpa-onnx, drafts/finals, language, word times; publishes `audio.transcript` · M1 — English Nemotron adapter, stable utterance gain and runtime Whisper recovery tested; real-model acceptance and PR pending
-- [ ] A-04 Whisper fallback (faster-whisper large-v3-turbo) · M2 — local-agreement fallback and whole-utterance retry after Nemotron failure tested; real-model acceptance and PR pending
+- [x] A-01 Mic reader: WASAPI 48 kHz, 10 ms blocks, 16 kHz + 32 kHz streams, ring buffer, laptop-mic fallback · M0 — real Windows capture verified on a Realtek SoundWire mic array after the WASAPI COM fix (#11)
+- [x] A-02 Silero VAD with the plan's thresholds; publishes `audio.vad` · M1 — real Silero VAD verified; 320 ms pre-roll keeps first words (#14)
+- [x] A-03 Captions: Nemotron via sherpa-onnx, drafts/finals, language, word times; publishes `audio.transcript` · M1 — real Nemotron 3.5 int8 verified: word-perfect English test clip with word times, ~4.6x real time on CPU; Spanish and French transcribed in en+es mode (#10, #14)
+- [x] A-04 Whisper fallback (faster-whisper large-v3-turbo) · M2 — real large-v3-turbo verified on English and Spanish; CPU int8 is ~1.5x real time, fine as the fallback (#10)
 - [x] A-05 Mute mic captions while `speech_out.playing`, plus 0.5 s · M2 — implemented and tested; PR number pending GitHub access
-- [ ] A-06 Voice prints (CAM++): enroll, match ≥ 0.5, session harvesting; publishes `audio.voice_match` · M2 — consent, matching, harvesting and deletion implemented; shared enrollment correlation and model acceptance pending
-- [ ] A-07 Text language check (Lingua) · M2 — local constrained language adapter implemented; installed-model acceptance and PR pending
-- [ ] A-08 Sound model (EfficientAT mn10_as), classes by name · M2 — local scorer and export wrapper implemented; EfficientAT export/model acceptance and PR pending
+- [x] A-06 Voice prints (CAM++): enroll, match ≥ 0.5, session harvesting; publishes `audio.voice_match` · M2 — real CAM++ verified: same voice 0.66, different voice 0.19 against the 0.5 threshold (#16)
+- [x] A-07 Text language check (Lingua) · M2 — real Lingua verified on English and Spanish captions, under 20 ms (#16)
+- [ ] A-08 Sound model (EfficientAT mn10_as), classes by name · M2 — exported and verified on T3/T4 tones, speech and noise with 10 s context (#13); doorbell class still needs a real doorbell recording
 - [x] A-09 Rhythm detector (T3 / T4) · M2 — both patterns and frequency bands implemented and tested; PR number pending GitHub access
-- [ ] A-10 Alert rules, direction, acknowledge, re-alert, clear; publishes `alert` and `hw.pattern` · M2 — rules and replayed PCM service tests pass; rig acceptance and PR pending
-- [ ] A-11 Ollama client with priority queue and warm-up (qwen3.5:4b, think off, keep_alive -1) · M1 — priority client and warm-up implemented and tested; local Ollama acceptance and PR pending
-- [ ] A-12 Name learning: phrase filter, JSON answer, stop-list, proposal lifecycle · M2 — validation and proposal lifecycle implemented and tested; model acceptance and PR pending
-- [ ] A-13 Translation of non-English finals · M2 — translation jobs implemented and tested with injected responses; model acceptance and PR pending
-- [ ] A-14 Garment descriptions from the fixed lists · M2 — allowlisted descriptions implemented and tested; local vision-model acceptance and PR pending
-- [ ] A-15 Suggested replies for keys 7–9 · M2 — reply jobs implemented and validated; model acceptance and PR pending
+- [ ] A-10 Alert rules, direction, acknowledge, re-alert, clear; publishes `alert` and `hw.pattern` · M2 — smoke and CO alerts fire from the real model and rhythm through AlertService (#13); direction needs Section 3 sensor levels on the rig
+- [x] A-11 Ollama client with priority queue and warm-up (qwen3.5:4b, think off, keep_alive -1) · M1 — real Ollama qwen3.5:4b verified from a cold start after the warm-up timeout fix (#12)
+- [x] A-12 Name learning: phrase filter, JSON answer, stop-list, proposal lifecycle · M2 — real model proposed "Sam" from "Hi, my name is Sam" (#12)
+- [x] A-13 Translation of non-English finals · M2 — real model translated "¿Dónde está la estación de tren?" to "Where is the train station?" (#12)
+- [x] A-14 Garment descriptions from the fixed lists · M2 — real model described a crop as "Person in blue shirt"; 0.4-0.9 s per crop (#12)
+- [x] A-15 Suggested replies for keys 7–9 · M2 — real model returned three reply suggestions (#12)
 - [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3 — wizard, profiles and guide implemented; manual clap annotations and Section 4 integration/venue run pending
 - [x] A-17 Test tone generator (T3, T4) · M2 — generator implemented and both frequency bands tested; PR number pending GitHub access
 - [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
