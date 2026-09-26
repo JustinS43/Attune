@@ -5,8 +5,9 @@ board does not reset, waits up to ``ready_timeout_s`` for ``READY``, sends ``HB`
 ``heartbeat_s`` and reconnects on its own if the cable is pulled. Runs on its own thread;
 never raises into the engine when no board is present.
 
-Because opening the port does not reset the board, an already running board will not
-print ``READY`` again by itself. The firmware re-announces ``READY`` when the laptop's
+Because opening the port does not reset the board (the UNO R4 WiFi; an UNO R3 may still
+reset, and then prints ``READY`` at boot), an already running board will not print
+``READY`` again by itself. The firmware re-announces ``READY`` when the laptop's
 heartbeat comes back after a loss; if a board keeps streaming ``LV``/``HB`` but no
 ``READY`` arrives in time, the link still comes up with firmware/driver ``"?"``.
 """
@@ -25,8 +26,9 @@ from . import protocol as p
 
 logger = logging.getLogger(__name__)
 
-# USB vendor IDs, most specific first. Arduino (incl. UNO R4 WiFi 0x2341:0x1002), then
-# arduino.org, then the common USB-serial bridges used on clones.
+# USB vendor IDs, most specific first. Arduino (UNO R4 WiFi 0x2341:0x1002 first, then any
+# other Arduino board such as the UNO R3, 0x2341:0x0043 or 0x0001), then arduino.org, then
+# the common USB-serial bridges used on clones.
 ARDUINO_VID = 0x2341
 UNO_R4_WIFI_PID = 0x1002
 KNOWN_VIDS = {
