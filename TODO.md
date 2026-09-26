@@ -109,6 +109,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-30 Remember Me full-face photo and local contact list with photo uploads · M3 (#42)
 - [x] P-31 Lens review fixes: docks avoid faces, clear Mono speakers, names during save, no mixed-language lines (#46)
 - [x] P-32 System debug: phone enrollment and console fixes, full-suite findings handed to owners (#51)
+- [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
 
 ## Gates and end-to-end checks (whole team)
 
