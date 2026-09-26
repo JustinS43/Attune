@@ -4,6 +4,8 @@
 **TODO:** H-13 (assembly + bench tests), H-01 - H-05 (firmware and link they exercise)
 **Plan:** section 04 "Wiring", "Power", "What the Arduino does"; test IDs T-H1 - T-H8
 
+**3D CAD view of the rig:** [cad-rig.html](cad-rig.html) (open it in a browser: orbit the model, explode view, click parts; bill of materials, pin map, signal flow and assembly steps). Its pin map matches `firmware/attune_rig/rig_config.h`. Needs internet for three.js and fonts.
+
 ## Parts
 
 | Part | Qty | Job |

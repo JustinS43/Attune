@@ -56,8 +56,11 @@ const state = {
   suggestions: [],
   speaking: '',
   hwLink: null,
-  sessionId: null
+  sessionId: null,
+  enroll: {phase: 'ready', name: '', consent: false, trackId: null, photo: '', face: 'idle', voice: 'idle', reason: ''},
+  faces: new Map()
 };
+let enrollmentFeed = null;
 
 function icon(name, className = 'icon') {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -240,9 +243,10 @@ function renderPeople() {
   content.append(back(), brand());
   heading('People', 'Familiar voices, easier to follow');
   if (state.live) content.append(pill());
+  content.append(button('Add a familiar face and voice', 'outline full', 'enroll'));
   content.append(el('h2', 'section-title', state.live ? 'Saved with consent' : 'Frequently seen'));
   const list = el('div', 'people-list');
-  if (!state.people.length) list.append(el('div', 'card empty', state.live ? 'Nobody is saved yet. Enroll people from the laptop console, with their consent.' : 'No saved people in this preview.'));
+  if (!state.people.length) list.append(el('div', 'card empty', state.live ? 'Nobody is saved yet. Use the Enroll tab together with the person you want to save.' : 'No saved people in this preview.'));
   for (const person of state.people) {
     const card = el('div', 'card person-card');
     const top = el('div', 'person-top');
@@ -273,8 +277,123 @@ function renderPeople() {
   content.append(el('p', 'note', 'Session names disappear when you forget this session. Saving a person requires their consent through enrollment.'));
 }
 
+function enrollLine(name) {
+  return `I'm ${name}. It's nice to meet you, and I'm looking forward to our conversation.`;
+}
+
+function renderEnroll() {
+  const enrollment = state.enroll;
+  content.append(brand());
+  heading('Remember me', 'Save your face and voice so Attune can recognize you.', 'A familiar face, a familiar voice');
+  content.append(pill());
+
+  const steps = el('div', 'enroll-steps');
+  for (const [number, label] of [['1', 'Photo'], ['2', 'Consent'], ['3', 'Voice']]) {
+    const step = el('span', `enroll-step${Number(number) <= (enrollment.phase === 'ready' || enrollment.phase === 'captured' ? 1 : enrollment.phase === 'face' ? 2 : 3) ? ' current' : ''}`);
+    step.append(el('b', '', number), label);
+    steps.append(step);
+  }
+  content.append(steps);
+
+  const photo = el('div', 'enroll-photo card');
+  const preview = el('img', 'enroll-preview');
+  preview.id = 'enroll-preview';
+  preview.alt = 'Face preview from the Attune camera';
+  if (enrollment.photo) preview.src = enrollment.photo;
+  else if (state.faces.size) preview.src = (state.enroll.trackId !== null ? state.faces.get(state.enroll.trackId) : null)?.photo || [...state.faces.values()][0].photo;
+  const placeholder = el('div', 'enroll-photo-placeholder');
+  placeholder.append(icon('camera'), el('span', '', state.live ? 'Waiting for a face in the Attune camera…' : 'Connect to Attune to take a photo'));
+  photo.append(preview, placeholder, el('span', 'enroll-camera-label', enrollment.photo ? 'PHOTO CAPTURED' : 'LIVE CAMERA PREVIEW'));
+  photo.classList.toggle('has-image', !!preview.src);
+  content.append(photo);
+
+  if (enrollment.phase === 'ready' && state.faces.size > 1) {
+    const choices = el('div', 'enroll-faces');
+    for (const [trackId, face] of state.faces) {
+      const choice = button('', `enroll-face${enrollment.trackId === trackId ? ' selected' : ''}`, 'select-face');
+      choice.dataset.trackId = trackId;
+      const image = el('img'); image.src = face.photo; image.alt = `Face ${trackId}`;
+      choice.append(image);
+      choices.append(choice);
+    }
+    content.append(el('p', 'note', 'More than one face is in view. Tap your own face.'), choices);
+  }
+
+  if (enrollment.phase === 'ready' || enrollment.phase === 'captured') {
+    const shutter = button(enrollment.photo ? 'Retake photo' : 'Take my photo', enrollment.photo ? 'outline full' : 'primary full', 'take-photo');
+    shutter.disabled = !state.live || !state.connected || !state.faces.size;
+    shutter.prepend(icon('camera'));
+    content.append(shutter);
+    content.append(el('p', 'note', 'Stand in front of the Attune camera in good light. Your photo is a preview; the engine collects several face views after you agree to save.'));
+    if (enrollment.photo) {
+      const form = el('div', 'enroll-form card');
+      const label = el('label', 'enroll-label', 'Your name');
+      const input = el('input', 'enroll-name');
+      input.id = 'enroll-name'; input.type = 'text'; input.maxLength = 40;
+      input.autocomplete = 'name'; input.placeholder = 'What should Attune call you?';
+      input.value = enrollment.name;
+      label.append(input);
+      const consent = el('label', 'enroll-consent');
+      const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.id = 'enroll-consent'; checkbox.checked = enrollment.consent;
+      consent.append(checkbox, el('span', '', 'I agree to save my face and voice prints on this laptop so Attune can recognize me. I can delete them from People.'));
+      const start = button('Save my face and voice', 'primary full', 'start-enroll');
+      start.id = 'start-enroll';
+      start.disabled = !enrollment.name.trim() || !enrollment.consent || !state.connected;
+      form.append(label, consent, start);
+      content.append(form);
+    }
+  } else {
+    const progress = el('div', 'enroll-progress card');
+    const face = el('div', `enroll-progress-row ${enrollment.face}`);
+    face.append(el('b', '', enrollment.face === 'ok' ? '✓' : '1'), el('span', '', enrollment.face === 'ok' ? 'Face saved' : enrollment.face === 'fail' ? `Face needs another try: ${enrollment.reason}` : 'Saving several views of your face…'));
+    const voice = el('div', `enroll-progress-row ${enrollment.voice}`);
+    voice.append(el('b', '', enrollment.voice === 'ok' ? '✓' : '2'), el('span', '', enrollment.voice === 'ok' ? 'Voice saved' : enrollment.face === 'ok' ? 'Speak clearly for at least five seconds' : 'Voice comes next'));
+    progress.append(face, voice);
+    content.append(progress);
+    if (enrollment.face === 'ok' && enrollment.voice !== 'ok') {
+      content.append(el('p', 'eyebrow enroll-prompt-label', 'Say this aloud near the Attune microphone'));
+      content.append(el('div', 'enroll-prompt card', enrollLine(enrollment.name)));
+      content.append(el('p', 'note', 'Keep your face in view and speak naturally. If the voice step stays open, say another short sentence.'));
+    }
+    if (enrollment.phase === 'done') {
+      content.append(button('View saved people', 'primary full', 'people'), button('Enroll another person', 'outline full enroll-again', 'enroll-again'));
+    } else if (enrollment.phase === 'error') {
+      content.append(button('Try again', 'primary full', 'enroll-again'));
+    }
+  }
+  content.append(el('div', 'info-card enroll-privacy', 'Attune saves your name, consent time, and face and voice prints on the laptop. The preview photo and spoken recording are not kept.'));
+}
+
+function updateEnrollPreview() {
+  if (state.screen !== 'enroll' || state.enroll.photo) return;
+  const first = state.enroll.trackId !== null ? state.faces.get(state.enroll.trackId) : [...state.faces.values()][0];
+  const preview = document.querySelector('#enroll-preview');
+  if (!preview) return;
+  if (first) preview.src = first.photo;
+  else preview.removeAttribute('src');
+  preview.parentElement.classList.toggle('has-image', !!first);
+  const shutter = document.querySelector('[data-action="take-photo"]');
+  if (shutter) shutter.disabled = !first || !state.connected;
+}
+
+function syncEnrollmentFeed() {
+  if (state.screen === 'enroll' && state.live && state.connected && !enrollmentFeed) {
+    enrollmentFeed = connect({role: 'console', frames: false, onMessage(msg) {
+      if (msg.type !== 'thumbnails') return;
+      state.faces = new Map((msg.thumbnails || []).filter(face => Number.isInteger(face.track_id) && face.jpeg_b64).map(face => [face.track_id, {photo: `data:image/jpeg;base64,${face.jpeg_b64}`} ]));
+      if (state.enroll.trackId !== null && !state.faces.has(state.enroll.trackId) && !state.enroll.photo) state.enroll.trackId = null;
+      if (state.screen === 'enroll') {
+        if (state.faces.size > 1 && state.enroll.phase === 'ready') refresh();
+        else updateEnrollPreview();
+      }
+    }});
+  } else if ((state.screen !== 'enroll' || !state.connected) && enrollmentFeed) {
+    enrollmentFeed.close(); enrollmentFeed = null; state.faces.clear();
+  }
+}
+
 function formatDate(value) {
-  const date = new Date(value);
+  const date = new Date(typeof value === 'number' || /^\d+(?:\.\d+)?$/.test(String(value)) ? Number(value) * 1000 : value);
   return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('en-US', {month: 'short', day: 'numeric'}).format(date);
 }
 
@@ -593,7 +712,8 @@ function render() {
     tab.classList.toggle('active', active);
     if (active) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
   });
-  ({home:renderHome, people:renderPeople, history:renderHistory, speak:renderSpeak, settings:renderSettings, live:renderLive})[state.screen]();
+  ({home:renderHome, people:renderPeople, history:renderHistory, speak:renderSpeak, enroll:renderEnroll, settings:renderSettings, live:renderLive})[state.screen]();
+  syncEnrollmentFeed();
   renderHint();
   viewport.scrollTop = 0;
 }
@@ -740,17 +860,38 @@ function onMessage(msg) {
     }
     case 'people':
       state.people = (msg.people || msg.list || msg.items || []).map(p => ({id: p.person_id, name: p.name, consent_t: p.consent_t, has_face: p.has_face, has_voice: p.has_voice, color: colorFor(p.name), consent: true}));
-      if (['people', 'settings'].includes(state.screen)) refresh();
+      if (['people', 'settings', 'enroll'].includes(state.screen)) refresh();
       break;
+    case 'enroll_result': {
+      const e = state.enroll;
+      if (!['face', 'voice'].includes(e.phase) || (msg.track_id != null && msg.track_id !== e.trackId)) break;
+      if (msg.part === 'face') {
+        e.face = msg.ok ? 'ok' : 'fail';
+        e.reason = msg.reason || 'Try again';
+        e.phase = msg.ok ? 'voice' : 'error';
+        e.voice = msg.ok ? 'wait' : 'idle';
+      } else if (msg.part === 'voice' && e.face === 'ok') {
+        e.voice = msg.ok ? 'ok' : 'fail';
+        e.reason = msg.reason || 'Try speaking again';
+        e.phase = msg.ok ? 'done' : 'error';
+        if (msg.ok) {
+          const person = state.people.find(p => p.id === msg.person_id);
+          if (person) person.has_voice = true;
+        }
+      }
+      if (state.screen === 'enroll') refresh();
+      if (e.phase === 'done') showToast(`${e.name} is saved with face and voice recognition.`);
+      break;
+    }
     case 'person_changed': {
       const i = state.people.findIndex(p => p.id === msg.person_id);
       if (msg.action === 'deleted' && i >= 0) state.people.splice(i, 1);
       else if (msg.action === 'renamed' && i >= 0) state.people[i].name = msg.name;
       else if (msg.action === 'enrolled' && i < 0) {
         state.people.push({id: msg.person_id, name: msg.name, has_face: true, has_voice: false, color: colorFor(msg.name), consent: true});
-        showToast(`${msg.name} saved with consent.`);
+        showToast(`${msg.name}'s face is saved. Finish the voice step.`);
       }
-      if (['people', 'settings'].includes(state.screen)) refresh();
+      if (['people', 'settings', 'enroll'].includes(state.screen)) refresh();
       break;
     }
     case 'name_proposal':
@@ -810,6 +951,7 @@ const link = params.has('demo') ? noopLink : connect({
     } else if (state.live) {
       refresh();
     }
+    syncEnrollmentFeed();
   }
 });
 
@@ -822,7 +964,24 @@ document.addEventListener('click', async event => {
   const control = event.target.closest('[data-action], [data-nav]');
   if (!control) return;
   const action = control.dataset.action ?? control.dataset.nav;
-  if (['home','people','history','speak','settings','live'].includes(action)) return navigate(action);
+  if (['home','people','history','speak','enroll','settings','live'].includes(action)) return navigate(action);
+  if (action === 'select-face') { state.enroll.trackId = Number(control.dataset.trackId); refresh(); return; }
+  if (action === 'take-photo') {
+    const entry = state.enroll.trackId !== null ? state.faces.get(state.enroll.trackId) : [...state.faces.values()][0];
+    if (!entry) return showToast('Wait until your face is in the Attune camera.');
+    state.enroll.trackId = state.enroll.trackId ?? [...state.faces.keys()][0];
+    state.enroll.photo = entry.photo;
+    state.enroll.phase = 'captured';
+    render(); return;
+  }
+  if (action === 'start-enroll') {
+    const e = state.enroll;
+    if (!state.live || !state.connected || !e.photo || !e.name.trim() || !e.consent || !state.faces.has(e.trackId)) return showToast('Keep your face in view, add your name, and tick consent.');
+    e.phase = 'face'; e.face = 'wait'; e.voice = 'idle';
+    link.send('enroll.start', {track_id: e.trackId, name: e.name.trim(), consent: true, consent_t: Date.now() / 1000});
+    render(); return;
+  }
+  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; render(); return; }
   if (action === 'theme') { state.theme = control.dataset.theme; render(); return; }
   if (action === 'toggle-feature') {
     const key = control.dataset.feature;
@@ -905,6 +1064,11 @@ document.addEventListener('input', event => {
     searchTimer = setTimeout(() => drawHistory(value), state.live ? 300 : 0);
   }
   if (event.target.id === 'speak-text') state.draft = event.target.value;
+  if (event.target.id === 'enroll-name') {
+    state.enroll.name = event.target.value;
+    const start = document.querySelector('#start-enroll');
+    if (start) start.disabled = !state.enroll.name.trim() || !state.enroll.consent || !state.connected;
+  }
 });
 document.addEventListener('keydown', event => {
   if (event.target.id === 'speak-text' && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -913,6 +1077,11 @@ document.addEventListener('keydown', event => {
   }
 });
 document.addEventListener('change', event => {
+  if (event.target.id === 'enroll-consent') {
+    state.enroll.consent = event.target.checked;
+    const start = document.querySelector('#start-enroll');
+    if (start) start.disabled = !state.enroll.name.trim() || !state.enroll.consent || !state.connected;
+  }
   if (event.target.id === 'voice-select') state.voice = event.target.value;
   if (event.target.id === 'tone-select') state.tone = event.target.value;
 });

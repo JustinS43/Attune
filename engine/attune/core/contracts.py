@@ -48,6 +48,8 @@ ENROLL_RESULT = "enroll.result"
 PERSON_CHANGED = "person.changed"
 SESSION_FORGET = "session.forget"
 PAUSED = "paused"
+# The camera switched on or off from a page (`camera.set`): {on}
+CAMERA_STATE = "camera.state"
 COMMAND = "command"
 STATUS_PART = "status.part"
 # Engine-internal (Section 4): the aggregated status the hub sends to the console.
@@ -73,6 +75,7 @@ TOPICS = frozenset(
         ALERT,
         REPLY_SUGGESTIONS,
         SENSORS_LEVELS,
+        CAMERA_STATE,
         SENSORS_TOUCH,
         TOUCH_ACTION,
         HW_PATTERN,
@@ -112,6 +115,7 @@ WS_PAUSED = "paused"
 WS_ENROLL_RESULT = "enroll_result"
 WS_PERSON_CHANGED = "person_changed"
 WS_HW_LINK = "hw_link"
+WS_CAMERA = "camera"
 
 _ALL = frozenset(ROLES)
 # Which roles receive each JSON message type. Frames go to pages that asked for them.
@@ -130,6 +134,7 @@ WS_AUDIENCE: dict[str, frozenset[str]] = {
     WS_ENROLL_RESULT: frozenset({"console", "phone"}),
     WS_PERSON_CHANGED: frozenset({"console", "phone"}),
     WS_HW_LINK: frozenset({"console", "phone"}),
+    WS_CAMERA: _ALL,
 }
 
 FRAME_HEADER_FORMAT = "<Qd"  # little-endian uint64 frame_no, float64 capture t
@@ -153,6 +158,7 @@ COMMAND_NAMES = frozenset(
         "name.answer",
         "alert.ack",
         "mark",
+        "camera.set",
     }
 )
 
