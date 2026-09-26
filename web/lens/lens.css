@@ -1,10 +1,460 @@
 /*
- * Lens view styles (the films' HUD look)
+ * Lens view styles: the stage (16:9, letterboxed), the HUD canvases, the demo chrome.
  *
- * Section 4 - Pages, Engine & Demo
- * TODO: P-06
- * Contracts: docs/contracts.md
- * Plan: docs/attune-build-plan.html, section 05 The two pages
- *
- * Placeholder only - no code yet (MLH: project code is written during the event).
+ * Section 4 - Pages, Engine & Demo. TODO: P-06.
+ * The glasses HUD itself is drawn on canvas (modes/*.js); this file only lays out the page.
  */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--attune-ink);
+  color: var(--attune-text);
+  font-family: var(--attune-font-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  background: #030405;
+}
+
+/* ------------------------------------------------------------ stage */
+.stage {
+  position: absolute;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(124, 245, 214, 0.06), transparent 70%),
+    radial-gradient(ellipse at 50% 50%, #141922 0%, #07080b 75%);
+  contain: strict;
+}
+
+.media,
+.media > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.media {
+  transition: filter var(--attune-slow) var(--attune-ease);
+}
+
+.film-video {
+  object-fit: cover;
+  opacity: 0;
+  display: none;
+}
+
+.media.film-on .film-video {
+  display: block;
+}
+
+.media.film-on .film-video.active {
+  opacity: 1;
+}
+
+#live-frame {
+  opacity: 0;
+  transition: opacity var(--attune-slow) var(--attune-ease);
+}
+
+#live-frame.live-on {
+  opacity: 1;
+}
+
+/* paused: the world dims and loses colour, the HUD explains why */
+.stage.paused .media {
+  filter: saturate(0.3) brightness(0.5);
+}
+
+.shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.28) 100%);
+}
+
+.hud {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transform: scale(1.012);
+  transition:
+    opacity 380ms var(--attune-ease),
+    transform 380ms var(--attune-ease);
+  pointer-events: none;
+}
+
+.hud.on {
+  opacity: 1;
+  transform: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ connecting / loading notice */
+.notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 380px;
+  max-width: 560px;
+  padding: 30px 38px 28px;
+  border-radius: 28px;
+  text-align: center;
+  animation: notice-in 420ms var(--attune-ease) both;
+}
+
+.notice[hidden] {
+  display: none;
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px));
+  }
+}
+
+.notice-mark {
+  width: 64px;
+  height: 64px;
+  display: block;
+  margin: 0 auto 14px;
+}
+
+.notice-mark .ring {
+  stroke-dasharray: 100;
+  animation: ring 2.4s var(--attune-ease) infinite;
+}
+
+.notice-mark .bar {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: bar 1.1s ease-in-out infinite;
+}
+
+.notice-mark .b2 {
+  animation-delay: 0.15s;
+}
+
+.notice-mark .b3 {
+  animation-delay: 0.3s;
+}
+
+@keyframes ring {
+  0% { stroke-dashoffset: 100; }
+  55%, 100% { stroke-dashoffset: 0; }
+}
+
+@keyframes bar {
+  0%, 100% { transform: scaleY(0.55); }
+  50% { transform: scaleY(1); }
+}
+
+.notice-title {
+  font: 650 22px/1.25 var(--attune-font-display);
+}
+
+.notice-detail {
+  margin-top: 6px;
+  font: 450 14px/1.45 var(--attune-font-text);
+  color: var(--attune-text-2);
+}
+
+.notice-detail code {
+  font: 500 13px var(--attune-font-mono);
+  color: var(--attune-accent);
+}
+
+.notice-hint {
+  margin-top: 14px;
+  font: 450 13px/1.4 var(--attune-font-text);
+  color: var(--attune-text-3);
+}
+
+.notice-hint:empty,
+.notice-detail:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------ demo chrome */
+.chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 300ms var(--attune-ease);
+}
+
+body.chrome-hidden .chrome {
+  opacity: 0;
+}
+
+body.chrome-hidden .chrome * {
+  pointer-events: none !important;
+}
+
+body.chrome-hidden {
+  cursor: none;
+}
+
+.mode-label {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 16px;
+  pointer-events: auto;
+}
+
+.mode-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex: none;
+  background: var(--attune-brand);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  transition: background var(--attune-slow) var(--attune-ease);
+}
+
+.mode-swatch[data-mode="mono"] {
+  background: #0b140d;
+  box-shadow: inset 0 0 0 1.5px var(--attune-phosphor), 0 0 12px rgba(107, 255, 143, 0.35);
+}
+
+.mode-swatch[data-mode="corner"] {
+  background:
+    linear-gradient(var(--attune-sky), var(--attune-sky)) no-repeat right 5px top 6px / 11px 7px,
+    #11161e;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.mode-name {
+  font: 650 15px/1.2 var(--attune-font-display);
+  letter-spacing: 0.01em;
+}
+
+.mode-device {
+  margin-top: 2px;
+  font: 450 12px/1.3 var(--attune-font-text);
+  color: var(--attune-text-2);
+}
+
+.dock {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.switches,
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 14px;
+  pointer-events: auto;
+}
+
+.transport {
+  gap: 4px;
+  padding: 6px 12px 6px 6px;
+}
+
+.transport[hidden] {
+  display: none;
+}
+
+.seg {
+  display: flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.seg button,
+.help-btn,
+.icon-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  color: var(--attune-text-2);
+  font: 560 12.5px/1 var(--attune-font-text);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background var(--attune-fast) var(--attune-ease),
+    color var(--attune-fast) var(--attune-ease);
+}
+
+.seg button {
+  padding: 7px 11px;
+  border-radius: 8px;
+}
+
+.seg button:hover,
+.help-btn:hover,
+.icon-btn:hover {
+  color: var(--attune-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.seg button[aria-pressed="true"] {
+  color: #06110e;
+  background: var(--attune-brand);
+}
+
+.help-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font: 650 14px/1 var(--attune-font-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#play .i-play {
+  display: none;
+  fill: currentColor;
+  stroke-width: 1.5;
+}
+
+#play.paused .i-play {
+  display: block;
+}
+
+#play.paused .i-pause {
+  display: none;
+}
+
+.seg button:focus-visible,
+.help-btn:focus-visible,
+.icon-btn:focus-visible {
+  outline: 2px solid var(--attune-mint);
+  outline-offset: 1px;
+}
+
+.scene {
+  width: 210px;
+  padding: 0 8px;
+}
+
+.scene-name {
+  font: 560 12.5px/1.2 var(--attune-font-text);
+  color: var(--attune-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-bar {
+  margin-top: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.scene-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: var(--attune-brand);
+}
+
+.scene-count {
+  font: 500 11.5px/1 var(--attune-font-text);
+  color: var(--attune-text-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ------------------------------------------------------------ help overlay */
+.help {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 48px));
+  padding: 26px 30px 22px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 40%),
+    var(--attune-glass-strong);
+  animation: notice-in 260ms var(--attune-ease) both;
+}
+
+.help[hidden] {
+  display: none;
+}
+
+.help h2 {
+  margin: 6px 0 16px;
+  font: 660 26px/1.1 var(--attune-font-display);
+}
+
+.help dl {
+  display: grid;
+  grid-template-columns: repeat(2, auto 1fr);
+  gap: 10px 14px;
+  margin: 0;
+  align-items: center;
+}
+
+.help dt {
+  justify-self: end;
+}
+
+.help dd {
+  margin: 0;
+  font: 450 14px/1.3 var(--attune-font-text);
+  color: var(--attune-text-2);
+}
+
+.help-foot {
+  margin: 18px 0 0;
+  font: 450 12.5px/1.4 var(--attune-font-text);
+  color: var(--attune-text-3);
+}
