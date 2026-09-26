@@ -10,6 +10,7 @@
  */
 
 import { connect } from '../shared/ws.js';
+import { speechSettings } from './speech-settings.js';
 import { createSaveSheet } from './save.js';
 import { createStation } from './station.js';
 import {listContacts, saveContact, deleteContact, photoFromFile} from './contacts.js';
@@ -756,7 +757,7 @@ function renderSettings() {
     choice.setAttribute('aria-pressed', String(theme === state.theme));
     mode.append(choice);
   }
-  content.append(mode, el('h2', 'setting-label', 'Live features'));
+  content.append(mode, speechSettings({demo: params.has('demo')}), el('h2', 'setting-label', 'Live features'));
   const features = el('div', 'card setting-group');
   features.append(
     settingToggle('Captions', state.live ? 'On this phone' : '', 'captions', 'wave'),
@@ -846,6 +847,10 @@ function render() {
 
 /** Re-render in place for live updates, keeping scroll position and any text being typed. */
 function refresh() {
+  if (content.querySelector('.speech-settings-form[data-editing]')) {
+    renderHint();
+    return;
+  }
   const active = document.activeElement;
   if (active && content.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) {
     renderHint();

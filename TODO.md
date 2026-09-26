@@ -121,6 +121,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 - [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
 
+- [ ] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status
+
 ## Gates and end-to-end checks (whole team)
 
 - [ ] M0 · Camera, mic and Arduino all feed the engine; the lens view shows video — camera (C922) and mic feed `python -m attune` and the lens shows live video with face tags; Arduino runs on the simulator until the rig is built
