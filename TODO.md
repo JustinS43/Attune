@@ -72,6 +72,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-12 History queries and API router (`/api/history/...`) · M2 (#19)
 - [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — wiring + T-H1–T-H8 checklist ready in #19; assembly and bench tests left
 - [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
+- [x] H-15 CAD rig page matches the real kit: UNO R3, servo tapper, no motor driver (#43)
+- [x] H-16 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
 
 ## Section 4 – Pages, Engine & Demo
 
@@ -105,6 +107,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-28 Calm Colour look: no flashing or pulsing, simple directional arrows (#39)
 - [x] P-29 Save a person with a double tap: consent on the phone, face/voice capture animations in every glasses mode, Quick Start in Film · M3 (#41)
 - [x] P-30 Remember Me full-face photo and local contact list with photo uploads · M3 (#42)
+- [x] P-31 Lens review fixes: docks avoid faces, clear Mono speakers, names during save, no mixed-language lines (#46)
 
 ## Gates and end-to-end checks (whole team)
 

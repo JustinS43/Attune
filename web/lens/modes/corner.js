@@ -208,7 +208,7 @@ export function createCornerMode() {
         const cap = st?.current ?? null;
         const tgt = cap ? dirAngle(cap.dir) : null;
         last = { key: st?.currentKey ?? null, name: cap?.name ?? null, lines: log.shown(st, ROWS), side: tgt == null ? null : Math.round(tgt / (Math.PI / 4)) };
-        if (cap || prop || toast) headroom(ctx, DX + 4, labelY - 16 * k, DW - 8, B - labelY + 12 * k, 0.3);
+        if (cap || prop || toast || view.translating) headroom(ctx, DX + 4, labelY - 16 * k, DW - 8, B - labelY + 12 * k, 0.3);
         // label row: "Live captions", or a name proposal / a saved toast in its place
         if (prop) {
           lit(ctx, `Is this ${prop.name}?`, DX + PAD, labelY, F.name, ACCENT);
@@ -222,6 +222,26 @@ export function createCornerMode() {
           icon(ctx, 'check', DX + PAD, labelY - 8 * k, 16 * k, MINT, 2.2);
           lit(ctx, `${toast.text} saved`, DX + PAD + 22 * k, labelY + 1, F.small, WHITE, 0.9);
           ctx.restore();
+        } else if (view.translating && !view.save) {
+          // a line waiting for its translation: the original, small and dimmed, in the label row
+          // (it never joins the caption lines, so they never mix languages)
+          const w8 = view.translating;
+          const hint = 'translating…';
+          const hw = textW(ctx, hint, F.label);
+          const lang = String(w8.lang || '').toUpperCase().slice(0, 2);
+          let tx = DX + PAD;
+          if (lang) {
+            lit(ctx, lang, tx, labelY + 1, F.label, ACCENT, 0.9);
+            tx += textW(ctx, lang, F.label) + 7 * k;
+          }
+          let orig = w8.text;
+          const room = DX + DW - PAD - hw - 8 * k - tx;
+          if (textW(ctx, orig, F.label) > room) {
+            while (orig.length > 1 && textW(ctx, `${orig}…`, F.label) > room) orig = orig.slice(0, -1);
+            orig = `${orig.trimEnd()}…`;
+          }
+          lit(ctx, orig, tx, labelY + 1, F.label, WHITE, 0.5 * clamp(w8.alpha));
+          lit(ctx, hint, DX + DW - PAD, labelY + 1, F.label, ACCENT, 0.8, 'right');
         } else {
           ctx.save();
           ctx.strokeStyle = 'rgba(255,255,255,0.6)';

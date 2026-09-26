@@ -9,10 +9,11 @@
  *   laptop -> Arduino: PAT <n> <L/R/B> <name> | STOP <n> | HB | MX <icon> | CFG <key> <value>
  */
 #pragma once
+#include "board.h"
 
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.1.0"   // 1.1.0: UNO R3 + servo tapper support; protocol unchanged
 #define SERIAL_BAUD 115200
-#define LINE_MAX 64
+#define LINE_MAX 64   // longest laptop line is ~20 chars ("PAT 999999 B BELL")
 
 // Arduino -> laptop
 #define MSG_READY "READY"
@@ -40,13 +41,27 @@
 #define DRIVER_L298 "L298"
 #define DRIVER_NONE "NONE"
 
-// Pattern names accepted by PAT ("LOST" is played by the board itself)
-static const char *const PATTERN_NAMES[] = {"T3", "T4", "BELL", "NAME", "OK", "NO"};
+// Pattern names accepted by PAT ("LOST" is played by the board itself). Kept in flash on
+// AVR; patterns.h builds its table from these.
+static const char PN_T3[] RIG_PROGMEM = "T3";
+static const char PN_T4[] RIG_PROGMEM = "T4";
+static const char PN_BELL[] RIG_PROGMEM = "BELL";
+static const char PN_NAME[] RIG_PROGMEM = "NAME";
+static const char PN_OK[] RIG_PROGMEM = "OK";
+static const char PN_NO[] RIG_PROGMEM = "NO";
 #define PATTERN_NAME_COUNT 6
 
-// Matrix icons accepted by MX. "ALERT_B" (alert, side unknown) is an addition to the
-// contract's list, used by the laptop when an alert has side "none".
-static const char *const ICON_NAMES[] = {"HEART", "ALERT_L", "ALERT_R", "ALERT_B", "PAUSE", "LOST"};
+// Status icons accepted by MX: the LED matrix on the UNO R4 WiFi, LED 13 blink codes on the
+// UNO R3. "ALERT_B" (alert, side unknown) is an addition to the contract's list, used by the
+// laptop when an alert has side "none".
+static const char IN_HEART[] RIG_PROGMEM = "HEART";
+static const char IN_ALERT_L[] RIG_PROGMEM = "ALERT_L";
+static const char IN_ALERT_R[] RIG_PROGMEM = "ALERT_R";
+static const char IN_ALERT_B[] RIG_PROGMEM = "ALERT_B";
+static const char IN_PAUSE[] RIG_PROGMEM = "PAUSE";
+static const char IN_LOST[] RIG_PROGMEM = "LOST";
+static const char *const ICON_NAMES[] RIG_PROGMEM = {IN_HEART, IN_ALERT_L, IN_ALERT_R,
+                                                     IN_ALERT_B, IN_PAUSE, IN_LOST};
 #define ICON_COUNT 6
 enum Icon { ICON_HEART = 0, ICON_ALERT_L, ICON_ALERT_R, ICON_ALERT_B, ICON_PAUSE, ICON_LOST };
 
