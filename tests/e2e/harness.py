@@ -386,6 +386,10 @@ class Engine:
     env: dict[str, str] = field(default_factory=dict)
     proc: subprocess.Popen | None = None
     starts: int = 0
+    remote_seen: dict[str, float] = field(
+        default_factory=dict
+    )  # "ip:port" -> first seen
+    _watch: threading.Thread | None = None
 
     @property
     def base(self) -> str:
@@ -466,6 +470,56 @@ class Engine:
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
+
+    def server_pid(self) -> int | None:
+        """The process that really runs the engine: the one listening on its port.
+
+        A venv's python.exe on Windows is a small launcher that starts the base interpreter
+        as a child, so `proc.pid` is not the process to measure."""
+        if not WINDOWS:
+            return self.proc.pid if self.proc else None
+        out = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                (
+                    f"(Get-NetTCPConnection -LocalPort {self.port} -State Listen "
+                    "-ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        ).stdout.strip()
+        return int(out) if out.isdigit() else None
+
+    def watch_network(self, every: float = 10.0) -> None:
+        """Note every outside address the engine talks to while it runs (Windows).
+
+        A connection can be short (a telemetry upload lasts about a minute), so one look at
+        the end is not enough."""
+        if not WINDOWS or (self._watch and self._watch.is_alive()):
+            return
+        t0 = time.monotonic()
+
+        def run() -> None:
+            pid = None
+            while self.alive():
+                pid = pid or self.server_pid()
+                if pid:
+                    for c in remote_connections(pid):
+                        addr = str(c.get("RemoteAddress"))
+                        if addr not in LOOPBACK_ADDRS:
+                            key = f"{addr}:{c.get('RemotePort')}"
+                            self.remote_seen.setdefault(
+                                key, round(time.monotonic() - t0, 1)
+                            )
+                time.sleep(every)
+
+        self._watch = threading.Thread(target=run, name="e2e-net-watch", daemon=True)
+        self._watch.start()
 
     def stop(self, timeout: float = 20.0) -> int | None:
         """Ask for a clean stop (Ctrl+Break / SIGTERM), then kill if it hangs."""
@@ -964,6 +1018,33 @@ def gpu_used_mb() -> float | None:
         return float(used)
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):
         return None
+
+
+LOOPBACK_ADDRS = {"127.0.0.1", "::1", "0.0.0.0", "::"}
+
+
+def dns_names(addresses: list[str]) -> dict[str, str]:
+    """Host names the laptop looked up for these IPs (the DNS cache), for the report."""
+    ips = sorted({a.rsplit(":", 1)[0] for a in addresses})
+    if not WINDOWS or not ips:
+        return {}
+    cmd = (
+        "Get-DnsClientCache -ErrorAction SilentlyContinue | "
+        "Select-Object Entry,Data | ConvertTo-Json"
+    )
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", cmd],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    ).stdout.strip()
+    try:
+        rows = json.loads(out) if out else []
+    except ValueError:
+        return {}
+    rows = rows if isinstance(rows, list) else [rows]
+    return {r.get("Data"): r.get("Entry") for r in rows if r.get("Data") in ips}
 
 
 def remote_connections(pid: int) -> list[dict]:

@@ -85,6 +85,7 @@ class Run:
         )
         self.snap_before = self.main_root.data_files()
         self.main.start()
+        self.main.watch_network()
         return self.main
 
     def stop_main(self) -> None:
@@ -1039,20 +1040,27 @@ def scen_privacy(run: Run) -> list[Check]:
             out.append(
                 check("privacy: session log has no caption text", not leaked, leaked)
             )
-    # network: only loopback while running
-    conns = h.remote_connections(e.proc.pid)
-    remote = sorted(
-        {
-            f"{c.get('RemoteAddress')}:{c.get('RemotePort')}"
-            for c in conns
-            if c.get("RemoteAddress") not in ("127.0.0.1", "::1", "0.0.0.0", "::")
-        }
-    )
+    # network: only loopback, all the time the engine has been running (the watcher looks
+    # every 10 s; the real interpreter, not the venv launcher)
+    conns = h.remote_connections(e.server_pid() or e.proc.pid)
+    for c in conns:
+        if c.get("RemoteAddress") not in h.LOOPBACK_ADDRS:
+            e.remote_seen.setdefault(
+                f"{c.get('RemoteAddress')}:{c.get('RemotePort')}", -1
+            )
+    seen = dict(e.remote_seen)
+    names = h.dns_names(list(seen))
     out.append(
         check(
-            "privacy: engine talks only to 127.0.0.1 (no outside connections)",
-            not remote,
-            {"remote": remote, "all": len(conns)},
+            "privacy: engine talks only to 127.0.0.1 (no outside connections while it ran)",
+            not seen,
+            {
+                "remote": {
+                    k: {"first_seen_s": v, "host": names.get(k.rsplit(":", 1)[0])}
+                    for k, v in seen.items()
+                },
+                "open_now": len(conns),
+            },
         )
     )
     return out
@@ -1293,6 +1301,7 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
     samples = []
     try:
         e.start()
+        e.watch_network()
         proc = h.start_node(
             "soak.mjs", {"base": e.base, "minutes": minutes, "every": 30}
         )
@@ -1301,11 +1310,14 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
         ) as (con, ph, lens):
             t0 = time.monotonic()
             end = t0 + minutes * 60
+            pid = (
+                e.server_pid() or e.proc.pid
+            )  # the real interpreter, not the venv launcher
             last_counts = None
             while time.monotonic() < end:
                 time.sleep(30)
                 now = time.monotonic()
-                ps = h.process_stats(e.proc.pid)
+                ps = h.process_stats(pid)
                 st = con.of("status")[-1] if con.of("status") else {}
                 counts = {
                     k: len(p.of(k))
@@ -1349,6 +1361,18 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
             "page_checks": page.get("checks"),
         }
         out.append(check(f"soak: engine alive after {minutes:.0f} min", alive))
+        seen = dict(e.remote_seen)
+        names = h.dns_names(list(seen))
+        out.append(
+            check(
+                "soak: no outside connections",
+                not seen,
+                {
+                    k: {"first_seen_s": v, "host": names.get(k.rsplit(":", 1)[0])}
+                    for k, v in seen.items()
+                },
+            )
+        )
         if len(samples) >= 4:
             first = samples[1]  # after warm-up
             last = samples[-1]
