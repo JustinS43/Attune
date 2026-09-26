@@ -606,7 +606,7 @@ class GpuLock:
                 if text != self._seen:
                     log.info("GPU lock held by %r; waiting", text)
                     self._seen = text
-                time.sleep(0.5)  # poll often: others take it again right after releasing
+                time.sleep(20)  # RULES.md: poll every 20-30 s
         (LOCK / "owner.txt").write_text(
             f"{self.owner} {time.strftime('%Y-%m-%d %H:%M:%S')}", encoding="utf-8"
         )
