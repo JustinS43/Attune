@@ -1022,6 +1022,31 @@ def gpu_used_mb() -> float | None:
         return None
 
 
+def gpu_process_mb(pid: int) -> float | None:
+    """Dedicated GPU memory of one process (Windows "GPU Process Memory" counter).
+
+    nvidia-smi can't split memory per process under WDDM, and the whole-GPU figure moves
+    with every other engine on the laptop."""
+    if not WINDOWS or not pid:
+        return None
+    cmd = (
+        f"(Get-Counter '\\GPU Process Memory(pid_{int(pid)}_*)\\Dedicated Usage' "
+        "-ErrorAction SilentlyContinue).CounterSamples | "
+        "Measure-Object CookedValue -Sum | ForEach-Object { $_.Sum }"
+    )
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        ).stdout.strip()
+        return round(float(out) / 2**20, 1) if out else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
 LOOPBACK_ADDRS = {"127.0.0.1", "::1", "0.0.0.0", "::"}
 
 
