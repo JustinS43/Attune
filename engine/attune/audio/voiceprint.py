@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import math
 import re
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class CAMExtractor:
@@ -47,9 +51,17 @@ class VoicePrints:
         self.session: dict[str, np.ndarray] = {}
         if root.exists():
             for path in root.glob("*/voice.json"):
-                data = json.loads(path.read_text())
-                if data.get("consent") is True:
-                    self.enrolled[path.parent.name] = self._unit(data["embedding"])
+                try:
+                    self._path(path.parent.name)
+                    data = json.loads(path.read_text())
+                    if data.get("consent") is True and self._consented_at(data.get("consent_t")):
+                        self.enrolled[path.parent.name] = self._unit(data["embedding"])
+                except (OSError, ValueError, TypeError, KeyError, AttributeError):
+                    logger.warning("Ignoring an invalid local voice enrollment")
+
+    @staticmethod
+    def _consented_at(value) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
     @staticmethod
     def _unit(vector) -> np.ndarray:
@@ -78,7 +90,11 @@ class VoicePrints:
         lock=None,
     ) -> None:
         """Save only the embedding from sufficient consented speech."""
-        if consent is not True or consent_t is None or len(samples) < self.enroll_s * 16000:
+        if (
+            consent is not True
+            or not self._consented_at(consent_t)
+            or len(samples) < self.enroll_s * 16000
+        ):
             raise ValueError("consent and sufficient speech are required")
         path = self._path(person_id)
         vector = self._unit(self.extract(samples))

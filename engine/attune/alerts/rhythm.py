@@ -14,6 +14,7 @@ class RhythmEvidence:
     beeps: int = 0
     t3_cycles: int = 0
     t4_cycles: int = 0
+    quiet_s: float = 0.0
 
 
 class RhythmDetector:
@@ -49,31 +50,34 @@ class RhythmDetector:
         return abs(actual - target) <= target * self.cfg["tolerance"] + self.cfg["frame_s"] / 2
 
     def _analyze(self) -> RhythmEvidence:
-        runs = list(self.runs)
-        # Include the current silence only after its expected full duration.
-        runs.append((self.state, self.length * self.cfg["frame_s"]))
-        evidence = RhythmEvidence(tone_on=self.state)
+        duration = self.length * self.cfg["frame_s"]
+        evidence = RhythmEvidence(tone_on=self.state, quiet_s=0.0 if self.state else duration)
         for kind, count in (("t3", 3), ("t4", 4)):
             on, gap, rest = [self.cfg[f"{kind}_{key}_s"] for key in ("on", "gap", "rest")]
             cycles, partial = 0, 0
-            for state, duration in runs:
+            for state, completed_duration in self.runs:
                 if state:
-                    if self._near(duration, on):
+                    if self._near(completed_duration, on) and partial < count:
                         partial += 1
                     else:
                         cycles, partial = 0, 0
                 elif partial:
-                    if partial == count and self._near(duration, rest):
+                    if partial == count and self._near(completed_duration, rest):
                         cycles += 1
                         partial = 0
-                    elif partial < count and self._near(duration, gap):
+                    elif partial < count and self._near(completed_duration, gap):
                         pass
                     else:
-                        # A growing final pause must not erase already observed evidence.
-                        if duration > (rest if partial == count else gap) * (
-                            1 + self.cfg["tolerance"]
-                        ):
-                            cycles, partial = 0, 0
+                        # Completed gaps must fit both bounds. A short gap is not
+                        # a growing pause once the next beep has already begun.
+                        cycles, partial = 0, 0
+            target = on if self.state else rest if partial == count else gap
+            if duration > target * (1 + self.cfg["tolerance"]) + self.cfg["frame_s"] / 2:
+                cycles, partial = 0, 0
+            elif not self.state and partial == count:
+                # The completed last beep confirms a group. Waiting for its
+                # final rest adds five unnecessary seconds to the second T4.
+                cycles += 1
             if kind == "t3":
                 evidence.beeps = min(partial, count)
                 evidence.t3_cycles = cycles
