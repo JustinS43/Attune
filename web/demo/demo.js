@@ -2,18 +2,21 @@
  * Demo page: the glasses view (left) and the phone app (right) running at the same time,
  * or either one full size.
  *
- * Section 4 - Pages, Engine & Demo. TODO: P-17.
+ * Section 4 - Pages, Engine & Demo. TODO: P-17, P-18 (glasses guide).
  *
  *   /demo/                       glasses + phone
  *   /demo/?view=lens|phone       start with one of them full size
+ *   /demo/?view=guide            the glasses guide (the frames stay loaded, just hidden)
  *   /demo/?source=film&mode=mono passed on to the glasses view (source, mode, engine)
  *   /demo/?palette=apricot       passed on to the phone app
  *
  * Keys work wherever the focus is (the two pages are same-origin frames):
- *   `  next view      Alt+1 both · Alt+2 glasses · Alt+3 phone
+ *   `  next view      Alt+1 both · Alt+2 glasses · Alt+3 phone · Alt+4 glasses guide
  */
 
-const VIEWS = ['split', 'lens', 'phone'];
+import { mountGuide } from './guide.js';
+
+const VIEWS = ['split', 'lens', 'phone', 'guide'];
 const STORE = 'attune.demo.view';
 const params = new URLSearchParams(location.search);
 
@@ -21,6 +24,7 @@ const lens = document.querySelector('#lens');
 const phone = document.querySelector('#phone');
 const stage = document.querySelector('.stage');
 const buttons = [...document.querySelectorAll('.views button')];
+const guide = document.querySelector('#guide');
 
 // ------------------------------------------------------------------ frames
 function pass(keys) {
@@ -57,6 +61,9 @@ function setView(next) {
   const p = new URLSearchParams(location.search);
   p.set('view', view);
   history.replaceState(null, '', `${location.pathname}?${p}`);
+  // hidden views leave the tab order and the accessibility tree (the frames stay loaded)
+  guide.inert = view !== 'guide';
+  stage.inert = view === 'guide';
   fit();
 }
 
@@ -91,7 +98,7 @@ new ResizeObserver(fit).observe(stage);
 function onKeydown(e) {
   const t = e.target;
   const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
-  if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[123]$/.test(e.code)) {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1234]$/.test(e.code)) {
     e.preventDefault();
     e.stopImmediatePropagation();
     setView(VIEWS[Number(e.code.slice(-1)) - 1]);
@@ -120,7 +127,48 @@ for (const frame of [lens, phone]) {
 function focusFor() {
   if (view === 'lens') lens.focus();
   else if (view === 'phone') phone.focus();
+  else if (view === 'guide') guide.focus({ preventScroll: true });
 }
 for (const b of buttons) b.addEventListener('click', () => setTimeout(focusFor, 50));
+
+// ------------------------------------------------------------------ glasses guide
+const MODE_URL = { color: 'color', mono: 'mono', corner: 'mono-corner' };
+
+// Put the glasses view into a look: through attuneLens when the frame's script is reachable,
+// otherwise by reloading the frame with ?mode= (and ?variant= for the Google Glass placement).
+function tryLook(mode, variant = 'rayban') {
+  let done = false;
+  try {
+    const api = lens.contentWindow?.attuneLens;
+    if (api?.setMode) {
+      const corner = api.modes?.corner;
+      if (mode === 'corner' && corner && corner.variant !== variant) {
+        corner.variant = variant;
+        // setMode ignores the current mode; step out and back so the label and URL catch up
+        if (lens.contentWindow.location.search.includes('mode=mono-corner')) api.setMode('color');
+      }
+      api.setMode(mode);
+      done = true;
+    }
+  } catch {
+    /* another origin: fall back to reloading the frame */
+  }
+  if (!done) {
+    let q;
+    try {
+      q = new URLSearchParams(lens.contentWindow.location.search);
+    } catch {
+      q = new URLSearchParams(pass(['source', 'engine', 'assets']));
+    }
+    q.set('mode', MODE_URL[mode]);
+    if (mode === 'corner' && variant === 'glass') q.set('variant', 'glass');
+    else q.delete('variant');
+    lens.src = `../lens/?${q}`;
+  }
+  setView('lens');
+  setTimeout(focusFor, 50);
+}
+
+mountGuide(guide, { onTry: tryLook });
 
 setView(view);
