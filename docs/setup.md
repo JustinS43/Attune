@@ -6,6 +6,27 @@
 
 ## Running the engine
 
+### Local models for the speaker demo
+
+With permission to download model weights, run this from the repo root:
+
+```bash
+python scripts/download_models.py --yes buffalo_l face_landmarker light_asd \
+    cam_plus_plus whisper_config.json whisper_model.bin \
+    whisper_preprocessor_config.json whisper_tokenizer.json whisper_vocabulary.json
+python scripts/download_models.py --check
+```
+
+Use `--root /path/to/checkout` when the running engine is in another checkout.
+The downloader pins sizes and SHA-256 hashes and verifies files before installing them.
+It extracts only the face detector and recognizer from Buffalo_L; its age and gender
+models are not installed. InsightFace's Buffalo_L weights are for non-commercial
+research use only. Model weights stay in the ignored `models/` folder.
+
+The live demo needs the C922 camera and a microphone allowed by macOS privacy settings.
+The voice model supports consented speaker enrollment; without an enrolled person,
+the demo can show speech placement but cannot verify saved-name accuracy.
+
 Run everything from the repo root, so `config/`, `models/` and `data/` resolve:
 
 ```bash
