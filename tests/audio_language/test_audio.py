@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import attune.audio.mic as mic_module
 import numpy as np
 import pytest
 from attune.audio.asr import NemotronASR, Recognition, token_words
@@ -152,13 +153,32 @@ def test_nemotron_feeds_actual_pcm_and_flushes():
     assert len(asr.stream.blocks[-1]) == 12800
 
 
-def test_mic_name_selection_falls_back(config):
+def test_mic_name_selection_falls_back(config, monkeypatch):
+    monkeypatch.setattr(mic_module.sys, "platform", "darwin")
     sd = SimpleNamespace(
         query_devices=lambda: [{"name": "Other", "max_input_channels": 1, "hostapi": 0}],
         query_hostapis=lambda: [{"name": "Core Audio"}],
     )
     mic = MicReader(config["audio"], lambda: 0, lambda e: None, sd)
     assert mic._device(False) is None
+
+
+def test_mic_name_selection_falls_back_to_wasapi_default_on_windows(config, monkeypatch):
+    monkeypatch.setattr(mic_module.sys, "platform", "win32")
+    devices = [
+        {"name": "Other (MME)", "max_input_channels": 1, "hostapi": 0},
+        {"name": "Other (WASAPI)", "max_input_channels": 1, "hostapi": 1},
+    ]
+    hosts = [
+        {"name": "MME", "default_input_device": 0},
+        {"name": "Windows WASAPI", "default_input_device": 1},
+    ]
+    sd = SimpleNamespace(query_devices=lambda: devices, query_hostapis=lambda: hosts)
+    mic = MicReader(config["audio"], lambda: 0, lambda e: None, sd)
+    assert mic._device(False) == 1
+    hosts[1]["default_input_device"] = -1
+    with pytest.raises(RuntimeError):
+        mic._device(False)
 
 
 class FakeASR:

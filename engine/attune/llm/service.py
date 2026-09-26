@@ -89,7 +89,7 @@ class LLMService:
         self._error = ""
 
     def _handle(self, topic: str, e: dict, generation: int) -> None:
-        if generation != self.worker.generation and topic not {
+        if generation != self.worker.generation and topic not in {
             "session.forget", "paused", "person.changed"
         }:
             return
