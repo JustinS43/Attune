@@ -37,6 +37,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `vision.track_lost` | 1 Vision | `track_id, t, side` (`left`, `right`, `none`) | Drives off-screen arrows |
 | `vision.appearance` | 1 Vision | `track_id, color, crop` (numpy) | Once a stranger is steady for 1 s |
 | `vision.description` | 2 Audio & Lang | `track_id, label` (e.g. "Person in blue jacket") | From the fixed lists only |
+| `audio.block` | 2 Audio | `t, sample_rate, samples` (mono float32 numpy array) | Local RAM only; timestamp is first sample; 16 kHz speech and 32 kHz alerts; never WebSocket/history |
 | `audio.vad` | 2 Audio & Lang | `t, is_speech, prob` | Every 32 ms |
 | `audio.transcript` | 2 Audio & Lang | `utt_id, t_start, t_end, text, final, lang, words: [(word, t0, t1)]` | No speaker yet |
 | `audio.voice_match` | 2 Audio & Lang | `utt_id, person_id or None, score` | After ≥ 1 s of speech |
@@ -55,7 +56,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `hw.link` | 3 Hardware | `connected, firmware, driver` | On change |
 | `speech_out.playing` | 3 Hardware | `state` (`start`, `end`), `t` | Section 2 mutes mic captions until end + 0.5 s |
 | `reply.spoken` | 3 Hardware | `text, voice` (`elevenlabs`, `kokoro`), `t` | Shown as "You (typed)" and saved to history |
-| `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason` | "more light", "come closer" |
+| `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason, track_id=None` | "more light", "come closer"; face enrollment echoes the requested track_id to correlate voice consent |
 | `person.changed` | 1 Vision | `person_id, name, action` (`enrolled`, `renamed`, `deleted`) | Everyone updates their caches |
 | `session.forget` | 4 Pages & Engine | — | Every section wipes session-only data |
 | `paused` | 4 Pages & Engine | `paused` (bool) | All recognition pauses |
@@ -101,7 +102,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `switch.set` | key (`translation`, `alerts`, `debug`), value | owning section |
 | `languages.set` | langs, e.g. ["en", "es"] | 2 Audio & Lang |
 | `pattern.test` | name, side | 3 Hardware |
-| `calibrate.step` | step | 2 Audio & Lang |
+| `calibrate.step` | step, measurements={} (optional manual observations) | 2 Audio & Lang |
 | `speak` | text, source (`typed`, `preset`, `suggestion`) | 3 Hardware |
 | `name.answer` | proposal_id, accept | 2 Audio & Lang (keyboard fallback for tap/hold) |
 | `alert.ack` | alert_id | 2 Audio & Lang |
@@ -154,3 +155,21 @@ Descriptions may only use these words. Nothing about gender, age, body, skin or 
 | Models | `models/` (gitignored, see `models/README.md`) |
 | Runtime data | `data/` (gitignored): `people/`, `profiles/`, `sessions/`, `reels/` |
 | Secrets | `.env` (gitignored), copied from `.env.example` |
+
+## Section 2 integration additions
+
+`audio.block` is local PCM, never serialized to WebSockets, history or the generic event log.
+Replay may feed these blocks directly on the shared clock. Audio capture publishes both
+16 kHz and 32 kHz mono streams. Pause/forget consumers discard queued recognition work.
+
+`enroll.result.track_id` defaults to `None` for existing producers. Voice enrollment
+requires a successful face result echoing the consenting `enroll.start.track_id`; it
+refuses ambiguous results without that correlation. Only matching final `caption`
+spans attributed to that face contribute to the five-second voice enrollment.
+
+Calibration begins with `calibrate.step` using `level`, `mic`, `you`, `other`,
+`balance`, `claps`, `noise`, or `faces`. `finish:<step>` saves it. Optional
+`measurements` carries `confirmed: true` for level; three shared-clock
+`audio_times` and `video_times` for annotated claps; or `distances_checked: [1,2,3]`
+for the face check. Status is reported through `status.part`, part `calibration`.
+This permits manual video observations until an automatic clap detector exists.
