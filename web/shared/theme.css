@@ -1,10 +1,83 @@
 /*
- * Colours and type shared by every page
+ * Colours and type shared by every page (the launch film's HUD look).
  *
- * Section 4 - Pages, Engine & Demo
- * TODO: P-06
- * Contracts: docs/contracts.md
- * Plan: docs/attune-build-plan.html, section 05 The two pages
- *
- * Placeholder only - no code yet (MLH: project code is written during the event).
+ * Section 4 - Pages, Engine & Demo. TODO: P-06.
+ * Offline: system fonts only, no external requests.
  */
+
+:root {
+  /* brand */
+  --attune-mint: #7cf5d6;
+  --attune-sky: #6ab8ff;
+  --attune-accent: #8ff3e0;
+  --attune-brand: linear-gradient(135deg, var(--attune-mint), var(--attune-sky));
+
+  /* signal colours */
+  --attune-amber: #ffc857;
+  --attune-red: #ff4d4f;
+  --attune-orange: #ff9f43;
+  --attune-info: #7cc8ff;
+  --attune-phosphor: #6bff8f;
+
+  /* surfaces and text */
+  --attune-ink: #07080b;
+  --attune-surface: #0e1016;
+  --attune-glass: rgba(14, 16, 22, 0.56);
+  --attune-glass-strong: rgba(14, 16, 22, 0.74);
+  --attune-border: rgba(255, 255, 255, 0.16);
+  --attune-border-strong: rgba(255, 255, 255, 0.26);
+  --attune-text: #f4f7fa;
+  --attune-text-2: rgba(255, 255, 255, 0.68);
+  --attune-text-3: rgba(255, 255, 255, 0.46);
+
+  /* type */
+  --attune-font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --attune-font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --attune-font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+
+  /* shape and motion */
+  --attune-radius: 18px;
+  --attune-radius-pill: 999px;
+  --attune-shadow: 0 14px 44px rgba(0, 0, 0, 0.38);
+  --attune-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --attune-fast: 160ms;
+  --attune-slow: 420ms;
+}
+
+/* Frosted-glass surface, the building block of every Attune panel. */
+.attune-glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 45%, transparent),
+    var(--attune-glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+  backdrop-filter: blur(20px) saturate(1.35);
+  border: 1px solid var(--attune-border);
+  border-radius: var(--attune-radius);
+  box-shadow: var(--attune-shadow);
+  color: var(--attune-text);
+}
+
+/* Keycap, e.g. <kbd class="attune-kbd">Y</kbd> */
+.attune-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7em;
+  height: 1.7em;
+  padding: 0 0.45em;
+  border-radius: 0.45em;
+  border: 1px solid var(--attune-border-strong);
+  border-bottom-width: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--attune-text);
+  font: 600 0.78em/1 var(--attune-font-text);
+  letter-spacing: 0.02em;
+}
+
+/* Small uppercase label used above panel titles. */
+.attune-eyebrow {
+  font: 650 11px/1.2 var(--attune-font-text);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--attune-accent);
+}

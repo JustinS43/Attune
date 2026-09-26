@@ -1,11 +1,96 @@
 <!doctype html>
 <!--
-  Lens view (full screen, recorded by OBS)
-  
-  Section 4 - Pages, Engine & Demo
-  TODO: P-06
-  Contracts: docs/contracts.md
-  Plan: docs/attune-build-plan.html, section 05 The two pages
-  
-  Placeholder only - no code yet (MLH: project code is written during the event).
+  Lens view: what the wearer sees through the glasses (full screen, recorded by OBS).
+
+  Section 4 - Pages, Engine & Demo. TODO: P-06, P-07, P-08, P-12.
+  Contracts: docs/contracts.md (sections 3-4 and "Pages integration additions").
+
+  URL: ?source=live|film  ?mode=color|mono|mono-corner  ?assets=/data/reels/film/  ?t=<film s>
+       ?engine=host:port (Live)  ?chrome=0 (start in presentation mode)
 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Attune · Lens</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237CF5D6'/%3E%3Cstop offset='1' stop-color='%236AB8FF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%2307080B'/%3E%3Cpath d='M9.6 22.6A8.4 8.4 0 1 1 13 24.1' fill='none' stroke='url(%23g)' stroke-width='2.4' stroke-linecap='round'/%3E%3Crect x='11.5' y='13.6' width='2.2' height='4.8' rx='1.1' fill='url(%23g)'/%3E%3Crect x='14.9' y='11.2' width='2.2' height='9.6' rx='1.1' fill='url(%23g)'/%3E%3Crect x='18.3' y='12.8' width='2.2' height='6.4' rx='1.1' fill='url(%23g)'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="lens.css">
+</head>
+<body>
+  <main id="app">
+    <div id="stage" class="stage">
+      <div id="media" class="media">
+        <canvas id="live-frame" width="1280" height="720" aria-hidden="true"></canvas>
+      </div>
+      <div class="shade" aria-hidden="true"></div>
+      <canvas class="hud" data-mode="color" aria-hidden="true"></canvas>
+      <canvas class="hud" data-mode="mono" aria-hidden="true"></canvas>
+      <canvas class="hud" data-mode="corner" aria-hidden="true"></canvas>
+      <div id="captions-live" class="sr-only" aria-live="polite"></div>
+
+      <div id="notice" class="notice attune-glass" hidden>
+        <svg class="notice-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <defs><linearGradient id="nm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CF5D6"/><stop offset="1" stop-color="#6AB8FF"/></linearGradient></defs>
+          <path class="ring" d="M19.4 45.6A17.5 17.5 0 1 1 26.3 48.7" fill="none" stroke="url(#nm)" stroke-width="3.6" stroke-linecap="round"/>
+          <rect class="bar b1" x="23.2" y="27.4" width="4.4" height="9.2" rx="2.2" fill="url(#nm)"/>
+          <rect class="bar b2" x="29.8" y="22.4" width="4.4" height="19.2" rx="2.2" fill="url(#nm)"/>
+          <rect class="bar b3" x="36.4" y="25.6" width="4.4" height="12.8" rx="2.2" fill="url(#nm)"/>
+        </svg>
+        <div class="notice-title" id="notice-title">Connecting to Attune engine…</div>
+        <div class="notice-detail" id="notice-detail"></div>
+        <div class="notice-hint" id="notice-hint"></div>
+      </div>
+    </div>
+
+    <div id="chrome" class="chrome">
+      <div class="mode-label attune-glass" id="mode-label">
+        <span class="mode-swatch" id="mode-swatch" aria-hidden="true"></span>
+        <div>
+          <div class="mode-name" id="mode-name">Full-colour AR</div>
+          <div class="mode-device" id="mode-device">Binocular waveguide</div>
+        </div>
+      </div>
+
+      <div class="dock">
+        <div class="transport attune-glass" id="transport">
+          <button class="icon-btn" id="play" type="button" aria-label="Play or pause the film (Space)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-pause" d="M8.5 6v12M15.5 6v12"/><path class="i-play" d="M8 5.5v13l10.5-6.5z"/></svg>
+          </button>
+          <button class="icon-btn" id="prev" type="button" aria-label="Previous scene (Left arrow)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div class="scene">
+            <div class="scene-name" id="scene-name">Loading film…</div>
+            <div class="scene-bar"><i id="scene-progress"></i></div>
+          </div>
+          <button class="icon-btn" id="next" type="button" aria-label="Next scene (Right arrow)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <span class="scene-count" id="scene-count"></span>
+        </div>
+        <div class="switches attune-glass">
+          <div class="seg" role="group" aria-label="Source (V)">
+            <button type="button" data-source="live">Live</button>
+            <button type="button" data-source="film">Film</button>
+          </div>
+          <div class="seg" role="group" aria-label="Glasses mode (M)">
+            <button type="button" data-mode="color">Colour</button>
+            <button type="button" data-mode="mono">Mono</button>
+            <button type="button" data-mode="corner">Corner</button>
+          </div>
+          <button class="help-btn" id="help-btn" type="button" aria-label="Keyboard shortcuts (?)">?</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="help" class="help attune-glass" role="dialog" aria-label="Keyboard shortcuts" hidden>
+      <div class="attune-eyebrow">Keyboard</div>
+      <h2>Shortcuts</h2>
+      <dl id="help-list"></dl>
+      <p class="help-foot">Press <kbd class="attune-kbd">?</kbd> or <kbd class="attune-kbd">Esc</kbd> to close</p>
+    </div>
+  </main>
+  <script type="module" src="lens.js"></script>
+</body>
+</html>
