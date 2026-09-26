@@ -28,6 +28,7 @@ audio = [
     "soxr",
     "silero-vad",
     "sherpa-onnx",          # GPU build: see docs/setup.md
+    "sherpa-onnx-core",     # sherpa's own onnxruntime.dll; without it Windows loads System32's old one
     "faster-whisper",
     "lingua-language-detector",
     "torch",                # EfficientAT and Silero
@@ -49,6 +50,11 @@ dev = [
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
+
+[tool.uv]
+# faster-whisper asks for the CPU "onnxruntime", which shares its folder with
+# "onnxruntime-gpu" and overwrites it. Keep only the GPU build off macOS.
+override-dependencies = ["onnxruntime; sys_platform == 'darwin'"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" }

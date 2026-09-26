@@ -114,7 +114,7 @@ bubble_fade_s = 4
 [nemotron]
 tokens = "models/nemotron/tokens.txt"
 encoder = "models/nemotron/encoder.int8.onnx"
-decoder = "models/nemotron/decoder.onnx"
+decoder = "models/nemotron/decoder.int8.onnx"
 joiner = "models/nemotron/joiner.int8.onnx"
 provider = "cpu"
 num_threads = 2
