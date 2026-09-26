@@ -30,6 +30,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-12 Instant colour label for strangers · M2 (#5)
 - [x] V-13 Tests in tests/vision using the replay reel · M2 (#5)
 - [ ] V-14 Stretch: Light-ASD for hard who's-talking cases · after M3, only if time
+- [x] V-15 Live dev runner: `devview --all` runs vision, fusion, audio, alerts and LLM together on one bus and clock, with `--audio-file` replay (#15)
 
 ## Section 2 – Audio & Language
 
