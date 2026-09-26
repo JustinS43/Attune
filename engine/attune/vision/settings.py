@@ -63,6 +63,7 @@ class FusionSettings:
     you_balance_db: float = 3.0
     harvest_after_s: float = 1.5
     first_words_wait_ms: float = 300.0
+    min_segment_s: float = 0.8  # shorter speaker pieces of a caption merge into a neighbour
     rate_hz: float = 15.0
     sync_min_corr: float = 0.3
     av_offset_s: float = 0.0  # audio lags video by this much; set by the clap test

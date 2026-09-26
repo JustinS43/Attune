@@ -11,7 +11,7 @@ from attune.fusion.harvest import Harvester
 from attune.fusion.speaker import SpeakerFusion
 from attune.fusion.sync import Envelope, in_time_score
 from attune.vision.settings import FusionSettings
-from attune.vision.types import Track, Tracks
+from attune.vision.types import Speaker, Track, Tracks
 
 FPS = 30
 
@@ -374,3 +374,37 @@ def test_forget_session_clears_labels():
     sim.f.forget_session()
     scene, _, _ = sim.step({2: still_face()})
     assert scene.faces[0].label == "Person"
+
+
+def test_a_flickering_speaker_does_not_chop_a_sentence():
+    f = SpeakerFusion(FusionSettings())
+    a = Speaker("face", 1, None, "Person in white shirt", "none")
+    b = Speaker("face", 2, None, "Person in blue shirt", "none")
+    someone = Speaker("someone", label="Someone", side="none")
+    words = [
+        ("Did", 0.0, 0.2),
+        ("you", 0.3, 0.4),
+        ("hear", 0.5, 0.7),
+        ("the", 0.8, 0.9),
+        ("doorbell", 1.0, 1.5),
+        ("a", 1.6, 1.7),
+        ("minute", 1.8, 2.0),
+        ("ago", 2.1, 2.4),
+    ]
+    who = [someone, a, a, b, a, someone, someone, someone]
+    f.timeline.extend((w[1], s) for w, s in zip(words, who))
+    caps = f._captions_for(
+        {
+            "utt_id": "9",
+            "text": "Did you hear the doorbell a minute ago",
+            "final": True,
+            "words": words,
+            "t_start": 0.0,
+            "t_end": 2.4,
+        },
+        now=5.0,
+        first_seen=0.0,
+    )
+    assert [(c.utt_id, c.speaker.track_id, c.text) for c in caps] == [
+        ("9", 1, "Did you hear the doorbell a minute ago")
+    ]

@@ -342,6 +342,7 @@ class SpeakerFusion:
                 groups[-1][1].append(w)
             else:
                 groups.append((spk, [w]))
+        groups = self._smooth(groups)
         utt = str(get(ev, "utt_id"))
         final = bool(get(ev, "final", False))
         lang = get(ev, "lang")
@@ -358,6 +359,53 @@ class SpeakerFusion:
             )
             for i, (spk, ws) in enumerate(groups)
         ]
+
+    def _smooth(self, groups: list[tuple[Speaker, list]]) -> list[tuple[Speaker, list]]:
+        """Stop a flickering speaker decision from chopping a sentence into pieces.
+
+        A short "Someone" piece (under 2x `min_segment_s`) joins the known
+        speaker next to it, and a piece under `min_segment_s` between two pieces
+        of the same speaker joins them. Real turn changes inside a sentence stay split.
+        """
+
+        def span(ws: list) -> float:
+            return float(ws[-1][2]) - float(ws[0][1])
+
+        short = self.s.min_segment_s
+        gs = list(groups)
+        changed = True
+        while changed and len(gs) > 1:
+            changed = False
+            for i, (spk, ws) in enumerate(gs):
+                prev = gs[i - 1] if i > 0 else None
+                nxt = gs[i + 1] if i + 1 < len(gs) else None
+                if (
+                    prev is not None
+                    and nxt is not None
+                    and _same(prev[0], nxt[0])
+                    and span(ws) < short
+                ):
+                    gs[i - 1 : i + 2] = [(prev[0], prev[1] + ws + nxt[1])]
+                elif spk.kind == "someone" and span(ws) < 2 * short:
+                    known = [
+                        j for j in (i - 1, i + 1) if 0 <= j < len(gs) and gs[j][0].kind != "someone"
+                    ]
+                    if not known:
+                        continue
+                    j = max(known, key=lambda k: span(gs[k][1]))
+                    lo, hi = min(i, j), max(i, j)
+                    gs[lo : hi + 1] = [(gs[j][0], gs[lo][1] + gs[hi][1])]
+                else:
+                    continue
+                changed = True
+                break
+        out: list[tuple[Speaker, list]] = []
+        for spk, ws in gs:
+            if out and _same(out[-1][0], spk):
+                out[-1] = (spk, out[-1][1] + ws)
+            else:
+                out.append((spk, ws))
+        return out
 
     # ---------------- tick ----------------
     def tick(self, now: float) -> tuple[Scene, list[Caption], VoiceHarvest | None]:
