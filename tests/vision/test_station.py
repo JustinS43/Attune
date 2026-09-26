@@ -374,6 +374,45 @@ def test_silent_mic_says_it_did_not_start(tmp_path):
     assert st.rec.phases()[-1] == "done"  # the face stays saved
 
 
+class StoppingMic(FakeMic):
+    """Delivers `blocks` blocks, then nothing (unplugged mid-sentence)."""
+
+    def __init__(self, samples, blocks):
+        super().__init__(samples)
+        self.left = blocks
+
+    def read(self, timeout=0.1):
+        self.left -= 1
+        if self.left < 0:
+            time.sleep(min(timeout, 0.01))
+            return None
+        return super().read(timeout)
+
+
+def test_a_mic_that_stops_mid_sentence_is_reported(tmp_path):
+    st = Station(tmp_path, mic=StoppingMic(speech_like(6.0), blocks=50))  # 0.5 s, then gone
+    st.start()
+    st.wait_phase("voice_failed")
+    assert "stopped" in st.rec[C.ENROLL_STATE][-1]["reason"]
+    st.send("skip_voice")
+    st.wait_closed()
+    assert st.rec.phases()[-1] == "done"
+
+
+def test_too_little_voice_for_cam_is_a_voice_failure(tmp_path):
+    st = Station(tmp_path)
+
+    def picky(audio):
+        raise ValueError("not enough voice audio")
+
+    st.enroller._extractor = picky
+    st.start()
+    st.wait_phase("voice_failed")
+    assert st.rec[C.ENROLL_STATE][-1]["reason"] == "not enough speech"
+    st.send("cancel")
+    st.wait_closed()
+
+
 # ------------------------------------------------------------------ requests
 def test_consent_is_required(tmp_path):
     st = Station(tmp_path)

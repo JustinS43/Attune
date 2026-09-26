@@ -564,7 +564,7 @@ class StationEnroller:
         mic = self._open_mic()
         mic.start()
         try:
-            opened = self.clock()
+            quiet_since = self.clock()  # wall clock: no blocks at all means a dead mic
             step: VoiceStep | None = None  # made on the first block: paced by audio time
             self._state(session, VOICE, mic=getattr(mic, "label", s.mic_name))
             last_level = last_progress = -1e9
@@ -573,14 +573,15 @@ class StationEnroller:
                 self._control(session)
                 block = mic.read(timeout=0.1)
                 if block is None:
-                    if step is None and self.clock() - opened > s.open_timeout_s:
+                    if self.clock() - quiet_since > s.open_timeout_s:
                         label = getattr(mic, "label", s.mic_name)
                         detail = getattr(mic, "detail", "")
-                        why = f"the laptop microphone ({label}) didn't start {detail}"
-                        return False, why.strip()
+                        what = "didn't start" if step is None else "stopped"
+                        return False, f"the laptop microphone ({label}) {what} {detail}".strip()
                     if step is None:
                         continue
                 else:
+                    quiet_since = self.clock()
                     if step is None:
                         step = VoiceStep(s, self.need_s, vad, float(block[0]))
                     step.feed(*block)
@@ -610,8 +611,12 @@ class StationEnroller:
                 log.exception("Station mic stop failed")
         audio = step.audio()
         step.clear()
-        vector = extract(audio)
-        del audio
+        try:
+            vector = extract(audio)
+        except ValueError:  # CAM++ found too little voice in it
+            return False, "not enough speech"
+        finally:
+            del audio
         from ..audio.voiceprint import STATION, write_print
 
         write_print(self.people_dir, session.person_id, vector, session.consent_t, STATION)
