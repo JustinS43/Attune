@@ -171,6 +171,64 @@ provider = "cpu"
 enroll_s = 5.0
 enroll_timeout_s = 45.0          # voice enrollment gives up ("not enough speech") after this
 match_s = 1.0
+# A-21 cross-mic: a print made on the laptop mic (enrollment station) is heard on the glasses
+# mic. Its own threshold; its scores are shifted onto the [fusion] voice_match scale. Simulated
+# laptop->glasses study (scripts/eval_crossmic.py, 29 TTS voices, CAM++ with the 2 s length
+# fix): EER 1.7%; at 0.5 1.0% false accepts, 3.7% misses on 2-3 s utterances (23% at 1.5 s).
+# No separate value was needed.
+station_match = 0.5
+# Bounded refinement: glasses-mic speech of a saved person (confident face, lip-synced talker,
+# one talker, >= harvest_after_s) that scores >= adapt_min against their base print joins a
+# small bank of glasses prints; their score is the better of the base print and the bank's
+# mean, the bank's measured against bank_match. The base print is never replaced.
+# Study: 8 bank prints cut misses at 0.1% false accepts from 22% to 2%; 0.53 keeps the bank's
+# false accepts at 1% (0.5 would let in 1.6%). Gate 0.45 passes 88% of the person's 1.5 s
+# utterances and 0.85% of someone else's.
+bank_match = 0.53
+adapt_min = 0.45
+adapt_max_prints = 8
+adapt_min_s = 1.5                # voiced seconds in the harvested span
+adapt_gap_s = 5.0                # at most one adaptation per person this often
+adapt_persist = true             # keep the bank in voice.json (deleted with the person)
+harvest_lag_s = 0.4              # harvests wait this long so their audio has arrived
+
+# Enrollment station (V-23, A-21, P-35): people are saved at the laptop's own camera and mic;
+# the glasses camera and mic are for the world outside. engine/attune/station/
+[enroll]
+source = "station"               # "station" (laptop camera + mic) or "glasses" (the P-29 flow)
+camera_name = "OV02E10"          # laptop camera (substring of the device name; IR cameras never)
+mic_name = "Microphone Array"    # laptop mic (substring, WASAPI); never falls back to another mic
+camera_width = 1280
+camera_height = 720
+camera_fps = 30
+open_timeout_s = 6               # no frames / audio this long after opening: busy or missing
+preview_width = 360              # phone preview: 3:4 crop from the middle, JPEG, memory only
+preview_fps = 12
+preview_quality = 70
+face_s = 5.0                     # capture window, from the first good crop (like enroll_s)
+face_timeout_s = 30
+face_rate_hz = 8                 # face prints per second at most
+center_tol = 0.2                 # face centre this far off the middle: "move to the middle"
+min_face_share = 0.22            # face narrower than this share of the preview: "come closer"
+max_face_share = 0.8             # wider: "move back a little"
+dominant_ratio = 1.3             # the person must be this much wider than any other face
+same_person = 0.4                # every print this close to the first ones (one person only)
+# station face vs the glasses face the save started from (median of best matches). LFW, real
+# models, 143 people: the same person scored 0.55-0.84, different people -0.07-0.24
+identity_match = 0.35
+decision_timeout_s = 60          # "That isn't the person you were looking at" waits this long
+sentence = "Every morning I walk my dog through the park, buy fresh bread and orange juice, and enjoy watching children play by the quiet river."
+voice_timeout_s = 40
+vad_start = 0.5
+vad_end = 0.35
+quiet_db = -42                   # voiced speech quieter than this (dBFS): "speak up"
+loud_db = -8                     # louder, or clipping: "a bit softer"
+clip_level = 0.98
+min_snr_db = 10                  # speech this close to the noise floor: "too noisy"
+pause_hint_s = 1.5               # silent this long before enough speech: "keep talking"
+level_hz = 15                    # level meter messages per second
+camera_source = ""               # tests / demos: a video file instead of the laptop camera
+mic_source = ""                  # tests / demos: a WAV file instead of the laptop mic
 
 [rhythm]
 low_band = [470, 570]

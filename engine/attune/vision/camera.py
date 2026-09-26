@@ -13,12 +13,18 @@ Section 1 - Vision. TODO: V-01. Plan: section 05 "Capture".
   seconds looks for the named camera again; once it's back it switches to it.
 - A video file can stand in for the camera (tests and demos), played back at
   its own frame rate.
+- A camera opened with `exclusive=True` (the enrollment station, V-23) reserves its
+  device while it holds it; other readers skip a reserved device when they fall back,
+  so two readers never fight over one camera.
+- Infrared cameras (Windows Hello) are never a fallback: they see no colour and no one's
+  face as the other cameras do. Only a camera named for them opens one.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -32,6 +38,13 @@ import cv2
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+_IR = re.compile(r"(\bIR\b|infrared)", re.IGNORECASE)
+
+
+def is_infrared(name: str) -> bool:
+    """A Windows Hello IR camera (by its device name)."""
+    return bool(_IR.search(name or ""))
 
 
 @dataclass
@@ -60,8 +73,31 @@ def list_cameras() -> list[CameraInfo]:
         return []
 
 
-def pick_camera(name: str, fallback_any: bool = True) -> CameraInfo | None:
-    cams = list_cameras()
+_reserved: set[str] = set()  # device names an exclusive reader holds right now
+_reserved_lock = threading.Lock()
+
+
+def reserve(name: str) -> None:
+    with _reserved_lock:
+        _reserved.add(name)
+
+
+def release(name: str) -> None:
+    with _reserved_lock:
+        _reserved.discard(name)
+
+
+def reserved() -> frozenset[str]:
+    with _reserved_lock:
+        return frozenset(_reserved)
+
+
+def pick_camera(
+    name: str,
+    fallback_any: bool = True,
+    exclude: Callable[[CameraInfo], bool] | None = None,
+) -> CameraInfo | None:
+    cams = [cam for cam in list_cameras() if not (exclude and exclude(cam))]
     if sys.platform == "darwin":
         # USB VID/PID identifies external webcams without depending on their brand.
         external = [cam for cam in cams if _is_external(cam)]
@@ -105,8 +141,13 @@ class Camera:
         clock: Callable[[], float] = time.perf_counter,
         on_frame: Callable[[int, float, np.ndarray], None] | None = None,
         on_status: Callable[[bool, str], None] | None = None,
+        exclusive: bool = False,
+        exclude: Callable[[CameraInfo], bool] | None = None,
     ):
         self.name = name
+        self.exclusive = exclusive  # reserve the device while this reader holds it
+        self.exclude = exclude  # devices this reader must never open
+        self._holding: str | None = None  # the device name this reader has reserved
         self.width, self.height, self.fps = width, height, fps
         self.source = source
         self.fallback_any = fallback_any
@@ -168,9 +209,12 @@ class Camera:
             )
             self.device_name = f"camera {self.source}"
         else:
-            info = pick_camera(self.name, self.fallback_any)
+            info = pick_camera(self.name, self.fallback_any, self._skip)
             if info is None:
                 return None
+            if self.exclusive:
+                reserve(info.name)
+                self._holding = info.name
             cap = cv2.VideoCapture(info.index, info.backend)
             self.device_name = info.name
             self.on_fallback = not _is_preferred(info, self.name)
@@ -188,6 +232,20 @@ class Camera:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
 
+    def _skip(self, cam: CameraInfo) -> bool:
+        """Never open an excluded device, one another reader has reserved, or an IR camera
+        this reader didn't ask for by name."""
+        if self.exclude is not None and self.exclude(cam):
+            return True
+        if is_infrared(cam.name) and not _matches(self.name, cam.name):
+            return True
+        return cam.name in reserved() and cam.name != self._holding
+
+    def _release(self) -> None:
+        if self._holding is not None:
+            release(self._holding)
+            self._holding = None
+
     def _set_status(self, ok: bool, detail: str) -> None:
         # A switch between cameras keeps ok=True but changes the device in the detail.
         if ok != self.connected or (ok and detail != self._detail):
@@ -197,19 +255,23 @@ class Camera:
                 self.on_status(ok, detail)
 
     def _preferred_is_back(self) -> bool:
-        return any(_is_preferred(cam, self.name) for cam in list_cameras())
+        return any(_is_preferred(cam, self.name) and not self._skip(cam) for cam in list_cameras())
 
     def _run(self) -> None:
         while not self._stop.is_set():
             cap = self._open()
             if cap is None:
+                self._release()
                 self._set_status(False, "camera lost")
                 self._stop.wait(1.0)
                 continue
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self._read_loop(cap, f"{self.device_name} {w}x{h}")
-            cap.release()
+            try:
+                self._read_loop(cap, f"{self.device_name} {w}x{h}")
+            finally:
+                cap.release()
+                self._release()
 
     def _read_loop(self, cap: cv2.VideoCapture, detail: str) -> None:
         file_period = 1.0 / (cap.get(cv2.CAP_PROP_FPS) or 30.0) if self.is_file else 0.0
