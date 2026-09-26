@@ -12,8 +12,8 @@
  */
 
 import {
-  W, H, FD, FT, MINT, AMBER, RED, ACCENT, font, clamp, easeOut, hexA, rrect, textW, glass, icon, eqBars,
-  logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX,
+  FD, FT, MINT, AMBER, RED, ACCENT, font, clamp, easeOut, hexA, rrect, textW, glass, icon, eqBars,
+  logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX, REGION,
 } from './hud.js';
 
 const SIDE_WORD = { left: 'Left', right: 'Right', behind: 'Behind', none: 'Nearby' };
@@ -27,10 +27,11 @@ export function t3Flash(age) {
   return beep ? 0.55 + 0.45 * Math.cos((bl / 0.5) * Math.PI * 0.5) : Math.max(0, 0.35 - (bl - 0.5) * 0.7);
 }
 
-// ---------------------------------------------------------------- status pill (top-left)
-const STATUS = { x: 46, y: 38, h: 54 };
+// ---------------------------------------------------------------- status pill (top-left of the display)
 export function drawStatus(ctx, blur, view, anim, a = 1) {
-  const { x, y, h } = STATUS;
+  const x = REGION.x + 26;
+  const y = REGION.y + 22;
+  const h = 54;
   const labels = { listening: 'Listening', paused: 'Paused', alert: 'Sound alert', connecting: 'Connecting…' };
   const colors = { listening: MINT, paused: 'rgba(255,255,255,0.55)', alert: view.activeAlert?.level === 'urgent' ? RED : AMBER, connecting: AMBER };
   const label = labels[view.status];
@@ -93,17 +94,20 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
   const color = al.acked ? MINT : al.color;
   if (!al.acked) {
     ctx.save();
-    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, W * 0.62);
+    const R = REGION;
+    const cx = R.x + R.w / 2;
+    const cy = R.y + R.h / 2;
+    const g = ctx.createRadialGradient(cx, cy, R.h * 0.42, cx, cy, R.w * 0.62);
     g.addColorStop(0, 'rgba(255,40,50,0)');
     g.addColorStop(1, `rgba(255,40,50,${0.55 * a * flash})`);
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(R.x, R.y, R.w, R.h);
     ctx.restore();
     edgeGlow(ctx, al.side, RED, a * (0.5 + 0.5 * flash), 640);
   }
   const w = 780;
   const h = 150;
-  const x = W / 2 - w / 2;
+  const x = REGION.x + REGION.w / 2 - w / 2;
   const yy = y + (1 - easeOut(clamp(al.age / 0.3))) * -30;
   glass(ctx, blur, x, yy, w, h, 36, {
     alpha: a, glow: color, tint: al.acked ? 'rgba(12,20,18,0.58)' : 'rgba(28,10,12,0.6)',
@@ -146,7 +150,7 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
       { key: 'A', gap: 8 },
       { text: 'acknowledge', font: font(450, 19, FT), color: 'rgba(255,255,255,0.62)' },
     ];
-  pill(ctx, blur, W / 2, yy + h + 18, 46, parts, { a: a * clamp((al.age - 0.35) / 0.3), align: 'center' });
+  pill(ctx, blur, REGION.x + REGION.w / 2, yy + h + 18, 46, parts, { a: a * clamp((al.age - 0.35) / 0.3), align: 'center' });
   return { x, y: yy, w, h: h + 70 };
 }
 
@@ -168,7 +172,7 @@ function chipAlert(ctx, blur, al, y, anim, dim) {
     parts.push({ key: 'A', gap: 12 });
   }
   const yy = y + (1 - easeOut(clamp(al.age / 0.3))) * -24;
-  const r = pill(ctx, blur, W / 2, yy, h, parts, { a, align: 'center', glow: color });
+  const r = pill(ctx, blur, REGION.x + REGION.w / 2, yy, h, parts, { a, align: 'center', glow: color });
   if (slot >= 0) {
     directionChip(ctx, (r.xs[slot] + r.xs[slot + 1] - 12) / 2 + 2, yy + h / 2, 21, al.side, color, anim, a);
     if (al.age < 1.4) ripples(ctx, r.x + h * 0.38 + h * 0.31, yy + h / 2, 24, color, al.age, a * (1 - al.age / 1.4), 2, 0.7);
@@ -177,10 +181,10 @@ function chipAlert(ctx, blur, al, y, anim, dim) {
 }
 
 /** Draw every active alert; returns the rects they cover (obstacles for the bubbles). */
-export function drawAlerts(ctx, blur, view, anim) {
+export function drawAlerts(ctx, blur, view, anim, topY = REGION.y + 88) {
   const dim = view.paused ? 0.6 : 1;
   const rects = [];
-  let y = 118;
+  let y = topY;
   for (const al of view.alerts) {
     const r = al.level === 'urgent' && !al.watch ? urgentCard(ctx, blur, al, y + 14, anim, dim) : chipAlert(ctx, blur, al, y, anim, dim);
     rects.push(r);
@@ -200,7 +204,7 @@ export function drawAlerts(ctx, blur, view, anim) {
         { icon: confirmed ? 'check' : 'cross', color: '#0B1A17', bg: confirmed ? MINT : 'rgba(255,255,255,0.7)' },
         { text: confirmed ? `${p.name} added to your people` : `Not ${p.name}`, font: font(620, 24, FD), color: '#FFFFFF' },
       ];
-    const r = pill(ctx, blur, W / 2, y, 58, parts, { a: p.alpha, align: 'center', glow: ACCENT });
+    const r = pill(ctx, blur, REGION.x + REGION.w / 2, y, 58, parts, { a: p.alpha, align: 'center', glow: ACCENT });
     rects.push(r);
     y += 74;
   }
@@ -208,7 +212,7 @@ export function drawAlerts(ctx, blur, view, anim) {
 }
 
 // ---------------------------------------------------------------- toasts (top centre)
-export function drawToasts(ctx, blur, view, anim, topY = 40) {
+export function drawToasts(ctx, blur, view, anim, topY = REGION.y + 22) {
   let y = topY;
   const rects = [];
   for (const t of view.toasts) {
@@ -226,7 +230,7 @@ export function drawToasts(ctx, blur, view, anim, topY = 40) {
     }
     ctx.save();
     ctx.translate(0, (1 - easeOut(a)) * -18);
-    rects.push(pill(ctx, blur, W / 2, y, 56, parts, { a, align: 'center', glow: t.color ?? MINT }));
+    rects.push(pill(ctx, blur, REGION.x + REGION.w / 2, y, 56, parts, { a, align: 'center', glow: t.color ?? MINT }));
     ctx.restore();
     y += 66;
   }
@@ -237,7 +241,7 @@ export function drawToasts(ctx, blur, view, anim, topY = 40) {
 export function drawPaused(ctx, blur, view, anim) {
   if (!view.paused) return;
   const a = clamp(view.pausedAge / 0.3);
-  const y = H / 2 - 36;
+  const y = REGION.y + REGION.h / 2 - 36;
   const parts = [
     { icon: 'pause', color: '#FFFFFF', bg: 'rgba(255,255,255,0.18)' },
     { text: 'Paused', font: font(680, 30, FD), color: '#FFFFFF', gap: 14 },
@@ -245,7 +249,7 @@ export function drawPaused(ctx, blur, view, anim) {
     { key: 'P', gap: 6 },
     { text: 'resume', font: font(450, 20, FT), color: 'rgba(255,255,255,0.6)' },
   ];
-  pill(ctx, blur, W / 2, y, 72, parts, { a, align: 'center' });
+  pill(ctx, blur, REGION.x + REGION.w / 2, y, 72, parts, { a, align: 'center' });
 }
 
 export { dot, rrect, keycap };

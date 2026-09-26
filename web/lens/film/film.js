@@ -220,26 +220,39 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     return { status: 'enrolled', label: p.name };
   }
 
+  /** Index of the segment that shows film time t (the last one started, in a gap between them). */
+  function segAt(t) {
+    let k = segs.findIndex((s) => t >= s.t0 && t < s.t1);
+    if (k < 0) {
+      k = 0;
+      for (let i = 0; i < segs.length; i++) if (segs[i].t0 <= t) k = i;
+    }
+    return k;
+  }
+
   // ---- per-frame emission
-  function tick() {
+  // tick() follows the playing video; tick(at) is offline rendering: film time is `at` exactly,
+  // whatever the video shows (the caller seeks the picture separately with frameAt).
+  function tick(at) {
     if (!segs.length) return;
     let seg = segs[cur];
     player.update();
+    const offline = at != null;
     // until the new clip has a picture, the old frame holds and nothing is drawn over it
-    if (!player.ready) return;
+    if (!offline && !player.ready) return;
     const v = player.video;
     const segEnd = seg.in + (seg.t1 - seg.t0);
-    if (active && playing && (v.ended || v.currentTime >= segEnd - 0.03)) {
+    if (!offline && active && playing && (v.ended || v.currentTime >= segEnd - 0.03)) {
       go(cur + 1);
       seg = segs[cur];
       return;
     }
     // browsers may leave a clip paused after a seek or a blocked autoplay: nudge it
-    if (active && playing && v.paused && v.readyState >= 2 && performance.now() - lastNudge > 500) {
+    if (!offline && active && playing && v.paused && v.readyState >= 2 && performance.now() - lastNudge > 500) {
       lastNudge = performance.now();
       v.play().catch(() => {});
     }
-    const media = v.presented ?? v.currentTime;
+    const media = offline ? seg.in + (at - seg.t0) : v.presented ?? v.currentTime;
     filmT = Math.min(seg.t1, Math.max(seg.t0, seg.t0 + (media - seg.in)));
     const t = filmT;
     setClock(t);
@@ -416,6 +429,40 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     seek(t) {
       const k = segs.findIndex((s) => t >= s.t0 && t < s.t1);
       if (k >= 0) go(k, t);
+    },
+    /** Offline rendering: the segment index for film time t, and a segment's time range. */
+    segmentAt: segAt,
+    segmentRange(k) {
+      const s = segs[k];
+      return { t0: s.t0, t1: s.t1, start: s.start };
+    },
+    get segment() {
+      return cur;
+    },
+    /** Offline rendering: stop playback and restart the script at film time t (clears the HUD state). */
+    offlineStart(t) {
+      if (playing) {
+        playing = false;
+        player.setPlaying(false);
+      }
+      const k = segAt(t);
+      go(k, Math.min(segs[k].t1, Math.max(segs[k].t0, t)));
+    },
+    /** Offline rendering: show exactly the video frame for film time t; resolves once it is painted. */
+    async frameAt(t, timeoutMs = 8000) {
+      const seg = segs[cur];
+      const tt = Math.min(seg.t1 - 0.001, Math.max(seg.t0, t));
+      const ct = seg.in + (tt - seg.t0) + 0.001; // a hair past the frame's start, never the previous frame
+      const next = segs[(cur + 1) % segs.length];
+      player.cue(seg.clip, ct, { clip: next.clip, t: next.in + (next.start - next.t0) });
+      const t0 = performance.now();
+      for (;;) {
+        const v = player.video;
+        player.update();
+        if (player.ready && v && !v.seeking && v.readyState >= 2 && Math.abs(v.currentTime - ct) < 0.02 && !v.dirty) return true;
+        if (performance.now() - t0 > timeoutMs) return false;
+        await new Promise((r) => setTimeout(r, 15));
+      }
     },
     /** Same commands as the engine link (docs/contracts.md section 4). */
     send(name, args = {}) {
