@@ -85,7 +85,7 @@ def _is_external(cam: CameraInfo) -> bool:
 
 
 def _is_preferred(cam: CameraInfo, name: str) -> bool:
-    return _is_external(cam) if sys.platform == "darwin" else _matches(name, cam.name)
+    return _is_external(cam) if sys.platform == "darwin" else not name or _matches(name, cam.name)
 
 
 class Camera:
