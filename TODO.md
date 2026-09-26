@@ -76,10 +76,10 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 3 – Hardware & Services
 
-- [x] H-01 Firmware: READY with the I²C driver probe, LV every 50 ms, HB · M0 — written in #19; bench-checked on the UNO R3 (#PR)
+- [x] H-01 Firmware: READY with the I²C driver probe, LV every 50 ms, HB · M0 — written in #19; bench-checked on the UNO R3 (#88)
 - [ ] H-02 Firmware: touch gestures (tap, hold, double) · M0 — written in #19; compile + bench check on the rig left
-- [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2 — written in #19; taps and timing bench-checked on the R3 (#PR); LEDs not yet watched
-- [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2 — written in #19; safety stop and CFG bench-checked on the R3 (#PR); LED 13 codes not yet watched
+- [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2 — written in #19; taps and timing bench-checked on the R3 (#88); LEDs not yet watched
+- [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2 — written in #19; safety stop and CFG bench-checked on the R3 (#88); LED 13 codes not yet watched
 - [x] H-05 Serial link: find by USB ID, no DTR reset, READY wait, HB, auto-reconnect; publishes `sensors.*` and `hw.link` · M0 (#19)
 - [x] H-06 Touch router (alert > name > nothing; double tap = pause); publishes `touch.action` · M2 (#19) — P-29: double tap = save this person, triple tap = pause
 - [x] H-07 ElevenLabs streaming voice (key from .env) · M2 (#19)
@@ -88,12 +88,12 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-10 SQLite schema (data/history.db): tables, full-text search (FTS5), talk-time query, auto-delete after 24 h · M1 (#19)
 - [x] H-11 History writer on its own thread (captions keep running if it fails), and forget session · M1 (#19)
 - [x] H-12 History queries and API router (`/api/history/...`) · M2 (#19)
-- [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — rig assembled; T-H1 passed, T-H3–T-H7 partly logged (#PR); T-H2, T-H8 and the hands-on parts left
+- [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — rig assembled; T-H1 passed, T-H3–T-H7 partly logged (#88); T-H2, T-H8 and the hands-on parts left
 - [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
 - [x] H-15 CAD rig page matches the real kit: UNO R3, servo tapper, no motor driver (#43)
 - [x] H-16 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
 - [x] H-17 Test patterns stop after one cycle; board restarts (brown-out) noticed and logged; heartbeat kept within 0.1–1 s; simulator reboot/heartbeat/sound controls; speech_out device "none" (#61)
-- [x] H-18 Firmware 1.1.1: no false link loss (the watchdog's time math wrapped on ~1 % of heartbeats and stopped a playing alarm about once a minute) and no skipped one-shot patterns; the engine plays a real alert's T3/T4 again when the board says READY (#PR)
+- [x] H-18 Firmware 1.1.1: no false link loss (the watchdog's time math wrapped on ~1 % of heartbeats and stopped a playing alarm about once a minute) and no skipped one-shot patterns; the engine plays a real alert's T3/T4 again when the board says READY (#88)
 
 ## Section 4 – Pages, Engine & Demo
 
