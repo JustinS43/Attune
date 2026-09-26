@@ -21,11 +21,14 @@
  *   long enough to be read (store.js); at most three at a time.
  * - Off-screen speakers dock to fixed edge slots in the order they arrived; the wearer's own
  *   words sit in the "You" bar; translations show the original line plus a language tag.
+ * - Calm when many people talk: nothing blinks, pulses or loops. The speaking meter is a still
+ *   glyph that only rises or settles (about 0.2 s) when a speaker starts or stops, held through
+ *   short pauses; docked speakers get one static chevron toward their side and a steady edge light.
  */
 
 import {
   FD, FT, MINT, ACCENT, font, clamp, lerp, easeOut, hexA, rrect, textW, glass, icon,
-  eqBars, dot, keycap, chevrons, faceBrackets, edgeGlow, REGION, tailFill,
+  eqBars, dot, keycap, chevrons, arrow, faceBrackets, edgeGlow, REGION, tailFill,
   springStep, createLineWrap, scrollTo, REDUCED_MOTION,
 } from './hud.js';
 
@@ -58,6 +61,8 @@ const SLOT_HOLD_S = 0.7; // an unfit slot is tolerated this long before the bubb
 const MOVE_W = 16; // spring stiffness (rad/s): a move settles in about 0.25 s
 const WIDTHS = [1, 0.82, 0.68]; // share of the full reserved width tried when space is tight
 const SAMPLE = 'Did you hear the doorbell a minute ago? The meeting starts at three.';
+const SPEAK_HOLD_S = 0.6; // a speaking glyph stays up through pauses this short
+const STILL = 0.6; // fixed phase for eqBars: a still level glyph, never a moving meter
 const R = () => REGION;
 /** The status pill (alerts.js drawStatus) is always there: slots slide around it. */
 const pillRect = () => ({ x: R().x + 14, y: R().y + 12, w: 440, h: 78 });
@@ -287,19 +292,17 @@ export function createBubbleLayer() {
     ctx.restore();
   }
 
-  function drawHeader(ctx, hd, x, cy, anim) {
+  function drawHeader(ctx, hd, x, cy) {
     let hx = x;
     if (hd.lead === 'userplus') {
       icon(ctx, 'userplus', hx - 2, cy - 11, 22, 'rgba(255,255,255,0.85)', 2);
       hx += 30;
     } else if (hd.lead === 'ring') {
-      const p = REDUCED_MOTION ? 1 : 0.5 + 0.5 * Math.sin(anim * 4);
       ctx.save();
       ctx.strokeStyle = hd.color;
       ctx.lineWidth = 2;
-      ctx.globalAlpha *= 0.5 + 0.5 * p;
       ctx.beginPath();
-      ctx.arc(hx + 7, cy, 7 + p * 1.5, 0, Math.PI * 2);
+      ctx.arc(hx + 7, cy, 8, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
       hx += 26;
@@ -327,7 +330,7 @@ export function createBubbleLayer() {
     return hx;
   }
 
-  function drawLangTag(ctx, b, x, cy, anim) {
+  function drawLangTag(ctx, b, x, cy) {
     const w = 94;
     rrect(ctx, x, cy - 14, w, 28, 14);
     ctx.fillStyle = 'rgba(255,255,255,0.14)';
@@ -340,13 +343,15 @@ export function createBubbleLayer() {
     if (b.translated) ctx.fillText(`${code} → EN`, x + 31, cy + 1);
     else {
       ctx.fillText(code, x + 31, cy + 1);
+      // translation pending: three still dots (no blinking)
+      ctx.save();
+      ctx.globalAlpha *= 0.7;
       for (let i = 0; i < 3; i++) {
-        ctx.globalAlpha = 0.35 + 0.65 * Math.max(0, Math.sin(anim * 6 - i * 0.8));
         ctx.beginPath();
         ctx.arc(x + 62 + i * 8, cy + 1, 2.2, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.globalAlpha = 1;
+      ctx.restore();
     }
     return w;
   }
@@ -393,6 +398,19 @@ export function createBubbleLayer() {
     ctx.restore();
   }
 
+  /**
+   * The speaking glyph's height (0.18 quiet .. 1 speaking) for one card. It changes only when the
+   * speaker starts or stops (held through pauses under SPEAK_HOLD_S), easing over about 0.2 s.
+   */
+  function speakLevel(o, on, anim) {
+    if (on) o.spkAt = anim;
+    const want = o.spkAt != null && anim - o.spkAt < SPEAK_HOLD_S ? 1 : 0;
+    const dt = o.spkT == null ? 1 : clamp(anim - o.spkT, 0, 0.1);
+    o.spkT = anim;
+    o.spk = REDUCED_MOTION || o.spk == null ? want : o.spk + (want - o.spk) * (1 - Math.exp(-dt * 16));
+    return lerp(0.18, 1, o.spk);
+  }
+
   function drawCard(ctx, card, anim) {
     const { x, y, w, h } = card;
     const a = card.a;
@@ -418,7 +436,6 @@ export function createBubbleLayer() {
     if (hd.unknown) {
       rrect(ctx, x + 1, y + 1, w - 2, h - 2, r - 1);
       ctx.setLineDash([7, 6]);
-      ctx.lineDashOffset = REDUCED_MOTION ? 0 : -anim * 18;
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
       ctx.lineWidth = 1.6;
       ctx.stroke();
@@ -429,14 +446,14 @@ export function createBubbleLayer() {
     ctx.save();
     rrect(ctx, x, y, w, h, r);
     ctx.clip();
-    drawHeader(ctx, hd, x + PADX - (card.kind === 'tag' ? 2 : 0), cy, anim);
+    drawHeader(ctx, hd, x + PADX - (card.kind === 'tag' ? 2 : 0), cy);
     if (card.textA > 0.01 && (card.b || card.lastB)) {
       const b = card.b ?? card.lastB;
       ctx.save();
       ctx.globalAlpha *= card.textA;
       const rx = x + w - PADX - 26;
-      eqBars(ctx, rx, cy, hd.unknown ? '#FFFFFF' : hd.color, REDUCED_MOTION ? 0.6 : anim, b.speaking ? Math.max(0.55, card.face?.lip ?? 1) : 0.18, 18);
-      if (b.lang && b.lang !== 'en') drawLangTag(ctx, b, rx - 104, cy, anim);
+      eqBars(ctx, rx, cy, hd.unknown ? '#FFFFFF' : hd.color, STILL, speakLevel(card, b.speaking, anim), 18);
+      if (b.lang && b.lang !== 'en') drawLangTag(ctx, b, rx - 104, cy);
       let by = y + PADT + HEADH + BODY_GAP;
       if (card.orig) {
         if (b.orig) {
@@ -728,12 +745,11 @@ export function createBubbleLayer() {
       const y = R().y + 190 + d.idx * (DH + 16);
       const slide = REDUCED_MOTION ? 0 : (1 - easeOut(clamp(d.a / Math.max(0.01, aT || 1)))) * 40;
       const x = side === 'left' ? R().x + 64 - slide : R().x + R().w - 64 - DW + slide;
-      const pulse = REDUCED_MOTION ? 0.9 : 0.8 + 0.2 * Math.sin(anim * 4);
-      // edge light in the speaker's colour
+      // a steady, faint edge light in the speaker's colour
       ctx.save();
       const ex = side === 'left' ? R().x : R().x + R().w;
       const g = ctx.createRadialGradient(ex, y + d.h / 2, 0, ex, y + d.h / 2, 420);
-      g.addColorStop(0, hexA(o.color, (bb ? 0.42 : 0.22) * a * pulse));
+      g.addColorStop(0, hexA(o.color, (bb ? 0.26 : 0.14) * a));
       g.addColorStop(1, hexA(o.color, 0));
       ctx.fillStyle = g;
       ctx.fillRect(side === 'left' ? ex : ex - 420, y + d.h / 2 - 420, 420, 840);
@@ -742,7 +758,8 @@ export function createBubbleLayer() {
       ctx.save();
       ctx.globalAlpha *= a;
       const dir = side === 'left' ? -1 : 1;
-      chevrons(ctx, (side === 'left' ? x - 26 : x + DW + 26), y + Math.min(d.h, TAG_H) / 2, dir, o.color, 15, 4);
+      // one static chevron toward the speaker; its side only changes after the SLOT_HOLD_S hold above
+      chevrons(ctx, (side === 'left' ? x - 24 : x + DW + 24), y + Math.min(d.h, TAG_H) / 2, dir, o.color, 15, 4, 1, a);
       const hy = y + (d.h > TAG_H + 4 ? PADT + HEADH / 2 : d.h / 2);
       ctx.save();
       rrect(ctx, x, y, DW, d.h, RAD);
@@ -757,7 +774,7 @@ export function createBubbleLayer() {
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
       ctx.fillText(`·  ${side === 'left' ? 'on your left' : 'on your right'}`, x + PADX + 26 + nameW + 12, hy + 1);
       if (bb) {
-        eqBars(ctx, x + DW - PADX - 26, hy, o.color, REDUCED_MOTION ? 0.6 : anim, bb.speaking ? 1 : 0.18, 18);
+        eqBars(ctx, x + DW - PADX - 26, hy, o.color, STILL, speakLevel(d, bb.speaking && on, anim), 18);
         d.wrap.update(ctx, bb.tokens, DW - PADX * 2, F.body, anim);
         scrollTo(d.scroll, d.wrap.lines.length, rows, dt);
         drawText(ctx, d.wrap, d.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: DW - PADX * 2 });
@@ -771,22 +788,24 @@ export function createBubbleLayer() {
       if (o.side !== 'behind') continue;
       const b = o.bubble;
       const a = (b ? b.alpha : 1) * dim;
-      edgeGlow(ctx, 'behind', o.color, a * 0.8, 480);
+      edgeGlow(ctx, 'behind', o.color, a * 0.5, 480);
       const w = Math.min(R().w - 200, 900);
       const head = `${o.name}  ·  behind you`;
       const headW = textW(ctx, head, F.sub);
-      const text = b ? fitTail(ctx, b.text, w - headW - 110, F.sub) : '';
+      const text = b ? fitTail(ctx, b.text, w - headW - 136, F.sub) : '';
       glass(ctx, blur, midX() - w / 2, by - 50, w, 44, 22, { alpha: a, glow: o.color });
       ctx.save();
       ctx.globalAlpha *= a;
-      dot(ctx, midX() - w / 2 + 26, by - 28, 6, o.color);
+      // a static arrow pointing down: behind you
+      arrow(ctx, midX() - w / 2 + 28, by - 28, 20, Math.PI / 2, o.color, 3);
+      dot(ctx, midX() - w / 2 + 52, by - 28, 6, o.color);
       ctx.font = F.sub;
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(head, midX() - w / 2 + 44, by - 27);
+      ctx.fillText(head, midX() - w / 2 + 70, by - 27);
       if (text) {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.fillText(`—  ${text}`, midX() - w / 2 + 56 + headW, by - 27);
+        ctx.fillText(`—  ${text}`, midX() - w / 2 + 82 + headW, by - 27);
       }
       ctx.restore();
       by -= 54;
@@ -827,7 +846,7 @@ export function createBubbleLayer() {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(bb.name, x + PADX + 26, hy);
-    eqBars(ctx, x + w - PADX - 26, hy, bb.color, REDUCED_MOTION ? 0.6 : anim, bb.speaking ? 1 : 0.18, 18);
+    eqBars(ctx, x + w - PADX - 26, hy, bb.color, STILL, speakLevel(c, !!b && bb.speaking, anim), 18);
     c.wrap.update(ctx, bb.tokens, w - PADX * 2, F.body, anim);
     scrollTo(c.scroll, c.wrap.lines.length, rows, dt);
     drawText(ctx, c.wrap, c.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: w - PADX * 2 });
@@ -876,11 +895,12 @@ export function createBubbleLayer() {
     const { blur, anim } = env;
     const dim = view.paused ? 0.3 : 1;
 
-    // face brackets: strangers when they first appear, proposals while they wait for an answer
+    // face brackets: strangers when they first appear, proposals while they wait for an answer.
+    // The dashes stand still (t 0); brackets only fade in and out.
     for (const f of view.faces) {
       if (f.tiny || f.ghost) continue;
       const prop = f.proposal;
-      const t = REDUCED_MOTION ? 0 : anim;
+      const t = 0;
       if (prop && prop.state === 'proposed') {
         faceBrackets(ctx, f, { a: 0.9 * dim, color: ACCENT, dashed: true, t, scale: 1.3 });
       } else if (prop && prop.state === 'confirmed' && prop.age < 1.2) {

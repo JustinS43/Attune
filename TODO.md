@@ -101,6 +101,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-25 Caption layout polish: one steady slot per person, no jumping bubbles, calm Mono and Corner lines · M3 (#36)
 - [ ] P-26 Re-render the launch film in the three glasses looks (Colour, Mono, Corner) from the lens's own renderers · M3 – M4 — pipeline in progress, renders after P-25
 - [x] P-27 Phone enrollment tab: consented face photo preview and guided voice enrollment · M3 (#33)
+- [x] P-28 Calm Colour look: no flashing or pulsing, simple directional arrows (#39)
 
 ## Gates and end-to-end checks (whole team)
 
