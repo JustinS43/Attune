@@ -197,6 +197,21 @@ def test_only_prints_are_stored(tmp_path):
     assert record["automatic"] is False
 
 
+def test_a_station_print_names_the_voice_model_that_made_it(tmp_path):
+    class TaggedCAM:  # like CAMExtractor, which knows its model's tag (A-27)
+        model_id = "357a834f702b8016"
+
+        def __call__(self, audio):
+            return unit_vec(len(audio))
+
+    st = Station(tmp_path)
+    st.enroller._extractor = TaggedCAM()
+    st.start()
+    st.wait_closed()
+    record = json.loads((st.people / "sam-1" / "voice.json").read_text())
+    assert record["model"] == "357a834f702b8016"
+
+
 def test_preview_goes_with_a_face_box_and_is_jpeg(tmp_path):
     st = Station(tmp_path)
     st.start(client_id=9)
