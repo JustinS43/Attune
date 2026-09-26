@@ -33,6 +33,7 @@
 .enroll-prompt-label { margin: 21px 0 8px; }
 .enroll-prompt { padding: 18px; font-size: 19px; font-weight: 680; line-height: 1.38; }
 .enroll-again { margin-top: 9px; }
+.enroll-skip { margin-top: 13px; }
 .enroll-privacy { font-weight: 560; line-height: 1.4; }
 .enroll-form button:disabled, .enroll-photo + button:disabled { opacity: .52; cursor: not-allowed; }
 .enroll-contacts { margin-top: 13px; }

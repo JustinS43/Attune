@@ -62,7 +62,7 @@ const state = {
   speaking: '',
   hwLink: null,
   sessionId: null,
-  enroll: {phase: 'ready', name: '', consent: false, trackId: null, photo: '', face: 'idle', voice: 'idle', reason: ''},
+  enroll: {phase: 'ready', name: '', consent: false, trackId: null, personId: null, photo: '', face: 'idle', voice: 'idle', reason: ''},
   faces: new Map()
 };
 let enrollmentFeed = null;
@@ -262,14 +262,14 @@ function renderPeople() {
   heading('People', 'Your familiar faces, all in one place');
   if (state.live) content.append(pill());
   const add = el('div', 'contact-actions');
-  add.append(button('Remember someone', 'primary full', 'enroll'), button('Add a photo contact', 'outline full', 'contact-new'));
+  add.append(button('Remember someone', 'primary full', 'enroll'));
   content.append(add);
   content.append(el('h2', 'section-title', 'Contacts'));
   const list = el('div', 'people-list');
   const enrolled = state.people.map(person => ({...person, contact: state.contacts.find(item => item.personId === person.id)}));
   const uploaded = state.contacts.filter(item => !item.personId).map(item => ({id: item.id, name: item.name, contact: item, photoOnly: true}));
   const entries = [...enrolled, ...uploaded].sort((a, b) => a.name.localeCompare(b.name));
-  if (!entries.length) list.append(el('div', 'card empty', 'No contacts yet. Add a photo or invite someone to save their face and voice.'));
+  if (!entries.length) list.append(el('div', 'card empty', 'No contacts yet. Invite someone to save their face.'));
   for (const person of entries) {
     const card = el('div', 'card person-card');
     const top = el('div', 'person-top');
@@ -312,7 +312,7 @@ function renderPeople() {
   const hasProposal = state.live ? !!state.liveProposal : !!state.proposal;
   if (hasProposal) content.append(proposalCard());
   else content.append(el('div', 'card empty', 'No unconfirmed session names.'));
-  content.append(el('p', 'note', 'Photo contacts stay on this device. Recognition is added only after the person agrees and completes face and voice enrollment.'));
+  content.append(el('p', 'note', 'Photo contacts stay on this device. Face recognition is added only after the person agrees and completes live face enrollment.'));
 }
 
 function renderNewContact() {
@@ -354,7 +354,7 @@ function enrollLine(name) {
 function renderEnroll() {
   const enrollment = state.enroll;
   content.append(brand());
-  heading('Remember me', 'Save your face and voice so Attune can recognize you.', 'A familiar face, a familiar voice');
+  heading('Remember me', 'Save your face so Attune can recognize you. Voice is optional.', 'A familiar face, a familiar voice');
   content.append(pill());
 
   const steps = el('div', 'enroll-steps');
@@ -404,8 +404,8 @@ function renderEnroll() {
       label.append(input);
       const consent = el('label', 'enroll-consent');
       const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.id = 'enroll-consent'; checkbox.checked = enrollment.consent;
-      consent.append(checkbox, el('span', '', 'I agree to save my face and voice prints on this laptop so Attune can recognize me. I can delete them from People.'));
-      const start = button('Save my face and voice', 'primary full', 'start-enroll');
+      consent.append(checkbox, el('span', '', 'I agree to save my face print and, if I complete the voice step, my voice print on this laptop. I can delete them from People.'));
+      const start = button('Save my face', 'primary full', 'start-enroll');
       start.id = 'start-enroll';
       start.disabled = !enrollment.name.trim() || !enrollment.consent || !state.connected;
       form.append(label, consent, start);
@@ -416,13 +416,16 @@ function renderEnroll() {
     const face = el('div', `enroll-progress-row ${enrollment.face}`);
     face.append(el('b', '', enrollment.face === 'ok' ? '✓' : '1'), el('span', '', enrollment.face === 'ok' ? 'Face saved' : enrollment.face === 'fail' ? `Face needs another try: ${enrollment.reason}` : 'Saving several views of your face…'));
     const voice = el('div', `enroll-progress-row ${enrollment.voice}`);
-    voice.append(el('b', '', enrollment.voice === 'ok' ? '✓' : '2'), el('span', '', enrollment.voice === 'ok' ? 'Voice saved' : enrollment.face === 'ok' ? 'Speak clearly for at least five seconds' : 'Voice comes next'));
+    voice.append(el('b', '', enrollment.voice === 'ok' ? '✓' : '2'), el('span', '', enrollment.voice === 'ok' ? 'Voice saved' : enrollment.voice === 'skipped' ? 'Voice skipped for now' : enrollment.face === 'ok' ? 'Speak clearly for at least five seconds' : 'Voice comes next'));
     progress.append(face, voice);
     content.append(progress);
-    if (enrollment.face === 'ok' && enrollment.voice !== 'ok') {
+    if (enrollment.phase === 'voice') {
       content.append(el('p', 'eyebrow enroll-prompt-label', 'Say this aloud near the Attune microphone'));
       content.append(el('div', 'enroll-prompt card', enrollLine(enrollment.name)));
       content.append(el('p', 'note', 'Keep your face in view and speak naturally. If the voice step stays open, say another short sentence.'));
+      content.append(button('Skip voice for now', 'outline full enroll-skip', 'skip-voice'));
+    } else if (enrollment.voice === 'skipped') {
+      content.append(el('p', 'note', 'Your face is saved. Voice recognition is not set up yet.'));
     }
     if (enrollment.phase === 'done') {
       content.append(button('View saved people', 'primary full', 'people'), button('Enroll another person', 'outline full enroll-again', 'enroll-again'));
@@ -430,7 +433,7 @@ function renderEnroll() {
       content.append(button('Try again', 'primary full', 'enroll-again'));
     }
   }
-  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and voice prints on the laptop. Your contact photo stays on this device; the spoken recording is not kept.'));
+  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and optional voice prints on the laptop. Your contact photo stays on this device; the spoken recording is not kept.'));
   content.append(button(`View contacts (${state.people.length + state.contacts.filter(item => !item.personId).length})`, 'outline full enroll-contacts', 'people'));
 }
 
@@ -979,22 +982,23 @@ function onMessage(msg) {
         e.reason = msg.reason || 'Try again';
         e.phase = msg.ok ? 'voice' : 'error';
         e.voice = msg.ok ? 'wait' : 'idle';
+        e.personId = msg.ok ? msg.person_id : null;
+        if (msg.ok && msg.person_id && e.photo) {
+          const contact = {id: `person:${msg.person_id}`, personId: msg.person_id, name: e.name.trim(), photo: e.photo, consentT: Date.now() / 1000};
+          saveContact(contact).then(() => { state.contacts = [...state.contacts.filter(item => item.id !== contact.id), contact]; if (state.screen === 'people') refresh(); })
+            .catch(() => showToast('Recognition was saved, but this device could not save the contact photo.'));
+        }
       } else if (msg.part === 'voice' && e.face === 'ok') {
-        e.voice = msg.ok ? 'ok' : 'fail';
+        e.voice = msg.ok ? 'ok' : e.voice === 'skipped' ? 'skipped' : 'fail';
         e.reason = msg.reason || 'Try speaking again';
-        e.phase = msg.ok ? 'done' : 'error';
+        e.phase = msg.ok || e.phase === 'done' ? 'done' : 'error';
         if (msg.ok) {
           const person = state.people.find(p => p.id === msg.person_id);
           if (person) person.has_voice = true;
-          if (msg.person_id && e.photo) {
-            const contact = {id: `person:${msg.person_id}`, personId: msg.person_id, name: e.name.trim(), photo: e.photo, consentT: Date.now() / 1000};
-            saveContact(contact).then(() => { state.contacts = [...state.contacts.filter(item => item.id !== contact.id), contact]; if (state.screen === 'people') refresh(); })
-              .catch(() => showToast('Recognition was saved, but this device could not save the contact photo.'));
-          }
         }
       }
       if (state.screen === 'enroll') refresh();
-      if (e.phase === 'done') showToast(`${e.name} is saved with face and voice recognition.`);
+      if (msg.part === 'voice' && msg.ok) showToast(`${e.name} is saved with face and voice recognition.`);
       break;
     }
     case 'person_changed': {
@@ -1106,7 +1110,13 @@ document.addEventListener('click', async event => {
     link.send('enroll.start', {track_id: e.trackId, name: e.name.trim(), consent: true, consent_t: Date.now() / 1000});
     render(); return;
   }
-  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; portrait = ''; portraitReady = false; render(); return; }
+  if (action === 'skip-voice') {
+    const e = state.enroll;
+    if (e.phase !== 'voice' || e.face !== 'ok' || !e.personId) return;
+    e.phase = 'done'; e.voice = 'skipped';
+    render(); showToast(`${e.name}'s face is saved without voice.`); return;
+  }
+  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, personId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; portrait = ''; portraitReady = false; render(); return; }
   if (action === 'save-contact') {
     const draft = state.contactDraft;
     if (!draft.photo || !draft.name.trim() || !draft.consent) return showToast('Add a photo, name, and their consent first.');
