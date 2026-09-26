@@ -173,3 +173,30 @@ Calibration begins with `calibrate.step` using `level`, `mic`, `you`, `other`,
 `audio_times` and `video_times` for annotated claps; or `distances_checked: [1,2,3]`
 for the face check. Status is reported through `status.part`, part `calibration`.
 This permits manual video observations until an automatic clap detector exists.
+
+## Pages integration additions
+
+Every page opens `ws://<engine>/ws` with `web/shared/ws.js` and first sends
+`{"type": "hello", "role": "lens" | "console" | "phone", "frames": bool}`. Only
+pages that asked for frames get the binary `frame` messages. The engine answers
+with `welcome`.
+
+**Binary frame layout:** bytes 0–7 little-endian uint64 `frame_no`, bytes 8–15
+little-endian float64 capture `t` (engine clock), then a 1280×720 JPEG.
+
+**Boxes** in `scene` are `[x, y, w, h]` in 1280×720 pixels (scaled from the camera
+frame), so they line up with the frames the lens draws.
+
+Extra engine → page messages (JSON, with `seq` like the rest):
+
+| type | Sent to | Fields |
+|---|---|---|
+| `welcome` | the page that said hello | `session_id, paused, config: {bubble_chars, bubble_lines, bubble_fade_s, presets}` |
+| `paused` | all | `paused` (bool), sent on every change |
+| `enroll_result` | console, phone | as the bus event `enroll.result` |
+| `person_changed` | console, phone | as the bus event `person.changed` |
+| `hw_link` | console, phone | as the bus event `hw.link` |
+
+`caption.translation` is not sent on its own: the engine re-sends that utterance's
+`caption` with its `translation` field filled in. Times (`t`, `t_start`, word times)
+are engine-clock seconds; pages only compare them with each other.
