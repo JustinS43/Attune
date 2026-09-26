@@ -53,6 +53,12 @@ ENROLL_PROGRESS = "enroll.progress"
 SAVE_REQUEST = "save.request"
 SAVE_CANCEL = "save.cancel"
 PERSON_CHANGED = "person.changed"
+# Enrollment station (V-23 / A-21 / P-35): saving a person at the laptop's own camera and mic.
+# Each carries the `client_id` of the page that started the save; the hub sends them to it only.
+ENROLL_STATE = "enroll.state"  # which screen: {session_id, phase, name, ...}
+ENROLL_PREVIEW = "enroll.preview"  # live laptop-camera preview: {jpeg (bytes), face, hint}
+ENROLL_LEVEL = "enroll.level"  # laptop-mic level meter: {level, db, hint, voiced_s, need_s}
+ENROLL_MISMATCH = "enroll.mismatch"  # not the person the glasses saw: {score, threshold}
 SESSION_FORGET = "session.forget"
 PAUSED = "paused"
 # The camera switched on or off from a page (`camera.set`): {on}
@@ -96,6 +102,10 @@ TOPICS = frozenset(
         SAVE_REQUEST,
         SAVE_CANCEL,
         PERSON_CHANGED,
+        ENROLL_STATE,
+        ENROLL_PREVIEW,
+        ENROLL_LEVEL,
+        ENROLL_MISMATCH,
         SESSION_FORGET,
         PAUSED,
         COMMAND,
@@ -131,6 +141,17 @@ WS_CAMERA = "camera"
 WS_ENROLL_PROGRESS = "enroll_progress"
 WS_SAVE_REQUEST = "save_request"
 WS_SAVE_CANCEL = "save_cancel"
+# Enrollment station: only to the page that started the save (not in WS_AUDIENCE broadcasts)
+WS_ENROLL_STATE = "enroll_state"
+WS_ENROLL_PREVIEW = "enroll_preview"  # jpeg_b64 instead of the bus event's jpeg bytes
+WS_ENROLL_LEVEL = "enroll_level"
+WS_ENROLL_MISMATCH = "enroll_mismatch"
+WS_STATION = {
+    ENROLL_STATE: WS_ENROLL_STATE,
+    ENROLL_PREVIEW: WS_ENROLL_PREVIEW,
+    ENROLL_LEVEL: WS_ENROLL_LEVEL,
+    ENROLL_MISMATCH: WS_ENROLL_MISMATCH,
+}
 
 _ALL = frozenset(ROLES)
 # Which roles receive each JSON message type. Frames go to pages that asked for them.
@@ -181,7 +202,24 @@ COMMAND_NAMES = frozenset(
         "camera.set",
         "save.start",
         "save.cancel",
+        "enroll.station",
     }
+)
+# `enroll.station` {action, ...}: start {name, consent, consent_t, request_id?, track_id?};
+# retry / new_person / skip_voice / cancel {session_id}.
+ENROLL_STATION_ACTIONS = ("start", "retry", "new_person", "skip_voice", "cancel")
+# `enroll.state` phases, in the order a save usually goes through them.
+ENROLL_PHASES = (
+    "opening",
+    "face",
+    "mismatch",
+    "face_failed",
+    "saving",
+    "voice",
+    "voice_failed",
+    "done",
+    "cancelled",
+    "fallback",
 )
 
 # Touch gestures (sensors.touch) and what the touch router makes of them (touch.action target).
@@ -333,6 +371,7 @@ class VoiceHarvest:
     person_id: str
     t0: float
     t1: float
+    talkers: int = 1  # most faces talking at once over [t0, t1] (A-21)
 
 
 @dataclass
@@ -447,6 +486,8 @@ class EnrollResult:
     ok: bool
     reason: str = ""
     track_id: int | None = None
+    source: str = "glasses"  # "station": saved at the laptop (V-23 / A-21)
+    session_id: str | None = None  # the station save it belongs to
 
 
 @dataclass(frozen=True)
@@ -458,6 +499,8 @@ class EnrollProgress:
     fraction: float
     person_id: str | None = None
     hint: str = ""
+    source: str = "glasses"  # "station": saved at the laptop (V-23 / A-21)
+    session_id: str | None = None
 
 
 @dataclass
@@ -501,3 +544,65 @@ class StatusPart:
     ok: bool
     detail: str = ""
     metrics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EnrollState:
+    """Enrollment station: where a save at the laptop is up to (drives the phone's screens)."""
+
+    session_id: str
+    phase: str  # see ENROLL_PHASES
+    name: str = ""
+    client_id: int | None = None
+    track_id: int | None = None
+    request_id: str | None = None
+    person_id: str | None = None
+    face_ok: bool = False
+    voice_ok: bool = False
+    sentence: str = ""
+    need_s: float = 5.0
+    reason: str = ""
+
+
+@dataclass
+class EnrollPreview:
+    """One live preview frame from the laptop camera, for the page that started the save."""
+
+    session_id: str
+    jpeg: bytes  # in memory only; the hub sends it as jpeg_b64
+    width: int
+    height: int
+    face: list[float] | None = None  # [x, y, w, h] as fractions of the preview
+    ok: bool = False
+    hint: str = ""
+    client_id: int | None = None
+
+
+@dataclass
+class EnrollLevel:
+    """The laptop mic's level meter while the person reads the sentence."""
+
+    session_id: str
+    level: float  # 0..1 over -60..0 dBFS
+    db: float
+    hint: str = ""
+    voiced_s: float = 0.0
+    need_s: float = 5.0
+    clipping: bool = False
+    speech: bool = False
+    peak: float = 0.0
+    noise_db: float | None = None
+    client_id: int | None = None
+
+
+@dataclass
+class EnrollMismatch:
+    """The station face isn't the glasses face the save started from."""
+
+    session_id: str
+    score: float
+    threshold: float
+    name: str = ""
+    track_id: int | None = None
+    request_id: str | None = None
+    client_id: int | None = None

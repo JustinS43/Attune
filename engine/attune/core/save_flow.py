@@ -22,6 +22,11 @@ Section 4 - Pages, Engine & Demo. TODO: P-29. Contracts: docs/contracts.md (2, 3
 4. Cancel (`save.cancel` {request_id}), no answer within `consent_timeout_s` (60 s), their face
    leaving the view, pause or "forget session" publish `save.cancel` {request_id, reason}.
 
+Enrollment station (V-23, `[enroll] source = "station"`): the person is saved at the laptop's
+own camera and mic, so their consent arrives as `enroll.station` {action: start, ...} instead
+of `enroll.start`, and their face leaving the glasses' view (they walk over to the laptop)
+doesn't cancel the request; only Cancel, the timeout, pause and forget do.
+
 Bus callbacks only update state under a lock and publish outside it; a small thread checks
 the timeout.
 """
@@ -60,6 +65,9 @@ class SaveFlow:
         config = config or {}
         cfg = {**DEFAULTS, **(config.get("save") or {})}
         vision = config.get("vision") or {}
+        # V-23: saved at the laptop, so the glasses losing their face doesn't end the request
+        # (a config without an [enroll] table keeps the original glasses behaviour)
+        self.station = (config.get("enroll") or {}).get("source") == "station"
         self.bus = bus
         self.clock = clock or config.get("clock") or time.perf_counter
         self.timeout_s = float(cfg["consent_timeout_s"])
@@ -169,7 +177,7 @@ class SaveFlow:
             self.faces.pop(tid, None)
             for key in [k for k, p in self.proposals.items() if p["track_id"] == tid]:
                 self.proposals.pop(key)
-            if self.active and self.active["track_id"] == tid:
+            if self.active and self.active["track_id"] == tid and not self.station:
                 events = self._cancel_locked("lost")
         self._publish(events)
 
@@ -217,6 +225,12 @@ class SaveFlow:
             self._publish(events)
         elif name == "enroll.start" and args.get("consent") is True:
             self._on_consent(args)
+        elif (
+            name == "enroll.station"
+            and args.get("action", "start") == "start"
+            and args.get("consent") is True
+        ):
+            self._on_consent(args)  # V-23: consent given at the enrollment station
 
     def _on_consent(self, args: dict) -> None:
         """The person ticked consent on a page: the enrollment runs, the request is answered."""
