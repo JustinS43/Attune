@@ -21,7 +21,7 @@ If you're an agent and you don't know which section your human is working on, **
 | 4 | Pages, Engine & Demo | _name_ | `engine/attune/core/` (except contracts.py), `engine/attune/server/`, `engine/attune/replay/`, `engine/attune/main.py`, `engine/attune/config.py`, `engine/attune/__init__.py`, `engine/attune/__main__.py`, `web/`, `scripts/` (except make_test_tones.py), `tests/pages_engine/`, `docs/setup.md`, `docs/demo-script.md` |
 
 **Shared files** (never change them as part of feature work; use a small separate `[shared]` PR):
-`docs/contracts.md`, `engine/attune/core/contracts.py`, `engine/pyproject.toml`, `engine/uv.lock`, `config/attune.example.toml`, `.env.example`, `.gitignore`, `.github/`, `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/feature-map.md`, `docs/attune-build-plan.html`.
+`docs/contracts.md`, `engine/attune/core/contracts.py`, `engine/pyproject.toml`, `engine/uv.lock`, `config/attune.example.toml`, `.env.example`, `.gitignore`, `.gitattributes`, `.github/`, `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/feature-map.md`, `docs/attune-build-plan.html`.
 The exception is `TODO.md`: tick your own section's lines in your feature PR (see "The to-do list").
 
 ## Workflow for every change
