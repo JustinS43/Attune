@@ -185,7 +185,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
 <div class="wrap">
   <header class="masthead">
     <div>
-      <div class="eyebrow">Attune · hackathon prototype · build plan v3</div>
+      <div class="eyebrow">Attune · hackathon prototype · build plan v4</div>
       <h1>Attune build plan</h1>
     </div>
     <p class="lede">How to build the Attune prototype end to end: a webcam and MLH Hardware Lab sensors taped to your glasses, and free AI software running entirely on your laptop. The prototype puts captions on the right faces, learns names, translates, and turns doorbells and smoke alarms into lights and buzzes. Nothing here is built yet; every step says how to check that it works.</p>
@@ -198,9 +198,9 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
     <dl class="glance">
       <div><dt>The brain</dt><dd>Your <b>Dell Precision 5690</b> with its RTX 3500 Ada (12 GB). Everything runs locally and works offline.</dd></div>
       <div><dt>Hardware</dt><dd><b>12 MLH menu items</b>, plus your glasses, tape and laptop. The webcam also needs a <b>USB-C to USB-A adapter</b>.</dd></div>
-      <div><dt>Software cost</dt><dd><b>$0.</b> Local AI: NVIDIA and InsightFace models, Ollama with Qwen 3.5. Sponsor add-ons: <b>ElevenLabs</b> (free MLH credits) and <b>Tiger Data</b> (free, runs on the laptop).</dd></div>
+      <div><dt>Software cost</dt><dd><b>$0.</b> Local AI: NVIDIA and InsightFace models, Ollama with Qwen 3.5. Sponsor add-on: <b>ElevenLabs</b> (free MLH credits). Conversation history uses SQLite, built into Python.</dd></div>
       <div><dt>Targets</dt><dd>Captions within <b>1 s</b>, the right speaker at least <b>90%</b> of the time, a smoke alarm flagged within <b>4 s</b>, and <b>no false alarms</b> in 10 minutes.</dd></div>
-      <div><dt>Before the event</dt><dd>Install the tools, download about <b>12 GB</b> of models and packages, and run the 8 stack tests in <a href="#tests">section 7</a>.</dd></div>
+      <div><dt>Before the event</dt><dd>Install the tools, download about <b>11.5 GB</b> of models and packages, and run the 8 stack tests in <a href="#tests">section 7</a>.</dd></div>
       <div><dt>Biggest risks</dt><dd>Wiring the Grove parts to the Arduino, NVIDIA's speech model on Windows, and a noisy hall. See <a href="#risks">section 9</a>.</dd></div>
     </dl>
   </header>
@@ -248,7 +248,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
           <li><div><strong>One local language model does names, translation and descriptions.</strong> The Qwen 3.5 model already installed in Ollama returns names as structured data. It translates, and it describes a stranger's clothing. Using one model keeps GPU memory under control. A tap on the touch sensor confirms any name before it's used.</div></li>
           <li><div><strong>Two independent checks for alarms.</strong> A sound-recognition model (EfficientAT) runs alongside a detector for the standard smoke-alarm rhythm of three beeps and a pause. Together they give alerts that are both fast and hard to fool. The LEDs and motor then signal the alarm on the side it came from.</div></li>
           <li><div><strong>Consent first, and people's data stays on the laptop.</strong> Only people who agree are enrolled. Strangers are remembered for the current session only and are described by their clothing, never their body. There's a switch to forget the session. The only thing that goes online is a reply the wearer types for ElevenLabs to speak.</div></li>
-          <li><div><strong>Two sponsor add-ons, both on the laptop.</strong> ElevenLabs speaks replies the wearer types, through the laptop's speakers, which makes Attune two-way. Tiger Data stores the conversation history, so the wearer can scroll back through what was said.</div></li>
+          <li><div><strong>ElevenLabs speaks for the wearer, and the laptop keeps a day of history.</strong> ElevenLabs speaks replies the wearer types, through the laptop's speakers, which makes Attune two-way. A local SQLite file stores the conversation history for 24 hours, so the wearer can scroll back through what was said; then it deletes itself.</div></li>
         </ol>
       </section>
 
@@ -266,7 +266,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
             <tr><td class="num">1:10</td><td class="k">New person</td><td>A judge, not enrolled, walks up and says "Hi, I'm Sam."</td><td>"Person in blue jacket" becomes "Sam? tap to confirm". The wearer taps the glasses arm and the label becomes "Sam". The wearer presses a suggested reply, and the laptop says "Nice to meet you, Sam!" in an ElevenLabs voice.</td></tr>
             <tr><td class="num">1:40</td><td class="k">Translation</td><td>Maya says a line in Spanish.</td><td>English in the bubble, with the Spanish original shown small and an "ES" tag.</td></tr>
             <tr><td class="num">2:10</td><td class="k">Alerts</td><td>A teammate plays a doorbell on the JBL from the right, then a smoke-alarm recording from the left.</td><td>An amber "Doorbell, right" chip, then a red "Smoke alarm, left" banner. The left LED flashes and the motor buzzes the three-beep rhythm. A tap acknowledges it.</td></tr>
-            <tr><td class="num">2:40</td><td class="k">Privacy</td><td>The operator presses "Forget this session".</td><td>Sam's label disappears; Maya and Leo stay, because they consented. The history panel shows the whole conversation from Tiger Data, and Sam's lines are gone.</td></tr>
+            <tr><td class="num">2:40</td><td class="k">Privacy</td><td>The operator presses "Forget this session".</td><td>Sam's label disappears; Maya and Leo stay, because they consented. The history panel shows the whole conversation, and Sam's lines are gone.</td></tr>
           </tbody>
         </table></div>
 
@@ -335,7 +335,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
               <div class="stage stack">
                 <div class="chip key"><b>Who's talking</b><span>Fuses everything into one scene</span></div>
                 <div class="chip"><b>Ollama</b><span>Names, translation, descriptions, suggested replies</span></div>
-                <div class="chip"><b>Tiger Data</b><span>Conversation history</span></div>
+                <div class="chip"><b>History</b><span>Conversation history, kept 24 h</span></div>
               </div>
               <div class="arrow" aria-hidden="true">→</div>
               <div class="stage"><div class="chip"><b>Web server</b><span>Pages and live link</span></div></div>
@@ -390,7 +390,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
           <div><span class="t">600–800 ms</span><span class="d">The first 560 ms chunk is decoded in about 40 ms. "So what" appears in grey in Maya's bubble.</span></div>
           <div><span class="t">every 560 ms</span><span class="d">The bubble grows as each new chunk is decoded.</span></div>
           <div><span class="t">1.5 s</span><span class="d">Maya stops talking.</span></div>
-          <div><span class="t">1.9–2.1 s</span><span class="d">After 400 ms of silence the utterance ends. The final, punctuated text replaces the grey draft.<span class="sub">The line is saved to the Tiger Data history.</span></span></div>
+          <div><span class="t">1.9–2.1 s</span><span class="d">After 400 ms of silence the utterance ends. The final, punctuated text replaces the grey draft.<span class="sub">The line is saved to the conversation history.</span></span></div>
           <div><span class="t">2.1 s</span><span class="d">The final text goes to the name-learning filter. It contains no "I'm…" phrase, so the language model isn't called.</span></div>
         </div>
         <p>Video takes a separate, shorter path. Each frame reaches the lens view about 100–130 ms after the camera captured it. The frame and its face boxes travel in the same message, so tags never drift off faces.</p>
@@ -579,7 +579,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
             <tr><td class="k">Pages</td><td>Plain HTML and canvas, styled like the films' HUD</td><td>Own</td><td>No build step, and fast to change</td><td>—</td><td>—</td></tr>
             <tr><td class="k">Spoken replies</td><td>ElevenLabs, low-latency voice</td><td>Paid service; free MLH credits</td><td>Natural voice for replies the wearer types; MLH sponsor prize</td><td>Kokoro, offline</td><td><span class="badge b-check">Needs Wi-Fi</span></td></tr>
             <tr><td class="k">Offline voice</td><td>Kokoro-82M through sherpa-onnx</td><td>Apache 2.0</td><td>Tiny and fast, natural-sounding, with English and Spanish voices</td><td>Piper</td><td><span class="badge b-info">Researched</span></td></tr>
-            <tr><td class="k">History</td><td>Tiger Data's TimescaleDB on local PostgreSQL</td><td>Free to self-host</td><td>Time-series history with auto-delete and fast search; MLH sponsor prize</td><td>Plain PostgreSQL</td><td><span class="badge b-info">Researched</span></td></tr>
+            <tr><td class="k">History</td><td>SQLite with FTS5 search (built into Python)</td><td>Public domain</td><td>No server to install; one file; fast search; auto-delete after 24 hours</td><td>A JSON-lines file</td><td><span class="badge b-info">Researched</span></td></tr>
             <tr><td class="k">Recording</td><td>OBS Studio</td><td>GPL-2.0</td><td>Records the lens view with the GPU's encoder, so it costs almost no CPU</td><td>Chrome's built-in recorder</td><td><span class="badge b-info">Researched</span></td></tr>
             <tr><td class="k">Arduino tools</td><td>Arduino IDE 2 or arduino-cli, the driver's library, pyserial</td><td>AGPL, MIT, BSD</td><td>Standard tools</td><td>—</td><td><span class="badge b-info">Researched</span></td></tr>
           </tbody>
@@ -728,15 +728,14 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
           <li><strong>Only the typed text</strong> goes to ElevenLabs. Nothing anyone else says leaves the laptop.</li>
         </ul>
 
-        <h3>Conversation history (Tiger Data)</h3>
+        <h3>Conversation history</h3>
         <ul>
-          <li><strong>Storage.</strong> Tiger Data's TimescaleDB runs on the laptop, on top of PostgreSQL. Every final caption, translation, typed reply, alert and confirmed name becomes a timestamped row.</li>
+          <li><strong>Storage.</strong> One SQLite file on the laptop (data/history.db). Every final caption, translation, typed reply, alert and confirmed name becomes a timestamped row.</li>
           <li><strong>The history panel</strong> (press Y) lists sessions by time. Each one is a scrolling timeline with a color per speaker, and translations and alerts in line. It has a search box, a filter by person, and a "Sounds you missed" list.</li>
-          <li><strong>Tiger Data features to show judges:</strong> time-ordered hypertables, a continuous aggregate for talk time per person per minute (a small chart), a retention policy that deletes history after 7 days, and full-text search.</li>
+          <li><strong>Deleted after a day.</strong> Rows older than 24 hours are deleted when the engine starts and every 10 minutes. Search uses SQLite's built-in full-text index, and the talk-time chart (per person per minute) is a simple query.</li>
           <li><strong>Never stored:</strong> audio, video and face prints.</li>
           <li><strong>Consent.</strong> Names are saved only for people who agreed. Strangers are saved under their clothing label, and "Forget this session" deletes their rows too. ShellHacks is in Florida, which generally requires everyone's consent to record a conversation, and a saved transcript may count. This isn't legal advice.</li>
-          <li><strong>Ask the MLH coach</strong> whether a locally run TimescaleDB counts for the prize. If they require Tiger Cloud, use its free tier for the same rows.</li>
-          <li><strong>If the database stops,</strong> captions keep running; rows wait in memory and are written when it's back.</li>
+          <li><strong>If the history writer fails,</strong> captions keep running; rows wait in memory and are written when it's back.</li>
         </ul>
 
         <h3>Recording the demo</h3>
@@ -931,13 +930,13 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
 
         <h3>H · Start-up and faults</h3>
         <div class="timeline">
-          <div><span class="t">Start</span><span class="d">The engine opens the devices, loads the models (about 20–40 s), connects to the history database and sends Ollama a warm-up request. Then the status strip shows "Ready".</span></div>
+          <div><span class="t">Start</span><span class="d">The engine opens the devices, loads the models (about 20–40 s), opens the history file, deletes rows older than 24 hours, and sends Ollama a warm-up request. Then the status strip shows "Ready".</span></div>
           <div><span class="t">Fault</span><span class="d">The Arduino cable is pulled mid-demo. The HUD says "Glasses link lost" and captions carry on. It reconnects within 3 s of replugging.</span></div>
         </div>
         <div class="box dry"><span class="lbl">What if</span>
           <ul>
             <li><strong>Someone unplugs the charger.</strong> The GPU slows down and fps drops, so the status strip warns "On battery" (change 12).</li>
-            <li><strong>The history database stops.</strong> Captions carry on; rows wait in memory and are written when it's back.</li>
+            <li><strong>The history file can't be written.</strong> Captions carry on; the status strip shows "History paused".</li>
           </ul>
         </div>
 
@@ -1007,7 +1006,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
             <tr><td class="id">T-S5</td><td class="k">Alerts</td><td>Through the JBL at 1–3 m, play 20 synthetic T3 alarms, 20 T4, 20 real smoke-alarm recordings and 20 doorbells. Then play 10 min of music, speech and café noise.</td><td>Smoke ≥ 95% within 4 s. Doorbell ≥ 90% within 2 s. 0 false alerts in the noise.</td></tr>
             <tr><td class="id">T-S6</td><td class="k">Language jobs</td><td>Prepare 50 introductions (half of them traps), 30 Spanish sentences and 20 upper-body crops. Run them on qwen3.5 2b, 4b and 9b and on gemma4:12b.</td><td>Names: ≥ 90% found, ≤ 1 false name in 50, warm replies ≤ 1.2 s. Translations rated fine by a Spanish speaker ≥ 90%. Descriptor color right ≥ 85%. Pick the smallest model that passes.</td></tr>
             <tr><td class="id">T-S7</td><td class="k">Capture</td><td>Run the webcam at 1080p30 MJPG through Media Foundation (then DirectShow), and the mic through WASAPI, for 10 min.</td><td>A steady 30 fps; frames ≤ 80 ms old; no audio dropouts; the audio/video offset is measured.</td></tr>
-            <tr><td class="id">T-S8</td><td class="k">Replies and history</td><td>Claim the ElevenLabs code and send 20 replies; repeat with Wi-Fi off. Load 30 minutes of captions into TimescaleDB, search them, and run the 7-day retention policy on old test rows.</td><td>First sound ≤ 1.5 s median online; Kokoro takes over offline; no reply captioned twice; searches return in under 0.5 s; old rows are deleted.</td></tr>
+            <tr><td class="id">T-S8</td><td class="k">Replies and history</td><td>Claim the ElevenLabs code and send 20 replies; repeat with Wi-Fi off. Load 30 minutes of captions into the SQLite history, search them, and check that rows older than 24 hours are deleted.</td><td>First sound ≤ 1.5 s median online; Kokoro takes over offline; no reply captioned twice; searches return in under 0.5 s; old rows are deleted.</td></tr>
           </tbody>
         </table></div>
 
@@ -1046,7 +1045,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
             <tr><td class="k">Pull the Arduino cable</td><td>"Glasses link lost" on the HUD and "?" on the matrix; captions and faces continue</td><td>Reconnects ≤ 3 s after replugging</td></tr>
             <tr><td class="k">Stop Ollama</td><td>"Language model offline"; names, translation and descriptions pause, and everything else runs</td><td>Recovers ≤ 30 s after a restart, including warm-up</td></tr>
             <tr><td class="k">Pull the webcam</td><td>"Camera lost"; captions continue from the laptop mic</td><td>Recovers ≤ 5 s after replugging</td></tr>
-            <tr><td class="k">Stop the history database</td><td>"History paused"; captions keep running</td><td>No rows lost after it restarts</td></tr>
+            <tr><td class="k">Make the history file read-only</td><td>"History paused"; captions keep running</td><td>Writing resumes once the file is writable</td></tr>
             <tr><td class="k">Turn the laptop's Wi-Fi off</td><td>The lens view carries on, and replies switch to Kokoro</td><td>A reply is still spoken within 1.5 s</td></tr>
             <tr><td class="k">Kill the engine</td><td>A restart script brings it back, and the pages reconnect by themselves</td><td>Back within 15 s</td></tr>
             <tr><td class="k">Unplug the charger</td><td>"On battery" warning in the status strip</td><td>Warning within 5 s</td></tr>
@@ -1076,10 +1075,9 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
             <tr><td>EfficientAT with mn10_as weights</td><td>GitHub</td><td class="num">~0.02 GB</td><td>Yes</td></tr>
             <tr><td>Kokoro-82M multilingual (offline replies and test speech)</td><td>sherpa-onnx releases</td><td class="num">~0.35 GB</td><td>Yes</td></tr>
             <tr><td>TranslateGemma 4B</td><td>Ollama</td><td class="num">~3.3 GB</td><td>No</td></tr>
-            <tr><td>PostgreSQL with TimescaleDB</td><td>Official sites</td><td class="num">~0.4 GB</td><td>Yes</td></tr>
-            <tr><td>OBS Studio, Arduino IDE 2, uv</td><td>Official sites</td><td class="num">~0.4 GB</td><td>Yes</td></tr>
-            <tr><td class="k">Everything</td><td></td><td class="num">~12 GB</td><td></td></tr>
-            <tr><td class="k">Essentials only</td><td></td><td class="num">~8.5 GB</td><td></td></tr>
+                        <tr><td>OBS Studio, Arduino IDE 2, uv</td><td>Official sites</td><td class="num">~0.4 GB</td><td>Yes</td></tr>
+            <tr><td class="k">Everything</td><td></td><td class="num">~11.5 GB</td><td></td></tr>
+            <tr><td class="k">Essentials only</td><td></td><td class="num">~8 GB</td><td></td></tr>
           </tbody>
         </table></div>
         <p><strong>Test sounds:</strong> record your home smoke alarm's test beep on your phone, generate T3 and T4 tone files, and take two or three doorbell clips from Freesound's CC0 section.</p>
@@ -1097,7 +1095,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
           <li><label><input type="checkbox"><span>Run stack tests <span class="id">T-S1</span> to <span class="id">T-S8</span>, and record the numbers.</span></label></li>
           <li><label><input type="checkbox"><span>Windows: power mode "Best performance", audio enhancements off for the webcam mic, and NVIDIA's sysmem fallback off.</span></label></li>
           <li><label><input type="checkbox"><span>Ollama: apply the settings from section 5, and confirm every model loads with the internet off.</span></label></li>
-          <li><label><input type="checkbox"><span>Claim the ElevenLabs credit code on the MLH page, and install PostgreSQL with TimescaleDB.</span></label></li>
+          <li><label><input type="checkbox"><span>Claim the ElevenLabs credit code on the MLH page.</span></label></li>
           <li><label><input type="checkbox"><span>Test sounds: your smoke alarm's test beep, T3 and T4 tones, and CC0 doorbell clips, in a playlist on the phone that pairs with the JBL.</span></label></li>
           <li><label><input type="checkbox"><span>Pack: laptop and charger, USB-C to USB-A adapter (two if you have them), a USB-C to C cable, glasses, clear tape and electrical tape, and a marker for labels.</span></label></li>
           <li><label><input type="checkbox"><span>Agree on roles, and read this plan together.</span></label></li>
@@ -1242,7 +1240,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
           <thead><tr><th>Question</th><th>Answer</th></tr></thead>
           <tbody>
             <tr><td class="k">Does it need the internet?</td><td>No. Everything runs on this laptop. Only ElevenLabs speaking typed replies is online, and with Wi-Fi off a local voice takes over.</td></tr>
-            <tr><td class="k">Where is the conversation history kept?</td><td>In Tiger Data's database on this laptop. It deletes itself after 7 days, and Forget removes strangers straight away.</td></tr>
+            <tr><td class="k">Where is the conversation history kept?</td><td>In a SQLite file on this laptop. It deletes itself after 24 hours, and Forget removes strangers straight away.</td></tr>
             <tr><td class="k">What about privacy?</td><td>Only people who consent are enrolled. Strangers are remembered for this session only, and described by their clothing. One button forgets the session, and nothing leaves the laptop.</td></tr>
             <tr><td class="k">How does it know who's talking?</td><td>It matches lip movement to the sound, recognizes your own voice by how loud it is at the glasses, and uses voice prints for people off-screen.</td></tr>
             <tr><td class="k">How accurate is it?</td><td>Quote the <span class="id">T-E1</span> to <span class="id">T-E4</span> numbers measured at the event.</td></tr>
@@ -1290,7 +1288,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
             <tr><td>Safety stop</td><td>2 s without the laptop</td><td>Design</td></tr>
             <tr><td>Longest buzz; motor share</td><td>0.6 s; at most 60% of any 2 s</td><td>Design</td></tr>
             <tr><td>Bubble text</td><td>2 lines of about 42 characters; fade after 4 s</td><td>Captioning practice</td></tr>
-            <tr><td>History retention</td><td>7 days</td><td>Design</td></tr>
+            <tr><td>History retention</td><td>24 hours</td><td>Design</td></tr>
             <tr><td>Reply fallback</td><td>Kokoro if no ElevenLabs audio within 1.5 s</td><td>Design</td></tr>
             <tr><td>Mic ignored during a spoken reply</td><td>While it plays, plus 0.5 s</td><td>Dry run</td></tr>
             <tr><td>Ollama</td><td>Temperature 0, 4096-token context, keep loaded 30 min</td><td>Design</td></tr>
@@ -1321,7 +1319,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
               <li><a href="https://github.com/ollama/ollama">Ollama</a> and its <a href="https://ollama.com/blog/structured-outputs">structured outputs</a></li>
               <li><a href="https://ollama.com/library/translategemma">TranslateGemma</a>, <a href="https://github.com/Helsinki-NLP/Opus-MT">Opus-MT</a>, <a href="https://github.com/OpenNMT/CTranslate2">CTranslate2</a></li>
               <li><a href="https://github.com/pemistahl/lingua-py">Lingua</a></li>
-              <li><a href="https://elevenlabs.io/docs">ElevenLabs</a>, <a href="https://github.com/timescale/timescaledb">TimescaleDB</a> (<a href="https://www.tigerdata.com/">Tiger Data</a>)</li>
+              <li><a href="https://elevenlabs.io/docs">ElevenLabs</a>, <a href="https://www.sqlite.org/fts5.html">SQLite FTS5</a></li>
             </ul></div>
           <div class="card"><h4>Hardware</h4>
             <ul>
@@ -1343,7 +1341,7 @@ details.more summary { cursor: pointer; font-weight: 600; color: var(--accent-in
   </div>
 
   <footer class="foot">
-    <div><strong>Attune build plan v3</strong> · 2026-09-25 · Nothing here is built yet. Three feasibility tests have been run; the stack, hardware and end-to-end tests are saved for later.</div>
+    <div><strong>Attune build plan v4</strong> · 2026-09-25 · Nothing here is built yet. Three feasibility tests have been run; the stack, hardware and end-to-end tests are saved for later.</div>
     <div>Timings marked as expected come from published numbers and the dry runs. Replace them with measured numbers as the tests run.</div>
   </footer>
 </div>

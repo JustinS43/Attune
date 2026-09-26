@@ -1,0 +1,103 @@
+# Attune settings. Copy to config/attune.toml (gitignored) and edit there.
+# Shared file: add keys in a [shared] PR. Values come from the build plan; tune them at calibration.
+
+[engine]
+host = "127.0.0.1"
+port = 8000
+data_dir = "data"
+models_dir = "models"
+
+# ---------- Section 1 - Vision ----------
+[vision]
+camera_name = "Logitech"        # matched against the device name, never index 0
+width = 1920
+height = 1080
+fps = 30
+det_size = 960                  # T-S3 picks 640 / 960 / 1280
+min_face_px = 36
+min_crop_px = 60
+match_threshold = 0.45
+match_margin = 0.08
+match_hits = 3                  # within 1 s
+recheck_s = 2.0
+track_survive_s = 1.0
+lost_list_s = 10.0
+enroll_crops = 8
+enroll_min_crops = 5
+
+[fusion]
+lip_talking = 0.03
+lip_uncertain = 0.015
+hold_s = 0.5
+switch_ratio = 1.5
+voice_match = 0.5
+offscreen_exit_memory_s = 30
+side_db = 3.0
+harvest_after_s = 1.5
+first_words_wait_ms = 300
+rate_hz = 15
+
+# ---------- Section 2 - Audio & Language ----------
+[audio]
+device_name = "Logitech"
+sample_rate = 48000
+block_ms = 10
+vad_start = 0.5
+vad_end = 0.35
+min_speech_ms = 250
+end_silence_ms = 400
+asr_chunk_ms = 560
+languages = ["en", "es"]        # empty = auto-detect
+mute_after_reply_s = 0.5
+
+[alerts]
+window_s = 1.0
+hop_s = 0.5
+smoke_score = 0.5
+watch_score = 0.3
+doorbell_score = 0.4
+doorbell_rest_s = 5
+realert_s = 30
+clear_quiet_s = 15
+
+[llm]
+model = "qwen3.5:4b"
+fallback_model = "qwen3.5:2b"
+num_ctx = 4096
+keep_alive = -1
+think = false
+temperature = 0
+proposal_expiry_s = 10
+
+# ---------- Section 3 - Hardware & Services ----------
+[hardware]
+baud = 115200
+ready_timeout_s = 3
+heartbeat_s = 0.5
+report_ms = 50
+tap_ms = 400
+hold_ms = 800
+led_brightness = 180
+
+[speech_out]
+fallback_after_s = 1.5
+presets = [
+    "Nice to meet you",
+    "Can you repeat that?",
+    "One moment",
+    "Thank you",
+    "I read captions, go ahead",
+]
+
+[history]
+db_path = "data/history.db"
+retention_hours = 24             # rows older than this are deleted
+
+# ---------- Section 4 - Pages ----------
+[pages]
+frame_width = 1280
+frame_height = 720
+jpeg_quality = 80
+bubble_chars = 42
+bubble_lines = 2
+bubble_fade_s = 4

@@ -1,0 +1,13 @@
+-- SQLite schema
+--
+-- Section 3 - Hardware & Services
+-- TODO: H-10
+-- Contracts: docs/contracts.md
+-- Plan: docs/attune-build-plan.html, section 05 Conversation history
+--
+-- What to build:
+-- - Tables for sessions and timeline rows (captions, translations, replies, alerts, confirmed names), indexed by time;
+-- - an FTS5 table for search; talk time per person per minute comes from a GROUP BY query.
+-- - Rows older than 24 hours are deleted (see db.py). Never audio, video or face/voice prints.
+--
+-- Placeholder only - no code yet (MLH: project code is written during the event).

@@ -1,0 +1,5 @@
+# Same line endings on every laptop, so nobody rewrites whole files by accident
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary

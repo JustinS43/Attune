@@ -1,0 +1,8 @@
+# Words that are never names (~200)
+#
+# Section 2 - Audio & Language
+# TODO: A-12
+# Contracts: docs/contracts.md
+# Plan: docs/attune-build-plan.html, section 05 Learning names
+#
+# Placeholder only - no code yet (MLH: project code is written during the event).
