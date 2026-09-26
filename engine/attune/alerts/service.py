@@ -11,7 +11,7 @@ from attune.audio.runtime import Worker, engine_clock
 
 from .rhythm import RhythmDetector
 from .rules import AlertRules
-from .sound_model import SoundModel
+from .sound_model import CLIP_SAMPLES, SoundModel
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class AlertService:
             raise ValueError("alerts require a 1 s window and whole rhythm frames per hop")
         self.rules = AlertRules(config["alerts"], config["fusion"]["side_db"])
         self.audio = np.empty(0, np.float32)
+        self.recent = np.empty(0, np.float32)  # up to 10 s of context for the sound model
         self.levels = deque(maxlen=200)
         self.tone_levels = deque()
         self.rhythm_end = None
@@ -64,6 +65,7 @@ class AlertService:
 
     def _reset(self) -> None:
         self.audio = np.empty(0, np.float32)
+        self.recent = np.empty(0, np.float32)
         self.rhythm.reset()
         self.rhythm_end = None
         self.tone_levels.clear()
@@ -100,12 +102,14 @@ class AlertService:
             samples = np.asarray(e["samples"], dtype=np.float32)
             if self.last_t is not None and abs(e["t"] - self.last_t) > 1.5 / 32000:
                 self.audio = np.empty(0, np.float32)
+                self.recent = np.empty(0, np.float32)
                 self.rhythm.reset()
                 self.rhythm_end = None
                 self.tone_levels.clear()
                 self.rules.history.clear()
             self.last_t = e["t"] + len(samples) / 32000
             self.audio = np.concatenate((self.audio, samples))
+            self.recent = np.concatenate((self.recent, samples))[-(CLIP_SAMPLES + 32000) :]
             while len(self.audio) >= 32000:
                 window = self.audio[:32000]
                 end = self.last_t - (len(self.audio) - 32000) / 32000
@@ -135,7 +139,9 @@ class AlertService:
                     scores = {}
                     if self.model is not None:
                         try:
-                            scores = self.model.score(window)
+                            ahead = len(self.audio) - 32000  # samples after this window
+                            context = self.recent[: len(self.recent) - ahead]
+                            scores = self.model.score(context[-CLIP_SAMPLES:])
                         except Exception:
                             self.worker.error = "sound model failed; rhythm-only alerts remain active"
                             logger.exception("Sound classification failed; preserving rhythm evidence")

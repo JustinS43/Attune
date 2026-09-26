@@ -7,6 +7,10 @@ from pathlib import Path
 
 import numpy as np
 
+# EfficientAT was trained on 10 s AudioSet clips; on 1-3 s inputs its logits blow up
+# (every class near 1.0). Shorter context is repeated out to this length.
+CLIP_SAMPLES = 10 * 32000
+
 
 class SoundModel:
     """Load an exported waveform-to-logits TorchScript model and its label order."""
@@ -29,11 +33,15 @@ class SoundModel:
         self.model = torch.jit.load(config["model_path"], map_location=self.device).eval()
 
     def score(self, samples: np.ndarray) -> dict[str, float]:
-        """Score one second of 32 kHz mono PCM; label positions come from export."""
+        """Score the latest 1-10 s of 32 kHz mono PCM as one 10 s clip."""
         import torch
 
-        if len(samples) != 32000:
-            raise ValueError("expected one second at 32 kHz")
+        samples = np.asarray(samples, dtype=np.float32)
+        if samples.ndim != 1 or len(samples) < 32000:
+            raise ValueError("expected at least one second at 32 kHz")
+        samples = samples[-CLIP_SAMPLES:]
+        if len(samples) < CLIP_SAMPLES:
+            samples = np.resize(samples, CLIP_SAMPLES)  # repeats the audio
         with torch.inference_mode():
             logits = self.model(torch.from_numpy(samples[None, :]).to(self.device))
             scores = torch.sigmoid(logits).flatten().cpu().tolist()
