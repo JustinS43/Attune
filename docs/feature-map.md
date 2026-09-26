@@ -22,7 +22,7 @@ flowchart LR
     L["2 Language<br/>Ollama: names, translation, descriptions, replies"]
     H["3 Hardware link<br/>serial, touch router"]
     S["3 Speak for me<br/>ElevenLabs, Kokoro"]
-    DB["3 History<br/>TimescaleDB"]
+    DB["3 History<br/>SQLite, 24 h"]
     C["4 Core + server<br/>bus, config, WebSockets, replay"]
   end
   subgraph UI["Laptop screen + speakers (Section 4)"]
@@ -58,7 +58,7 @@ flowchart LR
 |---|---|---|---|---|
 | 1 | **Vision** | `engine/attune/vision/`, `engine/attune/fusion/`, `tests/vision/` | Camera, face finding, tracking, face naming, enrollment (face), lip motion, who's talking, instant colour labels | _name_ |
 | 2 | **Audio & Language** | `engine/attune/audio/`, `alerts/`, `llm/`, `calibration/`, `tests/audio_language/`, `docs/calibration.md`, `scripts/make_test_tones.py` | Mic, voice activity, captions, voice prints, sound alerts, name learning, translation, garment descriptions, suggested replies, calibration | _name_ |
-| 3 | **Hardware & Services** | `firmware/`, `engine/attune/hardware/`, `speech_out/`, `history/`, `tests/hardware_services/`, `docs/hardware/` | The rig, Arduino firmware, serial link, touch rules, ElevenLabs "speak for me" with Kokoro fallback, Tiger Data history | _name_ |
+| 3 | **Hardware & Services** | `firmware/`, `engine/attune/hardware/`, `speech_out/`, `history/`, `tests/hardware_services/`, `docs/hardware/` | The rig, Arduino firmware, serial link, touch rules, ElevenLabs "speak for me" with Kokoro fallback, conversation history (SQLite, deleted after 24 h) | _name_ |
 | 4 | **Pages, Engine & Demo** | `engine/attune/core/`, `server/`, `replay/`, `main.py`, `config.py`, `web/`, `scripts/` (except test tones), `tests/pages_engine/`, `docs/setup.md`, `docs/demo-script.md` | Bus, contracts code, config, web server, lens view, console/speak/history panels, keyboard, status, replay, setup, OBS, demo and write-up | _name_ |
 
 **Shared files** (change only in small `[shared]` PRs): `docs/contracts.md`, `engine/attune/core/contracts.py`, `engine/pyproject.toml`, `config/attune.example.toml`, `.env.example`, `.gitignore`, `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/feature-map.md`. `TODO.md` is shared too, but each person only ticks lines in their own section.
@@ -95,7 +95,7 @@ Each feature lists its TODO IDs, the gate it's needed by, and what it depends on
 | Serial link | H-05 | M0 | bus (4) | `sensors.levels`, `sensors.touch`, `hw.link` |
 | Touch router | H-06 | M2 | `alert`, `name.proposal` (2) | `touch.action` |
 | Speak for me (ElevenLabs + Kokoro) | H-07 – H-09 | M2 | `speak` command (4) | `speech_out.playing`, `reply.spoken` |
-| Conversation history (Tiger Data) | H-10 – H-12 | M1 / M2 | `caption`, `caption.translation` (1, 2), `alert` (2) | history API |
+| Conversation history (SQLite, 24 h) | H-10 – H-12 | M1 / M2 | `caption`, `caption.translation` (1, 2), `alert` (2) | history API |
 | Rig assembly + bench tests | H-13 | M0 – M2 | — | the physical rig |
 
 ### Section 4 – Pages, Engine & Demo
@@ -175,8 +175,8 @@ Every file below already exists with a header that says what goes in it. Build i
 | `engine/attune/speech_out/elevenlabs_tts.py` | ElevenLabs low-latency streaming voice | H-07 |
 | `engine/attune/speech_out/kokoro_tts.py` | Offline voice: Kokoro-82M via sherpa-onnx | H-08 |
 | `engine/attune/speech_out/player.py` | Plays audio on the laptop speakers | H-09 |
-| `engine/attune/history/__init__.py` | Conversation history package (Tiger Data) | H-10 |
-| `engine/attune/history/schema.sql` | TimescaleDB schema | H-10 |
+| `engine/attune/history/__init__.py` | Conversation history package (local SQLite, deleted after 24 h) | H-10 |
+| `engine/attune/history/schema.sql` | SQLite schema | H-10 |
 | `engine/attune/history/db.py` | Connection and writes | H-11 |
 | `engine/attune/history/service.py` | HistoryService: saves every final caption, translation, reply, alert and confirmed name | H-11 |
 | `engine/attune/history/queries.py` | Reads for the history panel | H-12 |
@@ -221,7 +221,7 @@ Every file below already exists with a header that says what goes in it. Build i
 | `web/shared/ws.js` | WebSocket client with auto-reconnect | P-03 |
 | `web/shared/keys.js` | Keyboard shortcuts | P-12 |
 | `web/shared/theme.css` | Colours and type shared by every page | P-06 |
-| `scripts/check_setup.py` | Checks GPU, CUDA libraries, models, Ollama, PostgreSQL and devices | P-14 |
+| `scripts/check_setup.py` | Checks GPU, CUDA libraries, models, Ollama and devices | P-14 |
 | `scripts/download_models.py` | Fetches the model list in docs/setup.md into models/ | P-14 |
 | `scripts/start_attune.ps1` | Starts the engine and restarts it if it dies | P-14 |
 | `docs/setup.md` | Install and setup guide | P-14 |
@@ -254,7 +254,7 @@ Attune/
 │       ├── calibration/   2  wizard, venue profile
 │       ├── hardware/      3  serial link, protocol, touch router
 │       ├── speech_out/    3  ElevenLabs, Kokoro, player
-│       └── history/       3  TimescaleDB schema, writer, queries, API
+│       └── history/       3  SQLite schema, writer, queries, API
 ├── firmware/attune_rig/   3  Arduino sketch
 ├── web/                   4  lens view, panels, shared JS/CSS
 ├── scripts/               4  setup checks, downloads, start script (2: test tones)

@@ -1,6 +1,6 @@
 # Attune
 
-AR captions for deaf and hard-of-hearing people. A webcam and a few sensors are taped to a pair of glasses, and a laptop does the rest. It captions whoever is talking, in a speech bubble pointing at their face; names the people you know (with their consent); translates; and flashes and buzzes for smoke alarms and doorbells. It also speaks the wearer's typed replies aloud through ElevenLabs, and keeps a searchable conversation history in Tiger Data's TimescaleDB. Everything except the typed replies runs locally on the laptop.
+AR captions for deaf and hard-of-hearing people. A webcam and a few sensors are taped to a pair of glasses, and a laptop does the rest. It captions whoever is talking, in a speech bubble pointing at their face; names the people you know (with their consent); translates; and flashes and buzzes for smoke alarms and doorbells. It also speaks the wearer's typed replies aloud through ElevenLabs, and keeps a searchable conversation history on the laptop that deletes itself after 24 hours. Everything except the typed replies runs locally on the laptop.
 
 Built for ShellHacks (MLH).
 
@@ -21,7 +21,7 @@ Built for ShellHacks (MLH).
 |---|---|---|
 | 1 | Vision: camera, faces, lip motion, who's talking | _name_ |
 | 2 | Audio & Language: captions, voice prints, alerts, Ollama jobs | _name_ |
-| 3 | Hardware & Services: rig, firmware, serial link, ElevenLabs, Tiger Data | _name_ |
+| 3 | Hardware & Services: rig, firmware, serial link, ElevenLabs, conversation history | _name_ |
 | 4 | Pages, Engine & Demo: core, server, lens view, panels, replay, demo | _name_ |
 
 ## Layout

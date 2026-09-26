@@ -36,7 +36,6 @@ audio = [
 hardware = [
     "pyserial",
     "elevenlabs",
-    "psycopg[binary]",
 ]
 # Section 4 - Pages, Engine & Demo (core deps above)
 dev = [

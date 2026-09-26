@@ -90,7 +90,8 @@ presets = [
 ]
 
 [history]
-retention_days = 7
+db_path = "data/history.db"
+retention_hours = 24             # rows older than this are deleted
 
 # ---------- Section 4 - Pages ----------
 [pages]

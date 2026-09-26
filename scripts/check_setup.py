@@ -1,4 +1,4 @@
-"""Checks GPU, CUDA libraries, models, Ollama, PostgreSQL and devices
+"""Checks GPU, CUDA libraries, models, Ollama and devices
 
 Section 4 - Pages, Engine & Demo
 TODO: P-14

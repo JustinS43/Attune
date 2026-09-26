@@ -1,4 +1,4 @@
-"""Conversation history package (Tiger Data)
+"""Conversation history package (local SQLite, deleted after 24 h)
 
 Section 3 - Hardware & Services
 TODO: H-10

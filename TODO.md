@@ -63,8 +63,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] H-07 ElevenLabs streaming voice (key from .env) · M2
 - [ ] H-08 Kokoro offline voice, used if no audio within 1.5 s · M2
 - [ ] H-09 SpeechOutService + player; publishes `speech_out.playing` and `reply.spoken` · M2
-- [ ] H-10 TimescaleDB schema: hypertables, talk-time aggregate, 7-day retention, full-text search · M1
-- [ ] H-11 History writer with an in-memory buffer when the DB is down, and forget session · M1
+- [ ] H-10 SQLite schema (data/history.db): tables, full-text search (FTS5), talk-time query, auto-delete after 24 h · M1
+- [ ] H-11 History writer on its own thread (captions keep running if it fails), and forget session · M1
 - [ ] H-12 History queries and API router (`/api/history/...`) · M2
 - [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2
 - [ ] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2

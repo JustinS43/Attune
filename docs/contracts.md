@@ -115,9 +115,9 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `GET /api/history/sessions/{id}` | timeline rows: `{t, kind, speaker_label, text, translation, lang}` |
 | `GET /api/history/search?q=&person=` | matching rows |
 | `GET /api/history/missed?session=` | alerts and sounds in that session |
-| `GET /api/history/talktime?session=` | `{speaker_label: [{minute, seconds}]}` from the continuous aggregate |
+| `GET /api/history/talktime?session=` | `{speaker_label: [{minute, seconds}]}`, computed by a query |
 
-Row kinds: `caption`, `translation`, `reply`, `alert`, `name_confirmed`. Never stored: audio, video, face prints, voice prints.
+Row kinds: `caption`, `translation`, `reply`, `alert`, `name_confirmed`. Rows older than 24 hours are deleted. Never stored: audio, video, face prints, voice prints.
 
 ## 6. Arduino serial protocol
 
@@ -150,7 +150,7 @@ Descriptions may only use these words. Nothing about gender, age, body, skin or 
 |---|---|
 | Engine web server | `http://localhost:8000` (lens `/lens/`, WebSocket `/ws`) |
 | Ollama | `http://localhost:11434` |
-| PostgreSQL + TimescaleDB | `localhost:5432`, database `attune` |
+| Conversation history | `data/history.db` (SQLite, deleted after 24 h) |
 | Models | `models/` (gitignored, see `models/README.md`) |
 | Runtime data | `data/` (gitignored): `people/`, `profiles/`, `sessions/`, `reels/` |
 | Secrets | `.env` (gitignored), copied from `.env.example` |
