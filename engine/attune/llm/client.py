@@ -34,9 +34,14 @@ class OllamaClient:
         self._retry_at = 0.0
 
     def _request(self, payload: dict) -> dict:
-        connection = http.client.HTTPConnection(
-            "127.0.0.1", 11434, timeout=self.config.get("timeout_s", 30.0)
+        # The warm-up (no messages) loads the model into memory, which takes several
+        # seconds from cold; only answers once loaded are held to the short timeout.
+        timeout = (
+            self.config.get("load_timeout_s", 60.0)
+            if not payload["messages"]
+            else self.config.get("timeout_s", 30.0)
         )
+        connection = http.client.HTTPConnection("127.0.0.1", 11434, timeout=timeout)
         try:
             connection.request(
                 "POST", "/api/chat", json.dumps(payload), {"Content-Type": "application/json"}
