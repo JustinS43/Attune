@@ -61,6 +61,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
 - [x] A-19 Hot-plug recovery: re-initialise PortAudio after a mic loss, fall back, return to `[audio] device_name` between utterances; camera returns to `[vision] camera_name` after replug (Vision file) · M2 — unit-tested with fake devices; a real unplug/replug is still to check on the rig (#52)
 - [x] A-20 Make Windows capture simulation tests portable across macOS and Linux (#55)
+- [ ] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it — in progress
+- [ ] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions — in progress
 
 ## Section 3 – Hardware & Services
 
