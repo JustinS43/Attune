@@ -35,6 +35,7 @@ SENSORS_LEVELS = "sensors.levels"
 ENROLL_RESULT = "enroll.result"
 ENROLL_PROGRESS = "enroll.progress"
 PERSON_CHANGED = "person.changed"
+SAVE_REQUEST = "save.request"
 SESSION_FORGET = "session.forget"
 PAUSED = "paused"
 COMMAND = "command"
@@ -100,6 +101,8 @@ class EnrollResult:
     ok: bool
     reason: str = ""
     track_id: int | None = None  # the requested track, so Section 2 can pair voice consent
+    source: str = "glasses"  # "station": saved at the laptop (V-23 / A-21)
+    session_id: str | None = None  # the station save it belongs to
 
 
 @dataclass
@@ -176,3 +179,4 @@ class VoiceHarvest:
     person_id: str
     t0: float
     t1: float
+    talkers: int = 1  # most faces talking at once over the span (A-21 adapts only on 1)
