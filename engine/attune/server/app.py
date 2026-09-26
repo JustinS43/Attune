@@ -34,6 +34,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .speech_settings import create_router as speech_settings_router
 from .ws import Hub, host_of, is_loopback_host
 
 log = logging.getLogger(__name__)
@@ -204,6 +205,7 @@ def create_app(
         return Response(status_code=204)
 
     app.add_api_websocket_route("/ws", hub.endpoint)
+    app.include_router(speech_settings_router(Path(data_root) if data_root else Path.cwd()))
 
     if history_router is not None:
         app.include_router(history_router, prefix="/api/history")

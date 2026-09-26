@@ -132,6 +132,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] P-39 Phone and demo fixes from the e2e run: tab bar indicator, camera switch and state, no "UND" tag, hidden demo panes out of the tab order (#61)
 - [ ] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
 
+- [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
+
 ## Gates and end-to-end checks (whole team)
 
 - [ ] M0 · Camera, mic and Arduino all feed the engine; the lens view shows video — camera (C922) and mic feed `python -m attune` and the lens shows live video with face tags; Arduino runs on the simulator until the rig is built
