@@ -40,6 +40,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-22 Light-ASD active speaker model decides who is talking (#58)
 - [x] V-23 Enrollment station: save a face at the laptop camera (OV02E10) with a live phone preview, the glasses' quality gate and 8-most-varied rule, an identity check against the glasses face, and frame sharing when the main camera holds the laptop camera (#60)
 - [ ] V-25 Live speaker gate rehearsal: use the built-in camera when no external camera is present, compare Light-ASD on/off on a labeled local clip, and check speech bubble placement in the lens demo — camera access and local model weights pending; runbook in tests/vision/README.md
+- [x] V-26 Use the latest voice verdict so a stale match cannot keep an off-screen name or direction; keep weak identity scores inconclusive; honor a named built-in camera on macOS for the enrollment station (#68)
 
 ## Section 2 – Audio & Language
 
