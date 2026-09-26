@@ -3,6 +3,11 @@
 TODO H-11. One new session per engine start. Bus callbacks only build a row and hand it
 to the writer thread (db.py), so a slow or broken database never delays captions.
 
+Nothing said is lost (A-22): the newest draft of each caption is kept, and one whose final
+never comes (the engine stopping mid-sentence, a final lost on the way) is written when it has
+been quiet for ``history.orphan_draft_s`` and at stop. A later final replaces it; a retracted
+segment is dropped.
+
 ``session.forget`` removes strangers' lines from the current session (the demo: "Sam's
 lines are gone", enrolled people and your own lines stay). Set
 ``history.forget_mode = "session"`` to delete every row of the current session instead.
@@ -63,6 +68,10 @@ class HistoryService:
         self.session_id = str(given or f"{stamp}-{uuid.uuid4().hex[:4]}")
         self.db: dbm.HistoryDB | None = None
         self.utts: OrderedDict[str, dict] = OrderedDict()  # recent captions, for translations
+        self.drafts: dict[str, tuple[dict, float]] = {}  # caption id -> newest draft row, when
+        self.orphan_s = float(self.cfg.get("orphan_draft_s", 10.0))
+        self.orphans: set[str] = set()  # drafts saved without a final (removed if retracted)
+        self._lock = threading.RLock()  # drafts, orphans and utts (bus and status threads)
         self._unsubs: list = []
         self._stop = threading.Event()
         self._status_thread: threading.Thread | None = None
@@ -84,6 +93,7 @@ class HistoryService:
         api.bind(path, self.session_id)
         for topic, handler in (
             ("caption", self._on_caption),
+            ("caption.retract", self._on_retract),
             ("caption.translation", self._on_translation),
             ("reply.spoken", self._on_reply),
             ("alert", self._on_alert),
@@ -107,6 +117,7 @@ class HistoryService:
                     logger.debug("ignored error", exc_info=True)
         self._unsubs.clear()
         if self.db:
+            self._write_orphans(everything=True)  # words shown as a draft when we stopped
             self.db.submit(dbm.op_end_session, self.session_id, self.wall())
             self.db.flush(timeout=1.0)
             self.db.stop(timeout=0.5)
@@ -132,17 +143,62 @@ class HistoryService:
     # ------------------------------------------------------------- bus handlers
     def _on_caption(self, event) -> None:
         e = fields(event)
-        if not e.get("final"):
-            return
         text = str(e.get("text") or "").strip()
+        final = bool(e.get("final"))
+        if not final:
+            if text and e.get("utt_id") is not None:
+                with self._lock:
+                    self.drafts[str(e["utt_id"])] = (self._caption_row(e, text), time.monotonic())
+            return
+        if e.get("utt_id") is not None:
+            with self._lock:
+                self.drafts.pop(str(e["utt_id"]), None)
+                self.orphans.discard(str(e["utt_id"]))
         if not text:
             return
+        self._save(self._caption_row(e, text))
+
+    def _on_retract(self, event) -> None:
+        utt = fields(event).get("utt_id")
+        if utt is None:
+            return
+        with self._lock:
+            self.drafts.pop(str(utt), None)
+            saved = str(utt) in self.orphans
+            self.orphans.discard(str(utt))
+            if saved:
+                self.utts.pop(str(utt), None)
+        if saved:
+            self.db.submit(dbm.op_delete_caption, self.session_id, str(utt))
+
+    def _write_orphans(self, everything: bool = False) -> None:
+        """Save drafts whose final never came (quiet for orphan_draft_s, or all at stop)."""
+        now = time.monotonic()
+        with self._lock:
+            old = [k for k, (_, t) in self.drafts.items() if everything or now - t >= self.orphan_s]
+            rows = [self.drafts.pop(k)[0] for k in old]
+            self.orphans.update(old)
+            while len(self.orphans) > 500:
+                self.orphans.pop()
+        for row in rows:
+            self._save(row)
+        if rows:
+            logger.info("history: saved %d caption(s) whose final never came", len(rows))
+
+    def _save(self, row: dict) -> None:
+        with self._lock:
+            self.utts[row["utt_id"]] = row
+            while len(self.utts) > 500:
+                self.utts.popitem(last=False)
+        self.db.submit(dbm.op_upsert_caption, row)
+
+    def _caption_row(self, e: dict, text: str) -> dict:
         speaker = fields(e.get("speaker"))
         t0, t1 = _word_times(e.get("words"))
         engine_t = t0 if t0 is not None else self.clock()
         duration = (t1 - t0) if t0 is not None else len(text.split()) * SECONDS_PER_WORD
         utt_id = str(e.get("utt_id") or uuid.uuid4().hex)
-        row = self._row(
+        return self._row(
             "caption",
             wall=self._wall_at(engine_t),
             engine_t=engine_t,
@@ -155,10 +211,6 @@ class HistoryService:
             lang=e.get("lang"),
             duration_s=round(max(0.0, min(duration, 120.0)), 2),
         )
-        self.utts[utt_id] = row
-        while len(self.utts) > 500:
-            self.utts.popitem(last=False)
-        self.db.submit(dbm.op_upsert_caption, row)
 
     def _on_translation(self, event) -> None:
         e = fields(event)
@@ -243,16 +295,18 @@ class HistoryService:
         )
 
     def _on_forget(self, _event=None) -> None:
-        if self.forget_mode == "session":
-            self.utts.clear()
-        else:
-            for key in [
-                k
-                for k, r in self.utts.items()
-                if r["speaker_kind"] not in ("you", "you_typed")
-                and (r["person_id"] is None or str(r["person_id"]).startswith("session-"))
-            ]:
+        def stranger(r: dict) -> bool:
+            return r["speaker_kind"] not in ("you", "you_typed") and (
+                r["person_id"] is None or str(r["person_id"]).startswith("session-")
+            )
+
+        with self._lock:
+            everyone = self.forget_mode == "session"
+            for key in [k for k, (r, _) in self.drafts.items() if everyone or stranger(r)]:
+                self.drafts.pop(key)
+            for key in [k for k, r in self.utts.items() if everyone or stranger(r)]:
                 self.utts.pop(key)
+                self.orphans.discard(key)
         self.db.submit(dbm.op_forget, self.session_id, self.forget_mode)
 
     # ------------------------------------------------------------- status
@@ -266,6 +320,10 @@ class HistoryService:
 
     def _status_loop(self) -> None:
         while not self._stop.wait(1.0):
+            try:
+                self._write_orphans()
+            except Exception:
+                logger.exception("history: saving unfinished captions failed")
             try:
                 self.bus.publish("status.part", self.status())
             except Exception:

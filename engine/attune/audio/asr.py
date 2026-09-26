@@ -68,6 +68,34 @@ def token_words(tokens: list, times: list, duration: float) -> list[tuple[str, f
     return [item for item in result if item[0]]
 
 
+def hold_back(
+    tokens: list, base: int, times: list | None = None, heard_s: float = 0.0, settle_s: float = 1.5
+) -> int:
+    """Where to cut a stream's tokens (after `base`) so no word is split: before the
+    last word, unless it ends with punctuation, it is the only word, or the stream has
+    heard `settle_s` of audio after it (its next piece would have been decoded by then)."""
+    starts = []
+    for i in range(base, len(tokens)):
+        if tokens[i].startswith("<"):
+            continue
+        if tokens[i].startswith(("▁", " ")) or not starts:
+            starts.append(i)
+
+    def spelled(a: int, b: int) -> str:
+        return "".join(t for t in tokens[a:b] if not t.startswith("<")).replace("▁", "").strip()
+
+    keep = len(tokens)
+    while starts and not spelled(starts[-1], keep):
+        keep = starts.pop()  # a lone word mark goes with the word after it
+    settled = times is not None and keep and float(times[keep - 1]) < heard_s - settle_s
+    last = spelled(starts[-1], keep) if starts else ""
+    if len(starts) > 1 and not settled and not last.endswith((".", ",", "?", "!", ";", ":")):
+        keep = starts[-1]
+    elif not starts:
+        keep = len(tokens)
+    return keep
+
+
 class NemotronASR:
     """Decode one streaming utterance at a time from explicitly local weights."""
 
@@ -92,17 +120,27 @@ class NemotronASR:
         self.reset()
 
     def reset(self) -> None:
-        self.stream = self.recognizer.create_stream()
+        self.stream = self._new_stream()
+        self.samples = 0
+        self.base = 0  # tokens before this belong to utterances already cut off (see cut)
+
+    def _new_stream(self) -> Any:
+        stream = self.recognizer.create_stream()
         languages = self.config.get("languages", ["en"])
         self.language = languages[0] if len(languages) == 1 else "und"
-        if hasattr(self.stream, "set_option"):
-            self.stream.set_option("language", self.language if self.language != "und" else "auto")
+        if hasattr(stream, "set_option"):
+            stream.set_option("language", self.language if self.language != "und" else "auto")
         elif languages != ["en"]:
             raise RuntimeError("installed sherpa-onnx lacks per-stream language support")
-        self.samples = 0
+        return stream
 
     def feed(self, samples: np.ndarray, final: bool = False) -> Recognition:
-        """Return the latest hypothesis and model-derived word times."""
+        """Return the latest hypothesis and model-derived word times.
+
+        The model decodes in fixed chunks (560 ms for the exported Nemotron: a 650 ms window
+        moved by 560 ms). Feed it small steps (`[audio] asr_chunk_ms`) so each chunk is
+        decoded as soon as its audio is in, instead of waiting for the next big step.
+        """
         self.samples += len(samples)
         self.stream.accept_waveform(16000, samples)
         if final:
@@ -112,7 +150,85 @@ class NemotronASR:
             self.stream.input_finished()
         while self.recognizer.is_ready(self.stream):
             self.recognizer.decode_stream(self.stream)
+        return self._parse(
+            self.recognizer.get_result_all(self.stream), self.samples / 16000, self.base
+        )
+
+    def cut(self) -> Recognition:
+        """End the current utterance at what is decoded so far, and carry on listening.
+
+        The stream and its context go on (no flush): the next utterance's words are the
+        tokens decoded after this point, so a split in the middle of talk loses no words
+        (a fresh stream drops the first words of quiet speech). A word not decoded yet
+        goes to the next utterance. The last word decoded goes there too, unless it ends
+        with punctuation: the model decodes in 560 ms chunks, and a chunk can end inside
+        a word ("North Ca" | "rolina"). Word times stay relative to the stream's start.
+        """
         result = self.recognizer.get_result_all(self.stream)
+        if isinstance(result, str):
+            import json
+
+            result = json.loads(result)
+        if isinstance(result, dict):
+            tokens, times = list(result.get("tokens", [])), list(result.get("timestamps", []))
+        else:
+            tokens, times = list(result.tokens), list(result.timestamps)
+        heard = self.samples / 16000
+        keep = hold_back(tokens, self.base, times, heard, self.config.get("word_settle_s", 1.5))
+        end = float(times[keep]) if keep < len(times) else self.samples / 16000
+        segment = self._parse(result, min(end, self.samples / 16000), self.base, keep)
+        self.base = keep
+        return segment
+
+    def rescue(self, samples: np.ndarray, lock: Any, gap_s: float = 0.2) -> Recognition:
+        """Decode a short utterance the streaming pass heard as nothing, on its own stream.
+
+        Very short replies ("No", "Hi") on a fresh stream often come out empty: the model
+        has no context yet. Heard twice in a row, they are recognised, so the utterance is
+        decoded as [audio, gap, audio]. The model emits in 560 ms steps, so its word times
+        cannot say which copy a word came from: when the words repeat ("Yes, yes") one copy
+        is kept, else all of them. Word times are relative to the start of `samples`.
+        The recogniser is shared with the live stream, so every call into it holds `lock`,
+        one chunk at a time.
+        """
+        gap = np.zeros(round(gap_s * 16000), np.float32)
+        audio = np.concatenate([samples, gap, samples]).astype(np.float32)
+        second = (len(samples) + len(gap)) / 16000
+        with lock:
+            stream = self._new_stream()
+        step = 8960
+        for i in range(0, len(audio), step):
+            with lock:
+                stream.accept_waveform(16000, audio[i : i + step])
+                while self.recognizer.is_ready(stream):
+                    self.recognizer.decode_stream(stream)
+        with lock:
+            stream.accept_waveform(
+                16000, np.zeros(round(self.config["flush_s"] * 16000), np.float32)
+            )
+            stream.input_finished()
+            while self.recognizer.is_ready(stream):
+                self.recognizer.decode_stream(stream)
+            both = self._parse(self.recognizer.get_result_all(stream), len(audio) / 16000)
+        words = both.words
+        plain = [re.sub(r"[^\w']", "", w).lower() for w, _, _ in words]
+        half = len(words) // 2
+        if half and len(words) % 2 == 0 and plain[:half] == plain[half:]:
+            words = words[:half] if words[0][1] < second - 0.05 else words[half:]
+            last = words[-1][0]
+            words[-1] = (last.rstrip(",;:"), words[-1][1], words[-1][2])
+        duration = len(samples) / 16000
+
+        def local(t: float) -> float:
+            return min(duration, max(0.0, t - second if t >= second - 0.05 else t))
+
+        words = [(w, local(a), max(local(a), local(b))) for w, a, b in words]
+        text = " ".join(w for w, _, _ in words).strip()
+        return Recognition(text[:1].upper() + text[1:], both.lang, words)
+
+    def _parse(
+        self, result: Any, duration: float, base: int = 0, end: int | None = None
+    ) -> Recognition:
         if isinstance(result, str):
             import json
 
@@ -133,7 +249,11 @@ class NemotronASR:
         tag = re.search(r"<([a-z]{2,3})(?:-[A-Za-z]{2})?>", text)
         if tag:
             language = tag[1]
-        text = re.sub(r"<[^>]+>", "", text).strip()
+        if base or end is not None:
+            # only the tokens from `base` (the last cut) to `end`, and the text they spell
+            tokens, times = list(tokens)[base:end], list(times)[base:end]
+            text = "".join(t for t in tokens if not t.startswith("<")).replace("▁", " ")
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", text)).strip()
         return Recognition(
-            text, language.split("-")[0].lower(), token_words(tokens, times, self.samples / 16000)
+            text, language.split("-")[0].lower(), token_words(tokens, times, duration)
         )
