@@ -243,6 +243,7 @@ function renderPeople() {
   content.append(back(), brand());
   heading('People', 'Familiar voices, easier to follow');
   if (state.live) content.append(pill());
+  content.append(button('Add a familiar face and voice', 'outline full', 'enroll'));
   content.append(el('h2', 'section-title', state.live ? 'Saved with consent' : 'Frequently seen'));
   const list = el('div', 'people-list');
   if (!state.people.length) list.append(el('div', 'card empty', state.live ? 'Nobody is saved yet. Use the Enroll tab together with the person you want to save.' : 'No saved people in this preview.'));
@@ -360,7 +361,7 @@ function renderEnroll() {
       content.append(button('Try again', 'primary full', 'enroll-again'));
     }
   }
-  content.append(el('div', 'info-card enroll-privacy', 'Only face and voice prints are saved on the laptop. The preview photo and spoken recording are not kept.'));
+  content.append(el('div', 'info-card enroll-privacy', 'Attune saves your name, consent time, and face and voice prints on the laptop. The preview photo and spoken recording are not kept.'));
 }
 
 function updateEnrollPreview() {
