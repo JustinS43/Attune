@@ -17,7 +17,16 @@ def samples(
     amplitude: float = 0.1,
 ) -> list[float]:
     """Synthesize alarm cadence including the inter-cycle silence."""
-    if kind not in {"T3", "T4"} or cycles < 1 or rate < 2 * frequency or not 0 < amplitude <= 0.25:
+    if (
+        kind not in {"T3", "T4"}
+        or type(cycles) is not int
+        or cycles < 1
+        or type(rate) is not int
+        or rate <= 0
+        or not math.isfinite(frequency)
+        or not 0 < frequency < rate / 2
+        or not 0 < amplitude <= 0.25
+    ):
         raise ValueError("invalid tone parameters")
     count, on, gap, rest = (3, 0.5, 0.5, 1.5) if kind == "T3" else (4, 0.1, 0.1, 5.0)
     output = []

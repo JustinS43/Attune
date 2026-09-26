@@ -44,7 +44,7 @@ class AlertRules:
         t: float,
         scores: dict,
         rhythm: RhythmEvidence,
-        levels: tuple = (0, 0),
+        levels: tuple | None = None,
         motor_on: bool = False,
     ) -> list:
         """Ignore motor-contaminated windows, then apply the plan's firing table."""
@@ -87,14 +87,19 @@ class AlertRules:
                 )
             )
         for kind, score in fires.items():
+            # A matching cadence remains valid during its expected pause, but
+            # that silence must not postpone the quiet-clear deadline.
+            seen = t
+            if kind == "co" or (kind == "smoke" and smoke < self.cfg["smoke_score"]):
+                seen -= rhythm.quiet_s
             if kind not in self.active:
                 if kind == "doorbell" and t - self.last_bell < self.cfg["doorbell_rest_s"]:
                     continue
                 self.active[kind] = {
                     "id": str(uuid4()),
-                    "side": self.side(*levels),
+                    "side": self.side(*levels) if levels is not None else "none",
                     "score": score,
-                    "seen": t,
+                    "seen": seen,
                     "ack": None,
                 }
                 output.extend([self._event(kind, "start"), self._pattern(kind)])
@@ -102,12 +107,12 @@ class AlertRules:
                     self.last_bell = t
             else:
                 a = self.active[kind]
-                a["seen"], a["score"] = t, score
-                new_side = self.side(*levels)
+                a["seen"], a["score"] = seen, score
+                new_side = self.side(*levels) if levels is not None else a["side"]
                 if new_side != a["side"] and a["ack"] is None:
                     a["side"] = new_side
                     output.append(self._event(kind, "update"))
-                if a["ack"] is not None and t - a["ack"] >= self.cfg["realert_s"]:
+                if a["ack"] is not None and seen - a["ack"] >= self.cfg["realert_s"]:
                     a["ack"] = None
                     output.extend([self._event(kind, "start"), self._pattern(kind)])
         output.extend(self.tick(t))

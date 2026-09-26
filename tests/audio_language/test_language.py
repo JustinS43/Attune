@@ -133,3 +133,196 @@ def test_service_forget_drops_language_results(config, bus):
     future.set_result({"color": "blue", "garment": "shirt", "accessory": None})
     s._tick()
     assert not bus.events
+
+
+def wait_for(predicate):
+    deadline = time.monotonic() + 1
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert predicate()
+
+
+def test_real_ollama_load_response_warms_client(config):
+    calls = []
+
+    def transport(payload):
+        calls.append(payload)
+        return {"message": {"role": "assistant", "content": ""}, "done_reason": "load", "done": True}
+
+    client = OllamaClient(config["llm"], transport)
+    client.start()
+    try:
+        wait_for(lambda: client.warm)
+        assert calls[0]["messages"] == []
+        assert not client.error
+    finally:
+        client.stop()
+
+
+def test_idle_ollama_recovers_after_server_restart(config):
+    calls = []
+
+    def transport(payload):
+        calls.append(payload)
+        if len(calls) == 1:
+            raise ConnectionRefusedError("server stopped")
+        return {"message": {"content": ""}, "done_reason": "load", "done": True}
+
+    client = OllamaClient(config["llm"] | {"retry_s": 0.01}, transport)
+    client.start()
+    try:
+        wait_for(lambda: bool(client.error))
+        wait_for(lambda: client.warm)
+        assert not client.error
+        assert len(calls) == 2
+    finally:
+        client.stop()
+
+
+def test_translation_displaces_queued_description(config):
+    client = OllamaClient(config["llm"] | {"max_queue": 2})
+    description = client.submit("descriptions", [], {})
+    name = client.submit("names", [], {})
+    translation = client.submit("translation", [], {})
+    assert description.cancelled()
+    assert not name.done() and not translation.done()
+    assert client.queue.qsize() == 2
+    assert client.queue.get_nowait()[3] is translation
+    client.stop()
+
+
+def test_canceled_jobs_release_bounded_queue_capacity(config):
+    client = OllamaClient(config["llm"] | {"max_queue": 1})
+    obsolete = client.submit("replies", [], {})
+    obsolete.cancel()
+    latest = client.submit("replies", [], {})
+    overflow = client.submit("replies", [], {})
+    assert not latest.done()
+    assert isinstance(overflow.exception(), RuntimeError)
+    assert client.queue.qsize() == 1
+    client.stop()
+
+
+def test_canceling_running_reply_keeps_model_healthy(config):
+    entered, release = threading.Event(), threading.Event()
+
+    def transport(payload):
+        entered.set()
+        release.wait(1)
+        return {"message": {"content": '{"options":["Yes","No","Thank you"]}'}}
+
+    client = OllamaClient(config["llm"], transport)
+    future = client.submit("replies", [{"role": "user", "content": "hello"}], {})
+    client.start()
+    try:
+        assert entered.wait(1)
+        future.cancel()
+        release.set()
+        wait_for(lambda: client.warm)
+        assert not client.error
+        assert client.thread.is_alive()
+    finally:
+        release.set()
+        client.stop()
+
+
+@pytest.mark.parametrize("text", ["I'm tired", "I'm Sam's sister", "I'm Sam’s sister", "This is Sam"])
+def test_name_must_be_grounded_in_a_self_introduction(config, text):
+    answer = {"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99}
+    assert Names(config["llm"]).propose(caption(text), answer, 0) is None
+
+
+@pytest.mark.parametrize("text,name", [
+    ("Hello, I'm Sam.", "Sam"),
+    ("My name is Maya Chen", "Maya Chen"),
+    ("Me llamo Ana María.", "Ana María"),
+    ("Call me Jean-Luc.", "Jean-Luc"),
+])
+def test_explicit_introductions_accept_grounded_names(config, text, name):
+    answer = {"is_intro": True, "name": name, "whose": "speaker", "confidence": 0.99}
+    assert Names(config["llm"]).propose(caption(text), answer, 0)["name"] == name
+
+
+class PendingClient:
+    def __init__(self):
+        self.futures = []
+        self.warm = True
+        self.error = ""
+
+    def submit(self, kind, messages, schema):
+        future = Future()
+        self.futures.append((kind, future))
+        return future
+
+    def cancel_pending(self):
+        for _, future in self.futures:
+            future.cancel()
+
+
+def test_forget_received_after_queued_name_answer_cannot_confirm(config, bus):
+    service = LLMService(bus, config, client=PendingClient())
+    service.clock = lambda: 0
+    answer = {"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99}
+    proposal = service.names.propose(caption(), answer, 0)
+    service.worker.subscribe("command")
+    service.worker.subscribe("session.forget")
+    bus.publish("command", {"name": "name.answer", "args": {"proposal_id": proposal["proposal_id"], "accept": True}})
+    bus.publish("session.forget", {})
+    service.worker.start()
+    try:
+        wait_for(lambda: not service.names.pending)
+    finally:
+        service.worker.stop()
+    assert not [topic for topic, _ in bus.events if topic in {"name.proposal", "hw.pattern"}]
+    assert not service.names.confirmed
+
+
+def test_expiry_cannot_publish_while_forget_is_waiting(config, bus):
+    service = LLMService(bus, config, client=PendingClient())
+    service.clock = lambda: 100
+    answer = {"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99}
+    service.names.propose(caption(), answer, 0)
+    service.worker.subscribe("session.forget")
+    bus.publish("session.forget", {})
+    service._tick()
+    assert not [topic for topic, _ in bus.events if topic == "name.proposal"]
+    service.worker.stop()
+
+
+def test_only_latest_reply_remains_pending(config, bus):
+    client = PendingClient()
+    service = LLMService(bus, config, client=client)
+    service.clock = lambda: 0
+    service._handle("caption", caption("Hello"), 0)
+    old = client.futures[-1][1]
+    service._handle("caption", caption("How are you?") | {"utt_id": "u2"}, 0)
+    latest = client.futures[-1][1]
+    assert old.cancelled()
+    assert len(service.jobs) == 1
+    latest.set_result({"options": ["Fine", "Good", "Not bad"]})
+    service._tick()
+    assert bus.events == [("reply.suggestions", {"options": ["Fine", "Good", "Not bad"]})]
+
+
+def test_old_introduction_cannot_name_a_reappearing_track(config, bus):
+    client = PendingClient()
+    service = LLMService(bus, config, client=client)
+    service.clock = lambda: 0
+    service._handle("caption", caption(), 0)
+    old_name = next(future for kind, future in client.futures if kind == "names")
+    service._handle("vision.track_lost", {"track_id": 1}, 0)
+    service._handle("vision.appearance", {"track_id": 1, "crop": np.zeros((1, 1, 3), np.uint8)}, 0)
+    old_name.set_result({"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99})
+    service._tick()
+    assert not [topic for topic, _ in bus.events if topic in {"name.proposal", "hw.pattern"}]
+
+
+def test_llm_health_reports_offline_and_recovery(config, bus):
+    client = PendingClient()
+    service = LLMService(bus, config, client=client)
+    client.warm, client.error = False, "local model offline"
+    assert service._health()["ok"] is False
+    assert service._health()["detail"] == "local model offline"
+    client.warm, client.error = True, ""
+    service._error = "old job failed"
+    assert service._health() == {"ok": True, "detail": "ready", "metrics": {"warm": True, "pending": 0}}

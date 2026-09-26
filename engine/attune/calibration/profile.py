@@ -21,22 +21,41 @@ ALLOWED = {
     "complete_steps",
 }
 
+STEPS = ("level", "mic", "you", "other", "balance", "claps", "noise", "faces")
+
+
+def validate(values: dict) -> None:
+    """Accept only finite, correctly typed venue measurements, never identities."""
+    if not isinstance(values, dict) or not set(values) <= ALLOWED:
+        raise ValueError("invalid venue profile")
+    for key, value in values.items():
+        if key == "level_confirmed":
+            valid = type(value) is bool
+        elif key == "complete_steps":
+            valid = (
+                isinstance(value, list)
+                and all(isinstance(step, str) and step in STEPS for step in value)
+                and len(value) == len(set(value))
+            )
+        elif key == "face_scores":
+            valid = isinstance(value, list) and all(
+                type(score) in (float, int) and math.isfinite(score) and 0 <= score <= 1
+                for score in value
+            )
+        else:
+            valid = type(value) in (float, int) and math.isfinite(value)
+            if valid and key in {"left_gain", "right_gain"}:
+                valid = value > 0
+            if valid and key == "noise_rms":
+                valid = value >= 0
+        if not valid:
+            raise ValueError(f"invalid venue measurement: {key}")
+
 
 def save(root: Path, name: str, values: dict) -> Path:
     """Persist a profile atomically; reject path traversal and nonfinite measurements."""
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name) or not set(values) <= ALLOWED:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name):
         raise ValueError("invalid venue profile")
-
-    def validate(value):
-        if isinstance(value, float) and not math.isfinite(value):
-            raise ValueError("nonfinite measurement")
-        if isinstance(value, dict):
-            for v in value.values():
-                validate(v)
-        elif isinstance(value, list):
-            for v in value:
-                validate(v)
-
     validate(values)
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{name}.json"
@@ -58,6 +77,5 @@ def load(root: Path, name: str) -> dict:
     if not path.exists():
         return {}
     result = json.loads(path.read_text())
-    if not isinstance(result, dict) or not set(result) <= ALLOWED:
-        raise ValueError("invalid venue profile")
+    validate(result)
     return result

@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 INTRO = re.compile(r"\b(?:i['’]m|i am|my name|call me|this is|meet|me llamo|soy)\b", re.IGNORECASE)
+SELF_INTRO = r"\b(?:i['’]m|i\s+am|my\s+name(?:\s+is)?|call\s+me|me\s+llamo|soy)\s+"
 SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -67,14 +68,19 @@ class Names:
         if (
             answer.get("is_intro") is not True
             or answer.get("whose") != "speaker"
-            or not isinstance(confidence, (int, float))
-            or not self.cfg["name_confidence"] <= confidence <= 1
+            or type(confidence) not in {int, float}
+            or not self.cfg.get("name_confidence", 0.8) <= confidence <= 1
             or not 1 <= len(words) <= 3
             or len(name) > 80
             or any(w.casefold() in self.stoplist for w in words)
             or any(not w[0].isalpha() or not w[-1].isalpha() for w in words)
             or any(not all(c.isalpha() or c in "-'’" for c in w) for w in words)
         ):
+            return None
+        # A model's confidence cannot establish a name absent from the introduction.
+        # A possessive suffix ("I'm Sam's sister") describes a relationship, not Sam.
+        literal_name = r"\s+".join(re.escape(word) for word in words)
+        if re.search(SELF_INTRO + literal_name + r"(?![\w'’\-])", caption["text"], re.IGNORECASE) is None:
             return None
         track = caption["speaker"]["track_id"]
         if any(p["track_id"] == track for p in self.pending.values()):

@@ -320,3 +320,174 @@ def test_mic_start_failure_stops_audio_worker_and_unsubscribes(config, bus):
     assert mic.stopped
     assert not service.worker.thread.is_alive()
     assert not any(bus.callbacks.values())
+
+
+def test_nemotron_uses_per_stream_language_and_keeps_auto_drafts_unknown():
+    class Stream:
+        def __init__(self):
+            self.options = {}
+
+        def set_option(self, key, value):
+            self.options[key] = value
+
+        def accept_waveform(self, rate, data):
+            pass
+
+    class Recognizer:
+        def create_stream(self):
+            return Stream()
+
+        def is_ready(self, stream):
+            return False
+
+        def get_result_all(self, stream):
+            return {"text": "Hola", "tokens": ["▁Hola"], "timestamps": [0]}
+
+    model = Recognizer()
+    auto = NemotronASR({"languages": ["en", "es"]}, model)
+    assert auto.stream.options == {"language": "auto"}
+    assert auto.feed(np.ones(16000)).lang == "und"
+    spanish = NemotronASR({"languages": ["es"]}, model)
+    assert spanish.stream.options == {"language": "es"}
+    assert spanish.feed(np.ones(16000)).lang == "es"
+    spanish.reset()
+    assert spanish.stream.options == {"language": "es"}
+    model.get_result_all = lambda stream: {
+        "text": "<es-ES>Hola",
+        "tokens": ["<es-ES>", "▁Hola"],
+        "timestamps": [0, 0.1],
+    }
+    result = auto.feed(np.ones(16000))
+    assert (result.text, result.lang) == ("Hola", "es")
+    assert result.words == [("Hola", 0.1, 2.0)]
+
+
+def test_audio_tries_nemotron_for_multilingual_capture(config, bus, monkeypatch):
+    used = []
+    config["nemotron"] = {}
+    monkeypatch.setattr(
+        "attune.audio.service.NemotronASR", lambda cfg: used.append(cfg) or FakeASR()
+    )
+    service = AudioService(bus, config)
+    assert isinstance(service._make_asr(["en", "es"]), FakeASR)
+    assert used == [{"languages": ["en", "es"]}]
+
+
+def test_failed_language_switch_keeps_working_recognizer_and_detector(config, bus, monkeypatch):
+    old_language = SimpleNamespace(languages=["en"])
+    service = AudioService(bus, config, asr=FakeASR(), language=old_language)
+    old_asr = service.asr
+    monkeypatch.setattr(
+        "attune.audio.service.LanguageID", lambda langs: SimpleNamespace(languages=langs)
+    )
+
+    def unavailable(languages):
+        raise FileNotFoundError("local model missing")
+
+    monkeypatch.setattr(service, "_make_asr", unavailable)
+    with pytest.raises(FileNotFoundError):
+        service._handle("command", {"name": "languages.set", "args": {"langs": ["es"]}}, 0)
+    assert service.asr is old_asr
+    assert service.language is old_language
+    assert service.languages == ["en"]
+
+
+def test_stale_language_load_does_not_replace_current_state(config, bus, monkeypatch):
+    old_asr, old_language = FakeASR(), SimpleNamespace(languages=["en"])
+    service = AudioService(bus, config, asr=old_asr, language=old_language)
+    monkeypatch.setattr(
+        "attune.audio.service.LanguageID", lambda langs: SimpleNamespace(languages=langs)
+    )
+
+    def slow_load(languages):
+        service.worker.generation += 1
+        return FakeASR()
+
+    monkeypatch.setattr(service, "_make_asr", slow_load)
+    service._handle("command", {"name": "languages.set", "args": {"langs": ["es"]}}, 0)
+    assert service.asr is old_asr and service.language is old_language
+
+
+def test_voice_match_duration_excludes_endpoint_silence(config, bus):
+    received = []
+    voices = FakeVoices()
+    voices.match = lambda pcm: received.append(pcm.copy()) or (None, 0.0)
+    service = AudioService(
+        bus, config, vad=lambda pcm: 0.9 if pcm.mean() else 0.1,
+        asr=FakeASR(), voices=voices,
+        language=SimpleNamespace(detect=lambda text, lang: lang), mic=False,
+    )
+    service._audio({"t": 0, "samples": np.ones(20 * 512, np.float32)}, 0)
+    service._audio({"t": 0.640, "samples": np.zeros(13 * 512, np.float32)}, 0)
+    assert len(received[-1]) == 20 * 512
+    assert np.all(received[-1] == 1)
+    assert not service.speech_audio
+
+
+def test_enrollment_and_harvest_use_only_attributed_vad_speech(config, bus, tmp_path):
+    received = []
+    voices = VoicePrints(tmp_path, lambda pcm: received.append(pcm.copy()) or [1.0, 0.0], 0.5, 5, 1)
+    service = AudioService(bus, config, voices=voices)
+    service.clock = lambda: 0
+    service._handle(
+        "command", {"name": "enroll.start", "args": {"track_id": 1, "consent": True, "consent_t": 0}}, 0
+    )
+    service._handle(
+        "enroll.result", {"part": "face", "person_id": "sam", "track_id": 1, "ok": True}, 0
+    )
+    service.ring.append(0, np.r_[np.ones(2 * 16000), np.zeros(6 * 16000), np.ones(2 * 16000)])
+    service.speech_intervals.extend([(0, 2), (8, 10)])
+    caption = {"speaker": {"kind": "face", "track_id": 1}, "final": True}
+    service._handle("caption", caption | {"utt_id": "first", "words": [("Hi", 0, 10)]}, 0)
+    assert not voices.enrolled  # Ten seconds elapsed, but only four were speech.
+    service._handle("voice.harvest", {"person_id": "sam", "t0": 0, "t1": 10}, 0)
+    assert len(received[-1]) == 4 * 16000
+    service.ring.append(10, np.ones(16000))
+    service.speech_intervals.append((10, 11))
+    service._handle("caption", caption | {"utt_id": "second", "words": [("again", 10, 11)]}, 0)
+    assert "sam" in voices.enrolled
+    assert len(received[-1]) == 5 * 16000
+    assert np.all(received[-1] == 1)
+    service._handle("session.forget", {}, 0)
+    assert not service.speech_intervals and not service.ring.blocks
+    assert not voices.session and "sam" in voices.enrolled
+
+
+def test_invalid_new_consent_clears_previous_request(config, bus):
+    service = AudioService(bus, config)
+    service.pending_consent = {"track_id": 1, "consent": True, "consent_t": 0}
+    service._handle(
+        "command", {"name": "enroll.start", "args": {"track_id": 2, "consent": False}}, 0
+    )
+    assert service.pending_consent is None
+
+
+def test_voice_gallery_ignores_corrupt_or_unconsented_records(tmp_path):
+    import json
+
+    records = {
+        "broken": "not JSON",
+        "missing_time": json.dumps({"consent": True, "embedding": [1, 0]}),
+        "nan_time": json.dumps({"consent": True, "consent_t": float("nan"), "embedding": [1, 0]}),
+        "good": json.dumps({"consent": True, "consent_t": 0, "embedding": [1, 0]}),
+    }
+    for person, data in records.items():
+        folder = tmp_path / person
+        folder.mkdir()
+        (folder / "voice.json").write_text(data)
+    voices = VoicePrints(tmp_path, lambda pcm: [1, 0], 0.5, 5, 1)
+    assert set(voices.enrolled) == {"good"}
+    with pytest.raises(ValueError, match="consent"):
+        voices.enroll("new", np.ones(80000), True, float("nan"))
+
+
+def test_whisper_final_preserves_non_latin_spacing_and_clamps_word_times():
+    model = SimpleNamespace(transcribe=lambda *args, **kwargs: (
+        [SimpleNamespace(text="你好。", words=[
+            SimpleNamespace(word="你", start=-0.1, end=0.4),
+            SimpleNamespace(word="好。", start=1.1, end=2.0),
+        ])], SimpleNamespace(language="zh")
+    ))
+    result = WhisperASR({"languages": ["zh"]}, model).feed(np.ones(16000), True)
+    assert result.text == "你好。"
+    assert result.words == [("你", 0, 0.4), ("好。", 1, 1)]
