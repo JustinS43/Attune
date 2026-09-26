@@ -342,6 +342,7 @@ class SpeakerFusion:
                 groups[-1][1].append(w)
             else:
                 groups.append((spk, [w]))
+        groups = self._smooth(groups)
         utt = str(get(ev, "utt_id"))
         final = bool(get(ev, "final", False))
         lang = get(ev, "lang")
@@ -358,6 +359,61 @@ class SpeakerFusion:
             )
             for i, (spk, ws) in enumerate(groups)
         ]
+
+    def _smooth(self, groups: list[tuple[Speaker, list]]) -> list[tuple[Speaker, list]]:
+        """Stop a flickering speaker decision from chopping a sentence into pieces.
+
+        A short "Someone" piece (under 2x `min_segment_s`) joins the known
+        speaker next to it, and any other piece under `min_segment_s` joins its
+        longer neighbour. Real turn changes (each side longer) stay split.
+        """
+
+        def span(ws: list) -> float:
+            return float(ws[-1][2]) - float(ws[0][1])
+
+        short = self.s.min_segment_s
+
+        def fold(gs: list, i: int, j: int) -> None:
+            # piece i joins its neighbour j and takes j's speaker
+            lo, hi = min(i, j), max(i, j)
+            gs[lo : hi + 1] = [(gs[j][0], gs[lo][1] + gs[hi][1])]
+
+        def rule(gs: list, i: int) -> tuple[int, int | None]:
+            """(priority, neighbour to join) for piece i; lower priority acts first."""
+            spk, ws = gs[i]
+            nbrs = [k for k in (i - 1, i + 1) if 0 <= k < len(gs)]
+            known = [k for k in nbrs if gs[k][0].kind != "someone"]
+            if len(nbrs) == 2 and _same(gs[i - 1][0], gs[i + 1][0]) and span(ws) < short:
+                return 0, i - 1
+            if spk.kind == "someone" and known and span(ws) < 2 * short:
+                return 1, max(known, key=lambda k: span(gs[k][1]))
+            if span(ws) < short:
+                return 2, max(nbrs, key=lambda k: span(gs[k][1]))
+            return 9, None
+
+        gs = list(groups)
+        while len(gs) > 1:
+            # sandwiched flickers, then unknown words, then the shortest other piece
+            best = min(range(len(gs)), key=lambda k: (rule(gs, k)[0], span(gs[k][1])))
+            _, j = rule(gs, best)
+            if j is None:
+                break
+            fold(gs, best, j)
+            # neighbours that now share a speaker become one piece
+            merged: list = []
+            for spk, ws in gs:
+                if merged and _same(merged[-1][0], spk):
+                    merged[-1] = (spk, merged[-1][1] + ws)
+                else:
+                    merged.append((spk, ws))
+            gs = merged
+        out: list[tuple[Speaker, list]] = []
+        for spk, ws in gs:
+            if out and _same(out[-1][0], spk):
+                out[-1] = (spk, out[-1][1] + ws)
+            else:
+                out.append((spk, ws))
+        return out
 
     # ---------------- tick ----------------
     def tick(self, now: float) -> tuple[Scene, list[Caption], VoiceHarvest | None]:

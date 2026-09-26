@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Attune Horizon app icon</title>
+  <desc id="desc">A warm rising sun above three open turquoise arcs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#123e49"/><stop offset="1" stop-color="#082832"/></linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe5b0"/><stop offset="1" stop-color="#f3a976"/></linearGradient>
+    <linearGradient id="arc" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#3bcbbd"/><stop offset=".5" stop-color="#a0ead4"/><stop offset="1" stop-color="#3bcbbd"/></linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <circle cx="128" cy="93" r="32" fill="url(#sun)"/>
+  <path d="M49 179c22-27 50-41 79-41s57 14 79 41" fill="none" stroke="url(#arc)" stroke-width="17" stroke-linecap="round"/>
+  <path d="M76 191c15-18 33-27 52-27s37 9 52 27" fill="none" stroke="#5bd9cc" stroke-width="14" stroke-linecap="round"/>
+  <path d="M109 199c6-6 12-9 19-9s13 3 19 9" fill="none" stroke="#b7f0d8" stroke-width="11" stroke-linecap="round"/>
+</svg>

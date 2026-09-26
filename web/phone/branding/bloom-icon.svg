@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Attune Bloom app icon</title>
+  <desc id="desc">Three welcoming leaves opening toward a new day.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf8"/><stop offset="1" stop-color="#eeeae1"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4bc6b8"/><stop offset="1" stop-color="#087d83"/></linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <circle cx="180" cy="77" r="25" fill="#f4be88"/>
+  <path d="M126 196C69 196 48 165 48 112c48-2 80 21 80 70v14Z" fill="#1aa6a2"/>
+  <path d="M130 196c57 0 78-31 78-84-48-2-80 21-80 70v14Z" fill="url(#leaf)"/>
+  <path d="M128 188c-17-22-25-45-25-68 0-31 13-52 25-65 12 13 25 34 25 65 0 23-8 46-25 68Z" fill="#9cddcb"/>
+  <path d="M128 192v-69" stroke="#0c7278" stroke-width="5" stroke-linecap="round"/>
+</svg>
