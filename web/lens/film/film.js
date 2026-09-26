@@ -14,6 +14,8 @@
  * emits next, pause.toggle stops recognition, session.forget clears the answers.
  */
 
+import { createFilmPlayer } from './player.js';
+
 // which face tracks belong to which person (several ids = the same person re-acquired later)
 const PEOPLE_TRACKS = {
   dinner_group: { mark: [0], jess: [2, 1] },
@@ -98,39 +100,8 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
   if (dinner) dinner.start = FIRST_START;
   for (const s of segs) s.start ??= s.t0;
 
-  // ---- video elements, one per clip, created on demand
-  const videos = new Map();
-  let error = null;
-  function videoFor(clip) {
-    let v = videos.get(clip);
-    if (v) return v;
-    v = document.createElement('video');
-    v.muted = true;
-    v.playsInline = true;
-    v.preload = 'auto';
-    v.className = 'film-video';
-    v.src = `${base}${clip}.mp4`;
-    v.addEventListener('error', () => {
-      error = `Film footage not found at ${base}${clip}.mp4`;
-    });
-    v.addEventListener('loadedmetadata', () => {
-      // a seek requested before the metadata arrived: apply it now
-      if (v.want != null && Math.abs(v.currentTime - v.want) > 0.1) v.currentTime = v.want;
-    });
-    v.addEventListener('seeked', () => {
-      if (v.want != null && v.want > 0.5 && v.currentTime < 0.05 && (!v.seekable.length || v.seekable.end(0) === 0)) {
-        error = 'This web server cannot seek video (no HTTP Range support). Use the engine, or a server with Range requests.';
-      }
-    });
-    const onFrame = (_now, meta) => {
-      v.presented = meta.mediaTime;
-      v.requestVideoFrameCallback(onFrame);
-    };
-    if ('requestVideoFrameCallback' in v) v.requestVideoFrameCallback(onFrame);
-    layer.appendChild(v);
-    videos.set(clip, v);
-    return v;
-  }
+  // ---- footage: two <video> elements painted into a canvas, with a watchdog (player.js)
+  const player = createFilmPlayer({ layer, base });
 
   let cur = 0;
   let playing = true;
@@ -153,15 +124,11 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     cur = ((i % segs.length) + segs.length) % segs.length;
     const seg = segs[cur];
     const start = t ?? seg.start;
-    const v = videoFor(seg.clip);
-    v.want = seg.in + (start - seg.t0);
-    v.currentTime = v.want;
-    v.presented = v.want;
-    for (const [clip, el] of videos) {
-      el.classList.toggle('active', clip === seg.clip);
-      if (clip !== seg.clip && !el.paused) el.pause();
-    }
-    if (playing && active) v.play().catch(() => {});
+    // show this clip (holding the last frame until it has a picture) and cue the next one
+    // in the spare element so the cut to it is instant
+    const next = segs[(cur + 1) % segs.length];
+    player.cue(seg.clip, seg.in + (start - seg.t0), { clip: next.clip, t: next.in + (next.start - next.t0) });
+    player.setPlaying(playing && active);
     filmT = start;
     setClock(start);
     sent.clear();
@@ -173,14 +140,6 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     }
     reset();
     emit({ type: 'paused', paused: recogPaused });
-    // cue the next clip at its in-point so the cut is instant
-    const next = segs[(cur + 1) % segs.length];
-    const nv = videoFor(next.clip);
-    if (nv !== v) {
-      nv.pause();
-      nv.want = next.in + (next.start - next.t0);
-      nv.currentTime = nv.want;
-    }
   }
 
   // ---- face tracks
@@ -265,7 +224,10 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
   function tick() {
     if (!segs.length) return;
     let seg = segs[cur];
-    const v = videoFor(seg.clip);
+    player.update();
+    // until the new clip has a picture, the old frame holds and nothing is drawn over it
+    if (!player.ready) return;
+    const v = player.video;
     const segEnd = seg.in + (seg.t1 - seg.t0);
     if (active && playing && (v.ended || v.currentTime >= segEnd - 0.03)) {
       go(cur + 1);
@@ -405,16 +367,17 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     get info() {
       const seg = segs[cur];
       return {
-        index: cur, count: segs.length, label: seg?.label ?? '', playing, error,
+        index: cur, count: segs.length, label: seg?.label ?? '', playing, error: player.error,
         progress: seg ? (filmT - seg.t0) / (seg.t1 - seg.t0) : 0,
         t: filmT,
       };
     },
-    /** The element the glass panels blur (the visible video). */
+    /** What the glass panels blur: the canvas holding the film picture. */
     get blurSource() {
-      const v = videos.get(segs[cur]?.clip);
-      return v && v.readyState >= 2 ? v : null;
+      return player.frameSource;
     },
+    /** The footage player (two elements, canvas, watchdog stats) for debugging and tests. */
+    player,
     start(t) {
       active = true;
       layer.classList.add('film-on');
@@ -432,7 +395,7 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     stop() {
       active = false;
       layer.classList.remove('film-on');
-      for (const v of videos.values()) v.pause();
+      player.release(); // frees both video decoders while Live runs
     },
     tick,
     get playing() {
@@ -440,9 +403,7 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     },
     togglePlay() {
       playing = !playing;
-      const v = videoFor(segs[cur].clip);
-      if (playing) v.play().catch(() => {});
-      else v.pause();
+      player.setPlaying(playing && active);
       return playing;
     },
     next() {

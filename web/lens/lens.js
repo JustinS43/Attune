@@ -429,6 +429,15 @@ window.attuneLens = {
   },
 };
 
+// The URL's ?mode= always wins on load. No mode is remembered anywhere else (no storage); after
+// load only M, the mode buttons or attuneLens.setMode change it, and each writes it back to the
+// URL. A page restored from the back/forward cache re-reads its URL to stay in step.
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  const m = MODE_ALIASES[new URLSearchParams(location.search).get('mode')];
+  if (m) setMode(m);
+});
+
 syncChrome();
 setSource(sourceKind);
 requestAnimationFrame(frame);
