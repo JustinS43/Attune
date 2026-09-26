@@ -6,6 +6,31 @@
 
 ## Running the engine
 
+### Local models for the speaker demo
+
+With permission to download model weights, run this from the repo root:
+
+```bash
+python scripts/download_models.py --yes buffalo_l face_landmarker light_asd \
+    cam_plus_plus whisper_config.json whisper_model.bin \
+    whisper_preprocessor_config.json whisper_tokenizer.json whisper_vocabulary.json
+python scripts/download_models.py --check
+```
+
+Use `--root /path/to/checkout` when the running engine is in another checkout.
+The downloader pins sizes and SHA-256 hashes and verifies files before installing them.
+It extracts only the face detector and recognizer from Buffalo_L; its age and gender
+models are not installed. InsightFace's Buffalo_L weights are for non-commercial
+research use only. Model weights stay in the ignored `models/` folder.
+
+The live demo needs the glasses camera and a microphone: name them in `config/attune.toml`
+(`[vision] camera_name`, `[audio] device_name`), and on macOS allow both under System
+Settings > Privacy & Security. `cam_plus_plus` is 3D-Speaker's CAM++ export, the one the
+voice thresholds were tuned on; if `--check` reports it wrong, you have another export
+(WeSpeaker's, say): fetch it again, then re-enroll voices, because prints from different
+models never match. Without a saved person, the demo can show speech placement but cannot
+verify saved-name accuracy.
+
 Run everything from the repo root, so `config/`, `models/` and `data/` resolve:
 
 ```bash
