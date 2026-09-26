@@ -17,8 +17,10 @@ dependencies = [
 # Section 1 - Vision (SCRFD and ArcFace ONNX files are run directly with onnxruntime-gpu)
 vision = [
     "opencv-python",
-    "onnxruntime-gpu",
+    "onnxruntime-gpu[cuda,cudnn]; sys_platform != 'darwin'",  # brings CUDA 12 + cuDNN 9 runtime wheels
+    "onnxruntime; sys_platform == 'darwin'",                  # CPU build for Mac development
     "mediapipe",
+    "cv2-enumerate-cameras",                                  # open the webcam by name, not index
 ]
 # Section 2 - Audio & Language
 audio = [
@@ -49,8 +51,8 @@ url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu128" }
-torchaudio = { index = "pytorch-cu128" }
+torch = { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" }
+torchaudio = { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" }
 
 [build-system]
 requires = ["hatchling"]
