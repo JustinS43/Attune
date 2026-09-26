@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f8f6f2">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Attune · Phone preview</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Attune · Phone</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="stylesheet" href="./styles.css">
-  <script src="./app.js" defer></script>
+  <script type="module" src="./app.js"></script>
 </head>
 <body>
   <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -27,7 +27,7 @@
     <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
   </svg>
 
-  <div class="desktop-hint"><span class="hint-dot"></span> ATTUNE PHONE PREVIEW <span class="hint-sep">/</span> Interactive local demo</div>
+  <div class="desktop-hint" role="status"><span class="hint-dot demo"></span> ATTUNE PHONE <span class="hint-sep">/</span> Connecting…</div>
   <div class="phone-shell">
     <div class="phone-screen" id="app" data-theme="light">
       <div class="status-bar" aria-hidden="true"><span>9:41</span><div class="island"></div><span class="status-icons"><span class="signal">▂▄▆</span><span>◕</span><span class="battery"></span></span></div>
@@ -41,6 +41,7 @@
         <button class="tab" type="button" data-nav="settings"><svg><use href="#i-settings"></use></svg><span>Settings</span></button>
       </nav>
       <div class="home-indicator" aria-hidden="true"></div>
+      <div id="alert-banner" class="alert-banner" role="alert"></div>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </div>
   </div>
