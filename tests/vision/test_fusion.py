@@ -631,3 +631,19 @@ def test_a_someone_segment_takes_the_face_that_turns_up():
     f.timeline.append((0.1, A))  # a late decision covering those words
     caps = f._captions_for(draft("u7", words), now=2.0, first_seen=0.0)
     assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u7", 1)]
+
+
+def test_a_stretched_last_word_does_not_make_its_own_segment():
+    # the streaming recogniser stretches each draft's last word to the end of the chunk
+    f = SpeakerFusion(FusionSettings())
+    f.timeline.extend([(0.0, A), (0.62, B), (1.2, A)])  # a flicker under "starts at"
+    drafts = [
+        [("The", 0.0, 0.9)],
+        [("The", 0.0, 0.3), ("meeting", 0.3, 0.6), ("starts", 0.62, 1.5)],
+        [("The", 0.0, 0.3), ("meeting", 0.3, 0.6), ("starts", 0.62, 0.9)]
+        + [("at", 0.95, 1.1), ("three", 1.15, 1.5)],
+    ]
+    for i, words in enumerate(drafts):
+        caps = f._captions_for(draft("u8", words, i == 2), now=2.0 + i, first_seen=0.0)
+        assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u8", 1)]
+    assert f.take_retractions() == []
