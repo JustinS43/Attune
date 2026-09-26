@@ -39,11 +39,16 @@ talk_onset_s = 0.4              #   i.e. within 0.4 s of it,
 talk_sustain_s = 1.5            #   1.5 s if it started in the middle of someone's speech
 lip_open_max = 0.6              # wider open than this = yawn or laugh, not speech
 head_motion_max = 0.8           # face widths/s; faster = blurred lips, not measured
+talk_min_swings = 4             # joining mid-speech: open/close swings needed over talk_sustain_s
+talk_swing_amp = 0.03           # open ratio change that counts as a swing
+mouth_min_fps = 8.0             # fewer mouth samples a second: mouth not judged (starved GPU)
 sync_min_corr = 0.3             # lips in time with the sound: required when there is sound
 av_window_s = 1.5
 require_sync = true             # false only for film reels over unrelated audio
 voice_reject = 0.25             # best voice score below this vetoes a face with a session print
 harvest_min_corr = 0.4          # learn a face's voice only when this far in time
+learn_offscreen = true          # learn voices heard while every visible face is still as offscreen-N
+offscreen_claim_s = 3.0         # a face talking this long with an offscreen-N voice claims it
 hold_s = 0.5
 switch_ratio = 1.5
 voice_match = 0.5

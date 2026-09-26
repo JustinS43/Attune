@@ -76,6 +76,16 @@ class FusionSettings:
     # A head moving faster than this (face widths per second) blurs the lips and their
     # landmarks jump, so its lips count as not measured.
     head_motion_max: float = 0.8
+    # Talking that starts in the middle of someone's speech must show at least this many
+    # open/close swings (each >= talk_swing_amp of open ratio) over the last
+    # talk_sustain_s: lips parting once and closing again is two swings, speech is many.
+    talk_min_swings: int = 4
+    talk_swing_amp: float = 0.03
+    # Mouth evidence needs a steady frame rate: with fewer mouth samples than this per
+    # second (a starved GPU, landmarks failing), a face's mouth counts as not measured
+    # (not talking) instead of reading frame-to-frame jumps as lips moving. Scenes with
+    # 2-4 faces run at 9-14 fps, so the line sits below that.
+    mouth_min_fps: float = 8.0
     hold_s: float = 0.5
     switch_ratio: float = 1.5
     voice_match: float = 0.5
@@ -118,6 +128,14 @@ class FusionSettings:
     # Session voice prints are only harvested from a face this far in time (and passing
     # every talking check), so a silent face never learns a background voice.
     harvest_min_corr: float = 0.4
+    # Off-screen voices: speech heard for harvest_after_s while every visible face's mouth
+    # is measured and still is learnt as an "offscreen-N" session print. Speech that later
+    # matches it is never given to a face (it goes to Someone).
+    learn_offscreen: bool = True
+    # A face that talks on its own evidence (in time >= harvest_min_corr) for this long
+    # while its voice matches an "offscreen-N" voice claims that voice: it was this face
+    # all along (say its mouth was covered while that voice was learnt).
+    offscreen_claim_s: float = 3.0
 
 
 def _load(cls, table: dict[str, Any] | None):

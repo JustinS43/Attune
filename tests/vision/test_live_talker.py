@@ -11,7 +11,7 @@ import math
 from pathlib import Path
 
 import numpy as np
-from attune.fusion.speaker import SpeakerFusion
+from attune.fusion.speaker import SpeakerFusion, _TrackInfo
 from attune.fusion.sync import FLOOR_DB, Envelope, in_time_score
 from attune.vision.mouth import LipHistory, band_pass, mouth_in_frame
 from attune.vision.settings import FusionSettings
@@ -99,6 +99,8 @@ def test_live_silent_face_is_not_given_the_off_camera_speech():
     # lip movement that lined up with the sound for a moment remains (about 1 s).
     assert len(on_face) / len(heard) < 0.06
     assert not [t for t in on_face if 19.0 <= t <= 26.5]  # the yawn is not speech
+    # lips parting once (7.4-8 s) while people talk: not talking (talk_min_swings)
+    assert not [t for t in on_face if 7.0 <= t <= 9.5]
 
 
 def test_live_silent_face_captions_go_to_someone():
@@ -156,18 +158,19 @@ class Room:
     """One face and a mic. The face's mouth is either still (with landmark jitter and a lip
     parting now and then) or follows the sound it makes."""
 
-    def __init__(self, settings=None, seed=0):
+    def __init__(self, settings=None, seed=0, fps=FPS):
         self.f = SpeakerFusion(settings or FusionSettings())
         self.lips = LipHistory()
         self.rng = np.random.default_rng(seed)
+        self.fps = fps
         self.t = 0.0
         self.frame = 0
+        self.last_tick = -1.0
 
     def step(self, talking: bool, speech: bool, parting: bool = False, voice=None):
-        self.t += 1 / FPS
+        self.t += 1 / self.fps
         self.frame += 1
         t = self.t
-        loud = speech_loudness(t) if speech else -65.0
         if talking:  # the mouth leads the sound by about 0.1 s
             mouth = 0.05 + 0.25 * max(0.0, (speech_loudness(t + 0.1) + 40) / 25)
         else:
@@ -177,13 +180,19 @@ class Room:
         track = Track(1, [500, 300, 300, 300], 300, self.lips.score(t), None, None, 0.0,
                       "unknown", mouth)  # fmt: skip
         self.f.on_tracks(Tracks(self.frame, t, [track]))
-        self.f.on_audio_level({"t": t, "db": loud})
+        # the mic keeps its own 50 Hz pace whatever the camera does
+        for k in range(max(1, round(50 / self.fps)), 0, -1):
+            tk = t - (k - 1) / 50
+            self.f.on_audio_level(
+                {"t": tk, "db": speech_loudness(tk) if speech else -65.0}
+            )
         self.f.on_vad({"t": t, "is_speech": speech})
         if voice is not None:
             self.f.on_voice_match(
                 {"utt_id": "u", "person_id": voice[0], "score": voice[1]}
             )
-        if self.frame % 2 == 0:
+        if t - self.last_tick >= TICK - 1e-6:
+            self.last_tick = t
             return self.f.tick(t)
         return None
 
@@ -383,3 +392,177 @@ def test_digital_silence_does_not_dominate_the_in_time_check():
         lips.append((t, 0.2 + 0.1 * max(0.0, math.sin(2 * math.pi * 4 * (t + 0.05)))))
     assert min(db for _, db in env.samples) == FLOOR_DB
     assert in_time_score(lips, env, 2.5) > 0.5
+
+
+# ---------------- the live report: a silent teammate on camera, the talker behind it ----------------
+def run_speech(room, steps, voice=None, talking=False, parting=None):
+    """Steps of speech; returns how many ticks gave it to the face, and the harvests."""
+    on_face, harvests = 0, []
+    for i in range(steps):
+        out = room.step(
+            talking=talking,
+            speech=True,
+            voice=voice,
+            parting=bool(parting and parting(i)),
+        )
+        if out is not None and out[2] is not None:
+            harvests.append(out[2])
+        spk = room.f.current
+        on_face += spk is not None and spk.kind in ("face", "probable_face")
+    return on_face, harvests
+
+
+def test_silent_face_on_camera_and_an_off_camera_talker_with_another_voice():
+    room = Room()
+    for _ in range(60):
+        room.step(talking=False, speech=False)
+    # 1. The talker behind the camera speaks; the teammate on camera is still. Nothing
+    #    matches yet (no prints): the speech is Someone's, and its voice is learnt as an
+    #    off-screen voice.
+    on_face, harvests = run_speech(room, 90, voice=(None, 0.0))
+    assert on_face == 0 and room.f.current.kind == "someone"
+    assert [h.person_id for h in harvests] == ["offscreen-1"]
+    for _ in range(30):
+        room.step(talking=False, speech=False)
+    # 2. The same voice again. This time the teammate's mouth even moves in time with it
+    #    (the worst case for the lips), for less than offscreen_claim_s: the voice says
+    #    it is the off-screen talker, so it still isn't given to the face.
+    on_face, harvests = run_speech(room, 60, voice=("offscreen-1", 0.8), talking=True)
+    assert on_face == 0 and room.f.current.kind == "someone"
+    assert all(h.person_id != "track-1" for h in harvests)
+    # 3. Captions of that speech read Someone (a named off-screen voice would read its name).
+    assert room.f.decide(room.t)[0].label == "Someone"
+
+
+def test_a_face_that_really_talks_with_an_off_screen_voice_claims_it():
+    # The off-screen voice was this face's own (its mouth was covered while it was learnt).
+    s = FusionSettings()
+    room = Room(s)
+    for _ in range(60):
+        room.step(talking=False, speech=False)
+    first = None
+    for i in range(round((s.offscreen_claim_s + 1.5) * FPS)):
+        room.step(talking=True, speech=True, voice=("offscreen-1", 0.8))
+        if first is None and room.f.current.kind == "face":
+            first = (i + 1) / FPS
+    assert room.f.claimed == {"offscreen-1": "track-1"}
+    assert first is not None and first >= s.offscreen_claim_s - 0.3
+    assert room.f.current.kind == "face"
+
+
+def test_low_frame_rate_mouth_is_not_evidence():
+    # A starved GPU: a few frames a second. The vision side's lip score then comes from
+    # far-apart samples and reads high; the mouth isn't judged at all, so the speech goes
+    # to Someone. The same input at a normal frame rate is a talker.
+    def run(fps):
+        f = SpeakerFusion(FusionSettings())
+        t, frame, on_face, harvests = 0.0, 0, 0, []
+        next_tick = 0.0
+        while t < 4.0:
+            t += 1 / 50  # the mic's pace
+            speech = t >= 2.0
+            f.on_audio_level({"t": t, "db": speech_loudness(t) if speech else -65.0})
+            f.on_vad({"t": t, "is_speech": speech})
+            if round(t * 50) % round(50 / fps) == 0:
+                frame += 1
+                mouth = 0.05 + 0.25 * max(0.0, (speech_loudness(t + 0.1) + 40) / 25)
+                tr = Track(1, [500, 300, 300, 300], 300, 0.05 if speech else 0.002, None, None,
+                           0.0, "unknown", mouth if speech else 0.02)  # fmt: skip
+                f.on_tracks(Tracks(frame, t, [tr]))
+            if t >= next_tick:
+                next_tick += TICK
+                _, _, h = f.tick(t)
+                harvests += [h] if h else []
+                on_face += f.current is not None and f.current.kind in (
+                    "face",
+                    "probable_face",
+                )
+        return on_face, harvests, f
+
+    on_face, harvests, f = run(fps=5)
+    assert on_face == 0 and f.current.kind == "someone"
+    assert harvests == []  # a mouth that can't be judged isn't "clearly still" either
+    on_face, _, f = run(fps=25)
+    assert on_face > 0 and f.current.kind == "face"
+
+
+def test_a_voice_heard_from_another_face_on_screen_vetoes_this_one():
+    def run(stranger_left_first: bool):
+        f = SpeakerFusion(FusionSettings())
+        t, kinds = 0.0, []
+        for i in range(240):
+            t += 1 / FPS
+            speech = i >= 120
+            tracks = []
+            if not stranger_left_first or i < 30:
+                tracks.append(Track(2, [1200, 300, 200, 200], 200, 0.002, None, None, 0.0,
+                                    "unknown", 0.02))  # fmt: skip
+            if not stranger_left_first or i >= 60:
+                mouth = 0.05 + 0.25 * max(0.0, (speech_loudness(t + 0.1) + 40) / 25)
+                tracks.append(Track(1, [400, 300, 300, 300], 300, 0.05 if speech else 0.002,
+                                    None, None, 0.0, "unknown", mouth if speech else 0.02))  # fmt: skip
+            f.on_tracks(Tracks(i + 1, t, tracks))
+            f.on_audio_level({"t": t, "db": speech_loudness(t) if speech else -65.0})
+            f.on_vad({"t": t, "is_speech": speech})
+            if speech:  # the voice matches the stranger's session print, "track-2"
+                f.on_voice_match({"utt_id": "u", "person_id": "track-2", "score": 0.8})
+            f.tick(t)
+            kinds.append(f.current.kind if f.current else None)
+        return kinds
+
+    # track 2 was on screen together with track 1: they're different people
+    assert "face" not in run(stranger_left_first=False)
+    # track 2 left before track 1 appeared: it may be the same person, tracked again
+    assert "face" in run(stranger_left_first=True)
+
+
+def test_swings_count_open_and_close_movements():
+    f = SpeakerFusion(FusionSettings())
+    tr = _TrackInfo(1, [0, 0, 10, 10], 0.0, None, None, "unknown", 0.0)
+    for i in range(45):  # lips part once and close again over 1.5 s
+        t = i / FPS
+        tr.mouth.append((t, 0.2 if 0.4 <= t < 1.0 else 0.01))
+    assert f._swings(tr, 1.5, 1.5, 0.03) == 2
+    tr.mouth.clear()
+    for i in range(45):  # talking: about 4.5 syllables a second
+        t = i / FPS
+        tr.mouth.append((t, 0.15 + 0.1 * math.sin(2 * math.pi * 4.5 * t)))
+    assert f._swings(tr, 1.5, 1.5, 0.03) >= 10
+
+
+def test_lips_parting_once_in_time_with_a_loud_moment_is_not_talking():
+    # Mid-speech, a listener's lips part for 0.7 s just as the talker gets louder (as on
+    # the live clip at 7.4 s). Lip score and in-time check both pass for talk_sustain_s;
+    # only the swing count (one open, one close) tells it from talking.
+    def on_face(settings):
+        f, lips, rng = SpeakerFusion(settings), LipHistory(), np.random.default_rng(0)
+        t, frame, next_tick, ticks = 0.0, 0, 0.0, 0
+        while t < 7.0:
+            t += 1 / FPS
+            frame += 1
+            speech = t >= 1.5
+            loud = speech_loudness(t) + (15.0 if 4.0 <= t < 4.7 else 0.0)
+            f.on_audio_level({"t": t, "db": loud if speech else -65.0})
+            f.on_vad({"t": t, "is_speech": speech})
+            mouth = (
+                0.012
+                + (0.2 if 4.05 <= t < 4.75 else 0.0)
+                + 0.004 * rng.standard_normal()
+            )
+            lips.add(t, mouth)
+            tr = Track(1, [500, 300, 300, 300], 300, lips.score(t), None, None, 0.0, "unknown",
+                       mouth)  # fmt: skip
+            f.on_tracks(Tracks(frame, t, [tr]))
+            if t >= next_tick:
+                next_tick += TICK
+                f.tick(t)
+                ticks += f.current is not None and f.current.kind in (
+                    "face",
+                    "probable_face",
+                )
+        return ticks
+
+    assert on_face(FusionSettings()) == 0
+    assert (
+        on_face(FusionSettings(talk_min_swings=0)) > 0
+    )  # what the swing count prevents

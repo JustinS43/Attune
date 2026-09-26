@@ -186,7 +186,9 @@ def test_hold_and_switch_rule():
 
 def test_probable_speaker_is_dashed():
     sim = Sim()
-    for _ in range(20):  # no sound to check against: movement in the probable band
+    # no sound to check against: movement in the probable band (a new face's mouth is
+    # judged once it has 0.5 s of steady samples, then talk_confirm_s)
+    for _ in range(30):
         scene, _, _ = sim.step(
             {1: (500, 0.2, 0.010, None, None, "unknown"), 2: still_face(lip=0.002)},
             speech=True,
