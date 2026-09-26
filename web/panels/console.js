@@ -56,29 +56,37 @@ export function createConsole(ctx) {
     return h('div', { class: `atp-stat ${tone}` }, h('span', { class: 'atp-stat-label', text: label }), h('span', { class: 'atp-stat-value', text: value }));
   }
   function meter(label, level) {
-    const pct = Math.round(Math.max(0, Math.min(1, level ?? 0)) * 100);
+    const pct = Number.isFinite(level) ? Math.round(Math.max(0, Math.min(1, (level + 60) / 60)) * 100) : 0;
     return h('div', { class: 'atp-stat' }, h('span', { class: 'atp-stat-label', text: label }),
-      h('span', { class: 'atp-meter', role: 'meter', 'aria-valuenow': String(pct), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('i', { style: { width: `${pct}%` } })));
+      h('span', { class: 'atp-meter', role: 'meter', 'aria-label': label, 'aria-valuenow': String(pct), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('i', { style: { width: `${pct}%` } })));
   }
-  const flag = (v) => (v === true || v === 'ok' || v === 'connected' ? ['OK', 'ok'] : v === false || v === null || v === undefined ? ['Off', 'bad'] : [String(v), /fail|err|lost|off|down/i.test(String(v)) ? 'bad' : 'ok']);
+  function arduinoFlag(link) {
+    if (!link) return ['Offline', 'bad'];
+    return link.connected ? ['Connected', 'ok'] : ['Offline', 'bad'];
+  }
+
+  function ollamaFlag(llm) {
+    if (!llm || !llm.ok) return ['Unavailable', 'bad'];
+    return llm.warm ? ['Ready', 'ok'] : ['Starting', 'warn'];
+  }
 
   function renderStatus(s) {
     const delay = typeof s.caption_delay === 'number' ? `${s.caption_delay.toFixed(2)} s` : '—';
     const delayTone = typeof s.caption_delay === 'number' ? (s.caption_delay <= 1 ? 'ok' : s.caption_delay <= 1.5 ? 'warn' : 'bad') : '';
     const fps = typeof s.fps === 'number' ? s.fps.toFixed(0) : '—';
-    const [ard, ardTone] = flag(s.arduino);
-    const [oll, ollTone] = flag(s.ollama);
+    const [ard, ardTone] = arduinoFlag(s.arduino);
+    const [oll, ollTone] = ollamaFlag(s.ollama);
     statusGrid.replaceChildren(
       stat('FPS', fps, typeof s.fps === 'number' ? (s.fps >= 24 ? 'ok' : 'warn') : ''),
       stat('Caption delay', delay, delayTone),
       stat('GPU mem', typeof s.gpu_mem_gb === 'number' ? `${s.gpu_mem_gb.toFixed(1)} GB` : '—', typeof s.gpu_mem_gb === 'number' && s.gpu_mem_gb > 11 ? 'warn' : ''),
       stat('Arduino', ard, ardTone),
       stat('Ollama', oll, ollTone),
-      stat('Power', s.on_battery ? 'On battery' : 'Plugged in', s.on_battery ? 'bad' : 'ok'),
+      stat('Power', s.on_battery == null ? '—' : s.on_battery ? 'On battery' : 'Plugged in', s.on_battery == null ? '' : s.on_battery ? 'bad' : 'ok'),
       meter('Mic level', s.mic_level),
     );
     const parts = Array.isArray(s.parts) ? s.parts : Object.entries(s.parts || {}).map(([part, v]) => (typeof v === 'object' && v ? { part, ...v } : { part, ok: !!v }));
-    partsRow.replaceChildren(...parts.map((p) => h('span', { class: `atp-part ${p.ok ? 'ok' : 'bad'}`, title: p.detail || (p.ok ? 'healthy' : 'not running') }, h('i'), p.part)));
+    partsRow.replaceChildren(...parts.map((p) => h('span', { class: `atp-part ${p.ok && !p.stale ? 'ok' : 'bad'}`, title: p.stale ? 'status is stale' : p.detail || (p.ok ? 'healthy' : 'not running') }, h('i'), p.part)));
     if (!parts.length) partsRow.append(h('span', { class: 'atp-muted', text: 'Waiting for part health…' }));
     const cal = parts.find((p) => p.part === 'calibration');
     if (cal) calStatus.textContent = cal.detail || (cal.ok ? 'Calibration ready' : 'Calibration not ready');

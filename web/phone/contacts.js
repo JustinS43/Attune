@@ -18,9 +18,11 @@ async function transact(mode, operation) {
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, mode);
       const request = operation(tx.objectStore(STORE));
-      request.onsuccess = () => resolve(request.result);
+      let result;
+      request.onsuccess = () => { result = request.result; };
       request.onerror = () => reject(request.error);
-      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(tx.error || new Error('Contact storage transaction aborted.'));
     });
   } finally {
     db.close();

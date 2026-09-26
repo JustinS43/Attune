@@ -66,7 +66,10 @@ const state = {
   faces: new Map()
 };
 let enrollmentFeed = null;
-let portrait = '';
+const portraitCanvas = document.createElement('canvas');
+portraitCanvas.width = 360;
+portraitCanvas.height = 480;
+const portraitContext = portraitCanvas.getContext('2d');
 let portraitReady = false;
 let latestFaceBoxes = new Map();
 let frameBusy = false;
@@ -366,14 +369,22 @@ function renderEnroll() {
   content.append(steps);
 
   const photo = el('div', 'enroll-photo card');
-  const preview = el('img', 'enroll-preview');
+  const preview = enrollment.photo ? el('img', 'enroll-preview') : el('canvas', 'enroll-preview');
   preview.id = 'enroll-preview';
-  preview.alt = 'Full face portrait from the Attune camera';
-  if (enrollment.photo || portrait) preview.src = enrollment.photo || portrait;
+  if (enrollment.photo) {
+    preview.alt = 'Full face portrait from the Attune camera';
+    preview.src = enrollment.photo;
+  } else {
+    preview.width = portraitCanvas.width;
+    preview.height = portraitCanvas.height;
+    preview.setAttribute('role', 'img');
+    preview.setAttribute('aria-label', 'Live full face portrait from the Attune camera');
+    if (portraitReady) preview.getContext('2d').drawImage(portraitCanvas, 0, 0);
+  }
   const placeholder = el('div', 'enroll-photo-placeholder');
   placeholder.append(icon('camera'), el('span', '', state.live ? 'Move back until your whole face is in view…' : 'Connect to Attune to take a photo'));
   photo.append(preview, placeholder, el('span', 'enroll-camera-label', enrollment.photo ? 'PHOTO CAPTURED' : 'LIVE CAMERA PREVIEW'));
-  photo.classList.toggle('has-image', !!preview.src);
+  photo.classList.toggle('has-image', !!enrollment.photo || portraitReady);
   content.append(photo);
 
   if (enrollment.phase === 'ready' && state.faces.size > 1) {
@@ -441,10 +452,9 @@ function renderEnroll() {
 function updateEnrollPreview() {
   if (state.screen !== 'enroll' || state.enroll.photo) return;
   const preview = document.querySelector('#enroll-preview');
-  if (!preview) return;
-  if (portrait) preview.src = portrait;
-  else preview.removeAttribute('src');
-  preview.parentElement.classList.toggle('has-image', !!portrait);
+  if (!(preview instanceof HTMLCanvasElement)) return;
+  if (portraitReady) preview.getContext('2d').drawImage(portraitCanvas, 0, 0);
+  preview.parentElement.classList.toggle('has-image', portraitReady);
   const shutter = document.querySelector('[data-action="take-photo"]');
   if (shutter) shutter.disabled = !portraitReady || !state.connected;
 }
@@ -455,7 +465,7 @@ async function updatePortrait(frame) {
   lastPortraitFrameAt = performance.now();
   const trackId = state.enroll.trackId ?? state.faces.keys().next().value;
   const box = latestFaceBoxes.get(trackId);
-  if (!box) { portrait = ''; portraitReady = false; updateEnrollPreview(); return; }
+  if (!box) { portraitReady = false; updateEnrollPreview(); return; }
   frameBusy = true;
   try {
     const bitmap = await createImageBitmap(frame.blob);
@@ -466,12 +476,10 @@ async function updatePortrait(frame) {
       const left = x + w / 2 - width / 2;
       const top = y - h * .55;
       if (left < 0 || top < 0 || left + width > bitmap.width || top + height > bitmap.height) {
-        portraitReady = false; portrait = ''; updateEnrollPreview(); return;
+        portraitReady = false; updateEnrollPreview(); return;
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = 360; canvas.height = 480;
-      canvas.getContext('2d').drawImage(bitmap, left, top, width, height, 0, 0, 360, 480);
-      portrait = canvas.toDataURL('image/jpeg', .84);
+      if (state.screen !== 'enroll' || state.enroll.photo || (state.enroll.trackId ?? state.faces.keys().next().value) !== trackId) return;
+      portraitContext.drawImage(bitmap, left, top, width, height, 0, 0, 360, 480);
       portraitReady = true;
       updateEnrollPreview();
     } finally {
@@ -492,15 +500,16 @@ function syncEnrollmentFeed() {
         return;
       }
       if (msg.type !== 'thumbnails') return;
+      const previousTrackIds = [...state.faces.keys()].join(',');
       state.faces = new Map((msg.thumbnails || []).filter(face => Number.isInteger(face.track_id) && face.jpeg_b64).map(face => [face.track_id, {photo: `data:image/jpeg;base64,${face.jpeg_b64}`} ]));
       if (state.enroll.trackId !== null && !state.faces.has(state.enroll.trackId) && !state.enroll.photo) state.enroll.trackId = null;
       if (state.screen === 'enroll') {
-        if (state.faces.size > 1 && state.enroll.phase === 'ready') refresh();
+        if (state.enroll.phase === 'ready' && previousTrackIds !== [...state.faces.keys()].join(',')) refresh();
         else updateEnrollPreview();
       }
     }});
   } else if ((state.screen !== 'enroll' || !state.connected) && enrollmentFeed) {
-    enrollmentFeed.close(); enrollmentFeed = null; state.faces.clear(); latestFaceBoxes.clear(); portrait = ''; portraitReady = false; lastPortraitFrameAt = 0;
+    enrollmentFeed.close(); enrollmentFeed = null; state.faces.clear(); latestFaceBoxes.clear(); portraitReady = false; lastPortraitFrameAt = 0;
   }
 }
 
@@ -977,8 +986,9 @@ function onMessage(msg) {
       break;
     case 'enroll_result': {
       const e = state.enroll;
-      if (!['face', 'voice'].includes(e.phase) || (msg.track_id != null && msg.track_id !== e.trackId)) break;
+      if (msg.track_id != null && msg.track_id !== e.trackId) break;
       if (msg.part === 'face') {
+        if (e.phase !== 'face') break;
         e.face = msg.ok ? 'ok' : 'fail';
         e.reason = msg.reason || 'Try again';
         e.phase = msg.ok ? 'voice' : 'error';
@@ -990,6 +1000,7 @@ function onMessage(msg) {
             .catch(() => showToast('Recognition was saved, but this device could not save the contact photo.'));
         }
       } else if (msg.part === 'voice' && e.face === 'ok') {
+        if (!['voice', 'error', 'done'].includes(e.phase) || msg.person_id !== e.personId || e.voice === 'ok') break;
         e.voice = msg.ok ? 'ok' : e.voice === 'skipped' ? 'skipped' : 'fail';
         e.reason = msg.reason || 'Try speaking again';
         e.phase = msg.ok || e.phase === 'done' ? 'done' : 'error';
@@ -1090,17 +1101,17 @@ document.addEventListener('click', async event => {
   if (!control) return;
   const action = control.dataset.action ?? control.dataset.nav;
   if (['home','people','contact-new','history','speak','enroll','settings','live'].includes(action)) return navigate(action);
-  if (action === 'select-face') { state.enroll.trackId = Number(control.dataset.trackId); portrait = ''; portraitReady = false; refresh(); return; }
+  if (action === 'select-face') { state.enroll.trackId = Number(control.dataset.trackId); portraitReady = false; refresh(); return; }
   if (action === 'take-photo') {
     if (state.enroll.photo) {
       state.enroll.photo = '';
       state.enroll.phase = 'ready';
-      portrait = ''; portraitReady = false;
+      portraitReady = false;
       render(); return;
     }
-    if (!portraitReady || !portrait) return showToast('Move back until your whole face is visible.');
+    if (!portraitReady) return showToast('Move back until your whole face is visible.');
     state.enroll.trackId = state.enroll.trackId ?? [...state.faces.keys()][0];
-    state.enroll.photo = portrait;
+    state.enroll.photo = portraitCanvas.toDataURL('image/jpeg', .84);
     state.enroll.phase = 'captured';
     render(); return;
   }
@@ -1117,7 +1128,7 @@ document.addEventListener('click', async event => {
     e.phase = 'done'; e.voice = 'skipped';
     render(); showToast(`${e.name}'s face is saved without voice.`); return;
   }
-  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, personId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; portrait = ''; portraitReady = false; render(); return; }
+  if (action === 'enroll-again') { state.enroll = {phase: 'ready', name: '', consent: false, trackId: null, personId: null, photo: '', face: 'idle', voice: 'idle', reason: ''}; portraitReady = false; render(); return; }
   if (action === 'save-contact') {
     const draft = state.contactDraft;
     if (!draft.photo || !draft.name.trim() || !draft.consent) return showToast('Add a photo, name, and their consent first.');
