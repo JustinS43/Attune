@@ -84,8 +84,9 @@ class FusionSettings:
     # Mouth evidence needs a steady frame rate: with fewer mouth samples than this per
     # second (a starved GPU, landmarks failing), a face's mouth counts as not measured
     # (not talking) instead of reading frame-to-frame jumps as lips moving. Scenes with
-    # 2-4 faces run at 9-14 fps, so the line sits below that.
-    mouth_min_fps: float = 8.0
+    # 2-4 faces run at 9-14 fps (a face's mouth is missed now and then), so the line
+    # sits well below that.
+    mouth_min_fps: float = 6.0
     hold_s: float = 0.5
     switch_ratio: float = 1.5
     voice_match: float = 0.5

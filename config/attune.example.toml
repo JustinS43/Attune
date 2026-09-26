@@ -41,7 +41,7 @@ lip_open_max = 0.6              # wider open than this = yawn or laugh, not spee
 head_motion_max = 0.8           # face widths/s; faster = blurred lips, not measured
 talk_min_swings = 4             # joining mid-speech: open/close swings needed over talk_sustain_s
 talk_swing_amp = 0.03           # open ratio change that counts as a swing
-mouth_min_fps = 8.0             # fewer mouth samples a second: mouth not judged (starved GPU)
+mouth_min_fps = 6.0             # fewer mouth samples a second: mouth not judged (starved GPU)
 sync_min_corr = 0.3             # lips in time with the sound: required when there is sound
 av_window_s = 1.5
 require_sync = true             # false only for film reels over unrelated audio
