@@ -15,12 +15,6 @@ Threads and the event loop:
 
 Every JSON message is `{"type": ..., "seq": n, ...}` with `seq` counting up per page.
 Binary frames: LE uint64 frame_no, LE float64 capture t, then a JPEG (1280x720).
-
-Only the laptop's own pages may connect (P-38): a browser always sends `Origin`, and the
-socket is refused before it opens unless that origin is a loopback address, the address
-the page itself used to reach the engine (the phone on the LAN), or listed in
-`[pages] allowed_origins`. Other websites open in the same browser can't read captions and
-faces or send commands. Clients without `Origin` (scripts, tests) are not browsers.
 """
 
 from __future__ import annotations
@@ -84,7 +78,13 @@ def is_loopback_host(host: str) -> bool:
 
 
 def origin_allowed(origin: str | None, host: str | None, allowed: Iterable[str] = ()) -> bool:
-    """May a page from `origin` use the hub? `host` is the Host header of the request."""
+    """May a page from `origin` use the hub? `host` is the Host header of the request (P-38).
+
+    A browser always sends `Origin` on a WebSocket. Allowed: a loopback origin, the address
+    the page itself used to reach the engine (the phone on the LAN), or one listed in
+    `[pages] allowed_origins`. So other websites open in the same browser can't read
+    captions and faces or send commands. Clients without `Origin` are not browsers.
+    """
     if origin is None:
         return True  # not a browser: every browser sends Origin on a WebSocket
     origin = origin.strip()
@@ -223,8 +223,6 @@ class Hub:
         }
         data = Path(data_dir) if data_dir else Path(engine.get("data_dir", "data"))
         self.people_dir = data / "people"
-        self.allowed_origins = [str(o).strip() for o in pages.get("allowed_origins", []) or []]
-        self._refused_origins: set[str] = set()
 
         self.loop: asyncio.AbstractEventLoop | None = None
         self.clients: dict[int, Client] = {}
@@ -253,6 +251,9 @@ class Hub:
         self.frames_encoded = 0
         self.encode_ms: float | None = None  # moving average, written by the encoder only
         self._health_mark = (time.monotonic(), 0)
+        # P-38: browser pages from other websites are refused (see origin_allowed)
+        self.allowed_origins = [str(o).strip() for o in pages.get("allowed_origins", []) or []]
+        self._refused_origins: set[str] = set()
 
     # ------------------------------------------------------------------ lifecycle
     def connect(self) -> None:

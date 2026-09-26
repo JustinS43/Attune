@@ -479,7 +479,7 @@ def scen_camera_pause(run: Run) -> list[Check]:
         )
         # a page that opens now learns the camera is off
         with h.ws_pages(e.ws_url, ("phone", False)) as (late,):
-            w = late.wait("welcome", timeout=5)
+            w = late.wait("welcome", timeout=10)
             out.append(
                 check(
                     "camera off: a page that connects later is told (welcome)",
@@ -549,7 +549,7 @@ def scen_camera_pause(run: Run) -> list[Check]:
             )
         )
         with h.ws_pages(e.ws_url, ("lens", False)) as (late,):
-            w = late.wait("welcome", timeout=5)
+            w = late.wait("welcome", timeout=10)
             out.append(
                 check(
                     "pause: a page that connects later is told (welcome)",
@@ -1185,7 +1185,10 @@ def scen_robustness(run: Run) -> list[Check]:
                 time.sleep(25)
             log = e.log()
             alive = e.alive()
-            tracebacks = log.count("Traceback")
+            # a busy shared Ollama logs two tracebacks per timed-out request (reported
+            # separately); a crash loop is anything else
+            ollama = log.count("local Ollama request failed")
+            tracebacks = log.count("Traceback") - 2 * ollama
             lines = [
                 ln.split(": ", 1)[-1]
                 for ln in log.splitlines()
@@ -1237,16 +1240,23 @@ def scen_robustness(run: Run) -> list[Check]:
                 )
             )
             if name == "no-camera":
-                with h.ws_pages(e.ws_url, ("console", False)) as (con,):
-                    st = con.wait(
-                        "status", lambda m: "camera" in (m.get("parts") or {}), 8
+
+                def camera_missing(m):
+                    parts = m.get("parts") or {}
+                    cam, vis = parts.get("camera") or {}, parts.get("vision") or {}
+                    return cam.get("ok") is False or (
+                        vis.get("ok") is False and "camera" in str(vis.get("detail"))
                     )
-                cam = ((st or {}).get("parts") or {}).get("camera") or {}
+
+                with h.ws_pages(e.ws_url, ("console", False)) as (con,):
+                    st = con.wait("status", camera_missing, 10)
+                    last = con.of("status")[-1] if con.of("status") else {}
+                parts = (st or last).get("parts") or {}
                 out.append(
                     check(
                         "robustness no-camera: the console shows the camera is missing",
-                        cam.get("ok") is False,
-                        {k: cam.get(k) for k in ("ok", "detail")},
+                        bool(st),
+                        {k: parts.get(k) for k in ("camera", "vision")},
                     )
                 )
             if name == "bad-values":

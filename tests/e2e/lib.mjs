@@ -263,7 +263,7 @@ export async function layoutAudit(target, { minFont = 11, root = 'body' } = {}) 
  * moved off the page: a hidden pane must be `inert`, or Tab walks into an invisible app.
  */
 export async function hiddenFocusAudit(target, { root = 'body' } = {}) {
-  return target.evaluate(({ root }) => {
+  return target.evaluate(async ({ root }) => {
     const base = document.querySelector(root) || document.body;
     const vw = document.documentElement.clientWidth;
     const sel = 'a[href], button, input, select, textarea, iframe, [tabindex]:not([tabindex="-1"])';
@@ -281,6 +281,16 @@ export async function hiddenFocusAudit(target, { root = 'body' } = {}) {
       }
       const r = el.getBoundingClientRect();
       const off = r.width > 0 && (r.left >= vw || r.right <= 0);
+      if (faded && !off) {
+        // a bar that fades out but comes back when a control in it gets the focus is fine
+        const before = document.activeElement;
+        el.focus({ preventScroll: true });
+        await new Promise((ok) => setTimeout(ok, 450));
+        const back = Number(getComputedStyle(faded).opacity) > 0.5;
+        el.blur();
+        before?.focus?.({ preventScroll: true });
+        if (back) continue;
+      }
       if (faded || off) {
         const who = `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} "${(el.innerText || el.title || el.getAttribute('aria-label') || '').trim().slice(0, 24)}"`;
         out.push(`${who} ${faded ? `in faded .${String(faded.className).split(' ')[0]}` : 'off the page'}`);
@@ -378,7 +388,11 @@ export async function contrastAudit(target, { root = 'body', limit = 25 } = {}) 
       const bold = Number(cs.fontWeight) >= 700;
       const large = size >= 24 || (bold && size >= 18.66);
       const need = large ? 3 : 4.5;
-      if (ratio < need) fails.push(`"${text}" ${ratio.toFixed(2)}:1 (needs ${need}, ${size}px${bold ? ' bold' : ''})`);
+      if (ratio < need) {
+        const rgb = (c) => `rgb(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)})`;
+        const on = owner ? `${owner.tagName.toLowerCase()}.${String(owner.className).split(' ')[0]}` : 'page';
+        fails.push(`"${text}" ${ratio.toFixed(2)}:1 (needs ${need}, ${size}px${bold ? ' bold' : ''}; ${rgb(fgc)} on ${rgb(bg.color)} of ${on}, opacity ${opacity.toFixed(2)})`);
+      }
     }
     return { checked, fails: fails.slice(0, limit), unknown: unknown.slice(0, 8), unknownCount: unknown.length };
   }, { root, limit });
