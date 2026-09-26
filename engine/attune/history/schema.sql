@@ -1,0 +1,12 @@
+-- TimescaleDB schema
+--
+-- Section 3 - Hardware & Services
+-- TODO: H-10
+-- Contracts: docs/contracts.md
+-- Plan: docs/attune-build-plan.html, section 05 Conversation history
+--
+-- What to build:
+-- - Hypertables for utterances, alerts and replies; continuous aggregate for talk time per person per minute;
+-- - 7-day retention policy; full-text search index. Never audio, video or face/voice prints.
+--
+-- Placeholder only - no code yet (MLH: project code is written during the event).
