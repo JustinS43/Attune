@@ -101,6 +101,7 @@ class Camera:
         self._detail = ""
         self.frame_no = 0
         self.measured_fps = 0.0
+        self._reduced_mode = False
         self._latest: tuple[int, float, np.ndarray] | None = None
         self._cond = threading.Condition()
         self._stop = threading.Event()
@@ -156,9 +157,14 @@ class Camera:
             self.on_fallback = bool(self.name) and not _matches(self.name, info.name)
         if not cap.isOpened():
             return None
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        if not self._reduced_mode:
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(
+            cv2.CAP_PROP_FRAME_WIDTH, min(self.width, 1280) if self._reduced_mode else self.width
+        )
+        cap.set(
+            cv2.CAP_PROP_FRAME_HEIGHT, min(self.height, 720) if self._reduced_mode else self.height
+        )
         cap.set(cv2.CAP_PROP_FPS, self.fps)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
@@ -183,11 +189,10 @@ class Camera:
                 continue
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self._set_status(True, f"{self.device_name} {w}x{h}")
-            self._read_loop(cap)
+            self._read_loop(cap, f"{self.device_name} {w}x{h}")
             cap.release()
 
-    def _read_loop(self, cap: cv2.VideoCapture) -> None:
+    def _read_loop(self, cap: cv2.VideoCapture, detail: str) -> None:
         file_period = 1.0 / (cap.get(cv2.CAP_PROP_FPS) or 30.0) if self.is_file else 0.0
         next_due = time.perf_counter()
         fails_since = None
@@ -211,10 +216,16 @@ class Camera:
                 fails_since = fails_since or time.perf_counter()
                 if time.perf_counter() - fails_since > 0.5:
                     self._set_status(False, "camera lost")
+                    if not self._reduced_mode:
+                        self._reduced_mode = True
+                        log.warning(
+                            "Camera opened without usable frames; retrying at up to 1280x720"
+                        )
                     return
                 self._stop.wait(0.01)
                 continue
             fails_since = None
+            self._set_status(True, detail)
             if file_period:
                 next_due += file_period
                 delay = next_due - time.perf_counter()
