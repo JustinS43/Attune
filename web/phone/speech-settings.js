@@ -14,7 +14,7 @@ export function speechSettings({demo = false} = {}) {
       <label for="elevenlabs-voice">Voice ID <span class="note">(optional)</span></label>
       <input id="elevenlabs-voice" name="voice_id" type="text" autocomplete="off" spellcheck="false" maxlength="256" placeholder="Default voice" disabled>
       <button class="primary full" type="submit" disabled>Save voice settings</button>
-      <p class="note">Restart Attune after saving to use the new details.</p>
+      <p class="note">Saved details apply to your next spoken reply.</p>
     </form>`;
   const form = section.querySelector('form');
   const key = form.elements.api_key;
@@ -41,6 +41,7 @@ export function speechSettings({demo = false} = {}) {
     if (!response.ok) {
       if (response.status === 403) throw new Error('Open Settings on the Attune laptop at localhost to manage voice details.');
       if (response.status === 400) throw new Error('Check the key and voice ID: use letters, numbers, underscores and hyphens.');
+      if (response.status === 404 || response.status === 405) throw new Error('This preview has no speech engine. Open Settings from the live Attune page on your laptop.');
       throw new Error('Could not reach speech settings. Check that Attune is running and try again.');
     }
     return response.json();
@@ -59,7 +60,7 @@ export function speechSettings({demo = false} = {}) {
       const data = await request({method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(values)});
       configured(data);
       delete form.dataset.editing;
-      status.textContent = 'Saved on this laptop. Restart Attune to apply these settings.';
+      status.textContent = 'Saved on this laptop. The new details apply to your next spoken reply.';
     } catch (error) {
       status.textContent = error.message;
       save.disabled = false;

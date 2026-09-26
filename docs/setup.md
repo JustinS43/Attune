@@ -161,8 +161,9 @@ python tests/e2e/run_e2e.py pages      # one scenario
 ## ElevenLabs settings
 
 On the laptop, open `/phone/`, then **Settings → Speak for me → ElevenLabs voice**.
-Enter your API key and optional voice ID, choose **Save voice settings**, then restart
-Attune. Leave the key blank to keep it; leave the voice ID blank for the default voice.
+Enter your API key and optional voice ID, then choose **Save voice settings**. The
+new details apply to the next spoken reply without restarting Attune. Leave the
+key blank to keep it; leave the voice ID blank for the default voice.
 The saved key is never returned to the browser. It is cleared from the input after
 submission and is not stored in browser storage or sent through the event bus.
 
@@ -171,7 +172,8 @@ working directory's `.env`, preserving other entries. Direct `.env` editing stil
 works. Nonblank environment variables retain precedence; the form indicates when
 they manage a value. Secrets are only editable from the laptop using `localhost`
 or a loopback address; a remote phone shows instructions to use the laptop.
-Demo mode disables credential entry. Saving does not contact ElevenLabs or verify
+Demo mode disables credential entry. A static preview cannot save settings; use
+the live Attune page on the laptop. Saving does not contact ElevenLabs or verify
 that the account has credits or access to the chosen voice.
 
 The page uses `GET /api/settings/elevenlabs` for nonsecret status and
