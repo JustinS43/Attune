@@ -7,6 +7,10 @@ from pathlib import Path
 from uuid import uuid4
 
 INTRO = re.compile(r"\b(?:i['’]m|i am|my name|call me|this is|meet|me llamo|soy)\b", re.IGNORECASE)
+ADDRESS = re.compile(
+    r"\b(?i:hi|hey|hello|thanks|thank you|bye|goodbye|see you|nice to meet you)\s+([A-Za-z][a-z]{1,24})\b"
+)
+VOCATIVE = re.compile(r"^\s*([A-Za-z][a-z]{1,24})\s*,")
 SELF_INTRO = r"\b(?:i['’]m|i\s+am|my\s+name(?:\s+is)?|call\s+me|me\s+llamo|soy)\s+"
 SCHEMA = {
     "type": "object",
@@ -37,6 +41,9 @@ class Names:
         self.cfg = config
         self.pending: dict[str, dict] = {}
         self.confirmed: dict[int, str] = {}
+        self.rejected: set[tuple[int, str]] = set()
+        self.mentions: dict[tuple[str, str], set[str]] = {}
+        self.last_offered: dict[tuple[str, str], int] = {}
         self.stoplist = {
             line.strip().casefold()
             for line in Path(__file__)
@@ -51,15 +58,91 @@ class Names:
         speaker = caption["speaker"]
         return (
             caption.get("final")
-            and speaker["kind"] == "face"
+            and speaker["kind"] in {"face", "probable_face"}
             and speaker.get("track_id") is not None
-            and speaker.get("person_id") is None
+            and (
+                speaker.get("person_id") is None
+                or str(speaker.get("person_id")).startswith("auto-")
+            )
             and speaker["track_id"] not in self.confirmed
             and INTRO.search(caption["text"]) is not None
         )
 
+    def contextual(self, caption: dict, now: float, target: dict | None = None) -> dict | None:
+        """Offer a repeated directly addressed name for confirmation, never infer it from one line."""
+        evidence = self.evidence(caption, target)
+        if evidence is None:
+            return None
+        track, pid, name = evidence["track_id"], evidence["person_id"], evidence["name"]
+        key = (str(pid or f"track-{track}"), name.casefold())
+        uses = self.mentions.setdefault(key, set())
+        uses.add(str(caption.get("utt_id")))
+        if len(uses) - self.last_offered.get(key, 0) < 2 or any(
+            p["track_id"] == track for p in self.pending.values()
+        ):
+            return None
+        event = {
+            "proposal_id": str(uuid4()),
+            "track_id": track,
+            "name": name,
+            "state": "proposed",
+            "expires_t": now + self.cfg["proposal_expiry_s"],
+        }
+        self.pending[event["proposal_id"]] = event
+        self.last_offered[key] = len(uses)
+        return dict(event)
+
+    def evidence(self, caption: dict, target: dict | None = None) -> dict | None:
+        """A directly addressed candidate associated with one unknown or automatic face."""
+        speaker = caption.get("speaker") or {}
+        if not caption.get("final"):
+            return None
+        # A person saying "Hi Sam" is usually addressing somebody else. Only
+        # the wearer's words can name the sole visible conversation partner.
+        if speaker.get("kind") != "you" or target is None:
+            return None
+        addressed = target
+        if addressed.get("kind") not in {"face", "probable_face"}:
+            return None
+        track = addressed.get("track_id")
+        pid = addressed.get("person_id")
+        if track is None or (pid is not None and not str(pid).startswith("auto-")):
+            return None
+        text = caption.get("text", "")
+        match = ADDRESS.search(text) or VOCATIVE.search(text)
+        if not match:
+            return None
+        name = match.group(1).title()
+        if (
+            name.casefold() in self.stoplist
+            or track in self.confirmed
+            or (track, name.casefold()) in self.rejected
+        ):
+            return None
+        return {"track_id": track, "person_id": pid, "name": name, "utt_id": caption.get("utt_id")}
+
     def propose(self, caption: dict, answer: dict, now: float) -> dict | None:
         """Independently validate model output before asking for confirmation."""
+        name = self.grounded(caption, answer)
+        if name is None:
+            return None
+        track = caption["speaker"]["track_id"]
+        if (track, name.casefold()) in self.rejected or any(
+            p["track_id"] == track for p in self.pending.values()
+        ):
+            return None
+        event = {
+            "proposal_id": str(uuid4()),
+            "track_id": track,
+            "name": name,
+            "state": "proposed",
+            "expires_t": now + self.cfg["proposal_expiry_s"],
+        }
+        self.pending[event["proposal_id"]] = event
+        return dict(event)
+
+    def grounded(self, caption: dict, answer: dict) -> str | None:
+        """The actual name in a model answer, validated against transcript words."""
         name = answer.get("name", "")
         if not isinstance(name, str) or not self.eligible(caption):
             return None
@@ -80,20 +163,12 @@ class Names:
         # A model's confidence cannot establish a name absent from the introduction.
         # A possessive suffix ("I'm Sam's sister") describes a relationship, not Sam.
         literal_name = r"\s+".join(re.escape(word) for word in words)
-        if re.search(SELF_INTRO + literal_name + r"(?![\w'’\-])", caption["text"], re.IGNORECASE) is None:
+        if (
+            re.search(SELF_INTRO + literal_name + r"(?![\w'’\-])", caption["text"], re.IGNORECASE)
+            is None
+        ):
             return None
-        track = caption["speaker"]["track_id"]
-        if any(p["track_id"] == track for p in self.pending.values()):
-            return None
-        event = {
-            "proposal_id": str(uuid4()),
-            "track_id": track,
-            "name": " ".join(words),
-            "state": "proposed",
-            "expires_t": now + self.cfg["proposal_expiry_s"],
-        }
-        self.pending[event["proposal_id"]] = event
-        return dict(event)
+        return " ".join(words)
 
     def answer(self, proposal_id: str, accept: bool, now: float) -> dict | None:
         p = self.pending.pop(proposal_id, None)
@@ -104,6 +179,8 @@ class Names:
         )
         if p["state"] == "confirmed":
             self.confirmed[p["track_id"]] = p["name"]
+        elif p["state"] == "rejected" and accept is False:
+            self.rejected.add((p["track_id"], p["name"].casefold()))
         return p
 
     def expire(self, now: float) -> list:
@@ -116,3 +193,6 @@ class Names:
     def forget(self) -> None:
         self.pending.clear()
         self.confirmed.clear()
+        self.rejected.clear()
+        self.mentions.clear()
+        self.last_offered.clear()

@@ -42,6 +42,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-24 Attribution without waiting: the first words of an utterance are held back (up to 300 ms) only while a mouth on screen is moving or a known voice may still be matched, otherwise shown at once (#62)
 - [ ] V-25 Live speaker gate rehearsal: use the built-in camera when no external camera is present, compare Light-ASD on/off on a labeled local clip, and check speech bubble placement in the lens demo — camera access and local model weights pending; runbook in tests/vision/README.md
 - [x] V-26 Use the latest voice verdict so a stale match cannot keep an off-screen name or direction; keep weak identity scores inconclusive; honor a named built-in camera on macOS for the enrollment station (#68)
+- [ ] V-27 Automatic contact memory: persist engaged faces, deduplicate and rank up to 150, replace weak automatic profiles — code and unit tests done; live camera check left
 
 ## Section 2 – Audio & Language
 
@@ -68,6 +69,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
 - [x] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it (#62)
 - [x] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions (#62)
+- [ ] A-25 Automatic voice association and contextual names: persist harvested voice prints, offer repeated name evidence — code and unit tests done; live two-mic check left
 
 ## Section 3 – Hardware & Services
 
@@ -134,9 +136,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
 
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
-
-- [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
-
+- [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
 
 ## Gates and end-to-end checks (whole team)
 
