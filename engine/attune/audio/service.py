@@ -179,8 +179,16 @@ class AudioService:
             return WhisperASR(self.config["whisper"] | {"languages": languages})
 
     def _speech_span(self, start: float, end: float) -> np.ndarray:
-        """Return only VAD-positive samples in an available attributed span."""
-        audio = self.ring.span(start, end)
+        """Return only VAD-positive samples in an available attributed span.
+
+        A span the ring can't give (a gap, or already dropped) is empty: one missed voice
+        sample must not mark the whole audio part as failed.
+        """
+        try:
+            audio = self.ring.span(start, end)
+        except ValueError as exc:
+            logger.debug("speech span %.2f-%.2f unavailable: %s", start, end, exc)
+            return np.empty(0, np.float32)
         parts = [
             audio[round((max(start, a) - start) * 16000) : round((min(end, b) - start) * 16000)]
             for a, b in self.speech_intervals
