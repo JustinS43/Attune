@@ -38,6 +38,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-20 Prefer any connected USB webcam on macOS instead of matching a camera model name (#56)
 - [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
 - [x] V-22 Light-ASD active speaker model decides who is talking (#58)
+- [ ] V-24 Attribution without waiting: the first words of an utterance are held back (up to 300 ms) only while a mouth on screen is moving or a known voice may still be matched, otherwise shown at once — in progress
 
 ## Section 2 – Audio & Language
 
@@ -119,6 +120,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-32 System debug: phone enrollment and console fixes, full-suite findings handed to owners (#51)
 - [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
+- [ ] P-36 Captions on the lens and phone survive a reconnect (the hub replays recent captions on hello) and the phone drops retracted segments — in progress
 
 ## Gates and end-to-end checks (whole team)
 
