@@ -52,7 +52,8 @@ Nothing is downloaded or installed.
   launcher, so the child `Popen` returns is not the process to measure.
 - Engines take the team's GPU lock (`%TEMP%/attune_gpu.lock`, `ATTUNE_E2E_NO_LOCK=1` on a
   laptop without the shared setup) and give it back between scenarios and at least every ~9
-  minutes. The soak holds it for its whole length.
+  minutes. A soak is one turn of at most 9 minutes (`--soak-min` above 9 is capped while
+  the lock is used); run it again for a longer total.
 
 ## Scenarios
 
@@ -69,6 +70,7 @@ Nothing is downloaded or installed.
 | `captions` | a 6-sentence script with known text: on the lens (messages, the drawn captions and the screen-reader line) and the phone (messages and the live view): every sentence, in order, no duplicates, word error rate |
 | `first_words` | speech that starts right after start-up keeps its first words |
 | `alerts` | T3 and T4 recordings: the right alert and side on the glasses and phone, `PAT T3`/`PAT T4` to the rig on that side, "Got it" acknowledges everywhere and stops the rig |
+| `station` | the laptop enrollment station's phone screens against `tests/pages_engine/station_e2e/fake_engine.py` (the real hub, save flow and station with a fake camera, mic and models; nothing opened, prints in a temp folder): its own flow test (`phone_station.mjs`), then every station screen at 390x844 and 360x740, Apricot and dark: layout, contrast, names, focus, buttons reachable, the mismatch and no-camera screens, Escape, and asking the same person again right after a cancel |
 | `robustness` | no mic, no camera, a `--source` typo, a missing model, bad config values, a broken TOML: clear log lines, no crash loop; a typo or a broken config stops at once with exit code 2 |
 | `soak` | looping speech for `--soak-min` minutes: engine memory, CPU, threads, handles, GPU, fps, caption delay, message rates, outside connections, and the pages' JS heap and DOM size |
 
@@ -78,4 +80,5 @@ and the screenshot for each. A few checks fail on purpose until another stream f
 
 Files: `harness.py` (engines, GPU lock, WebSocket pages, fixtures, scoring), `run_e2e.py`
 (scenarios and the table), `test_e2e.py` (pytest), `lib.mjs` (browser helpers and audits),
-`pages.mjs`, `captions.mjs`, `alerts.mjs`, `save.mjs`, `reconnect.mjs`, `soak.mjs`.
+`pages.mjs`, `captions.mjs`, `alerts.mjs`, `save.mjs`, `reconnect.mjs`, `soak.mjs`,
+`station.mjs`.

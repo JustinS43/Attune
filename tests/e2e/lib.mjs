@@ -211,7 +211,10 @@ export async function layoutAudit(target, { minFont = 11, root = 'body' } = {}) 
     for (const el of all) {
       const r = el.getBoundingClientRect();
       const pos = getComputedStyle(el).position;
-      if (pos !== 'fixed' && (r.right > vw + 1 || r.left < -1) && !el.closest('.sr-only')) {
+      // a face box that runs past the edge of a clipped camera picture is not off the page
+      const s = shown(el);
+      if (s.right - s.left < 1 || s.bottom - s.top < 1) continue;
+      if (pos !== 'fixed' && (s.right > vw + 1 || s.left < -1) && !el.closest('.sr-only')) {
         // only report the outermost offender
         if (!out.offscreen.some((o) => o.el.contains(el))) out.offscreen.push({ el, r });
       }

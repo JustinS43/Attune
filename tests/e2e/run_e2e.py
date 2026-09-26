@@ -4,7 +4,7 @@ Section 4 - Pages, Engine & Demo. TODO: P-37.
 
     python tests/e2e/run_e2e.py                      # every scenario except the soak
     python tests/e2e/run_e2e.py pages captions       # some scenarios
-    python tests/e2e/run_e2e.py soak --soak-min 15   # the soak (15 minutes)
+    python tests/e2e/run_e2e.py soak --soak-min 9    # the soak (at most 9 minutes a turn)
     python tests/e2e/run_e2e.py --list
 
 Prints a pass/fail table and writes results.json, the engine logs and screenshots to
@@ -15,13 +15,14 @@ Prints a pass/fail table and writes results.json, the engine logs and screenshot
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import json
 import re
 import sys
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -1418,6 +1419,116 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
     return out
 
 
+@contextlib.contextmanager
+def fake_station_engine(tag: str) -> Iterator[str | None]:
+    """Start tests/pages_engine/station_e2e/fake_engine.py on the QA port with an empty
+    prints folder; yields its READY line (None if it did not come up), stops it after."""
+    import subprocess
+
+    fake = h.REPO / "tests" / "pages_engine" / "station_e2e" / "fake_engine.py"
+    data = h.out_root() / f"station-{tag}-{dt.datetime.now().astimezone():%H%M%S}"
+    proc = subprocess.Popen(
+        [h.python_exe(), str(fake), "--port", str(h.PORT), "--data", str(data)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=h.REPO,
+        env={**h.os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    try:
+        yield h.read_line(proc, "READY", 45)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        h.wait_until(lambda: h.port_free(h.PORT), 10)
+        h.shutil.rmtree(data, ignore_errors=True)
+
+
+def scen_station(run: Run) -> list[Check]:
+    """The phone's laptop-station screens (P-35) against the station's fake engine.
+
+    tests/pages_engine/station_e2e/fake_engine.py runs the real hub, save flow and station
+    with a fake laptop camera, mic and models (no device, no GPU, drawn "people", prints in a
+    temporary folder). Its own flow test (phone_station.mjs) runs first, then station.mjs
+    checks layout, contrast, names and focus on every station screen. Each gets a fresh fake
+    engine, because the flow test saves the two "people" the audit needs unsaved."""
+    import subprocess
+
+    here = h.REPO / "tests" / "pages_engine" / "station_e2e"
+    flow = here / "phone_station.mjs"
+    if not (here / "fake_engine.py").is_file() or not flow.is_file():
+        return [
+            check("station: the station's fake engine is in the repo", False, str(here))
+        ]
+    if not h.port_free(h.PORT):
+        return [check("station: port free for the fake engine", False, h.PORT)]
+    base = f"http://127.0.0.1:{h.PORT}"
+    out: list[Check] = []
+    with fake_station_engine("flow") as ready:
+        out.append(
+            check("station: fake engine up (no camera, mic or GPU)", bool(ready), ready)
+        )
+        if not ready:
+            return out
+        res = subprocess.run(
+            [
+                h.find_node() or "node",
+                str(flow),
+                base,
+                str(run.out / "shots" / "station-flow"),
+            ],
+            env={
+                **h.os.environ,
+                "PLAYWRIGHT_CORE": str(h.find_playwright() / "playwright-core"),
+            },
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=400,
+            check=False,
+        )
+        steps = [
+            ln.split(" ok ", 1)[1] for ln in res.stdout.splitlines() if " ok " in ln
+        ]
+        failed = next(
+            (ln for ln in (res.stderr + res.stdout).splitlines() if "FAILED" in ln), ""
+        )
+        out.append(
+            check(
+                "station flow: enroll, mismatch, linked save, fallback, Escape "
+                f"({len(steps)} steps)",
+                res.returncode == 0 and "PASS phone station screens" in res.stdout,
+                failed or (steps[-1] if steps else res.stderr[-400:]),
+            )
+        )
+    with fake_station_engine("audit") as ready:
+        if not ready:
+            out.append(
+                check("station: fake engine up again for the audit", False, ready)
+            )
+            return out
+        res2 = h.run_node(
+            "station.mjs", {"base": base, "out": str(run.out / "shots")}, timeout=600
+        )
+        out.extend(
+            res2.get("checks")
+            or [
+                check(
+                    "station: audit script ran",
+                    False,
+                    res2.get("error") or res2.get("_stderr", "")[-600:],
+                )
+            ]
+        )
+    return out
+
+
 SCENARIOS: dict[str, Callable[[Run], list[Check]]] = {
     "security": scen_security,
     "code_network": scen_code_network,
@@ -1431,6 +1542,7 @@ SCENARIOS: dict[str, Callable[[Run], list[Check]]] = {
     "first_words": scen_first_words,
     "alerts": scen_alerts,
     "robustness": scen_robustness,
+    "station": scen_station,
 }
 USES_MAIN = {
     "security",
@@ -1443,6 +1555,11 @@ USES_MAIN = {
 }
 
 
+SOAK_TURN_MIN = (
+    9.0  # one soak's turn with the GPU lock (the team's limit is 10 minutes)
+)
+
+
 def run_suite(names: list[str], out: Path, soak_min: float = 0.0) -> dict:
     run = Run(out)
     started = time.time()
@@ -1453,7 +1570,18 @@ def run_suite(names: list[str], out: Path, soak_min: float = 0.0) -> dict:
             t0 = time.monotonic()
             try:
                 if name == "soak":
-                    checks = scen_soak(run, soak_min or 15)
+                    minutes = soak_min or SOAK_TURN_MIN
+                    if run.lock.enabled and minutes > SOAK_TURN_MIN:
+                        # the team holds the GPU lock at most 10 minutes at a time
+                        print(
+                            f"   soak capped at {SOAK_TURN_MIN:g} min (asked {minutes:g}): "
+                            "run it again for a longer total, or set ATTUNE_E2E_NO_LOCK=1 "
+                            "on a laptop nobody else uses",
+                            flush=True,
+                        )
+                        run.notes["soak_capped_from_min"] = minutes
+                        minutes = SOAK_TURN_MIN
+                    checks = scen_soak(run, minutes)
                 else:
                     checks = SCENARIOS[name](run)
             except Exception as exc:  # noqa: BLE001 - a broken scenario is a failed check
@@ -1504,7 +1632,10 @@ def main(argv: list[str] | None = None) -> int:
         "scenarios", nargs="*", help="scenarios to run (default: all but soak)"
     )
     ap.add_argument(
-        "--soak-min", type=float, default=15.0, help="soak length in minutes"
+        "--soak-min",
+        type=float,
+        default=SOAK_TURN_MIN,
+        help=f"soak length in minutes (at most {SOAK_TURN_MIN:g} while the GPU lock is used)",
     )
     ap.add_argument("--out", help="output folder")
     ap.add_argument("--list", action="store_true")
