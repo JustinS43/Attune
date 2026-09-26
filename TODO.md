@@ -80,9 +80,9 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] P-06 Lens view: video canvas, face tags, dots under 40 px, HUD theme · M0 (video) / M1 (tags)
 - [ ] P-07 Speech bubbles: tails, dashed tails, off-screen docking, "You" bar, drafts, fade, push apart, ES tag · M1
 - [ ] P-08 Alert banners, name proposals ("Sam? tap to confirm"), paused state · M2
-- [ ] P-09 Console panel (C): enroll with thumbnails and consent, people list, switches, pattern tests, calibration UI, event log + Mark · M1
-- [ ] P-10 Speak panel (S): text box, presets 1–5, suggestions 7–9 · M2
-- [ ] P-11 History panel (Y): sessions, timeline, search, person filter, sounds you missed, talk-time chart · M2
+- [x] P-09 Console panel (C): enroll with thumbnails and consent, people list, switches, pattern tests, calibration UI, event log + Mark · M1 (#18)
+- [x] P-10 Speak panel (S): text box, presets 1–5, suggestions 7–9 · M2 (#18)
+- [x] P-11 History panel (Y): sessions, timeline, search, person filter, sounds you missed, talk-time chart · M2 (#18)
 - [ ] P-12 Keyboard shortcuts (C S Y H E F P, 1–9) · M1
 - [ ] P-13 Session log, reel recorder and replay mode · M1
 - [ ] P-14 Setup: docs/setup.md, check_setup.py, download_models.py, start script with auto-restart · M3
