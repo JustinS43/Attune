@@ -14,6 +14,7 @@ Fake devices only: no camera or mic is opened.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 
@@ -386,3 +387,100 @@ def test_someone_else_at_the_laptop_is_caught(tmp_path, two_people):
     assert res.ok and res.track_id is None  # not linked to the glasses face
     face = h.main_face(h.glasses(0.3, A[0]))
     assert face.track_id == a.track_id and face.name != "Alex"
+
+
+# ------------------------------------------------------------------ a film reel as the laptop camera
+REELS = f"{ROOT}/data/reels/film"
+
+
+def reel_prints(detector, embedder, path, seconds):
+    """Face prints of the biggest face at these times of a reel (the glasses' view of them)."""
+    from attune.vision.embedder import align
+
+    cap = cv2.VideoCapture(path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    rows = []
+    for s in seconds:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(s * fps))
+        ok, frame = cap.read()
+        dets = detector.detect(frame) if ok else []
+        if dets:
+            d = max(dets, key=lambda x: x.width)
+            rows.append(embedder.embed([align(frame, d.kps)])[0])
+    cap.release()
+    return np.stack(rows)
+
+
+@needs_face_models
+@pytest.mark.skipif(
+    not (os.path.isfile(f"{REELS}/grandpa.mp4") and os.path.isfile(f"{REELS}/mom_talk.mp4")),
+    reason="film reels not downloaded",
+)
+@pytest.mark.parametrize(("glasses_reel", "same"), [("grandpa", True), ("mom_talk", False)])
+def test_a_film_reel_as_the_laptop_camera(tmp_path, glasses_reel, same):
+    """The station's real camera path (Camera on a video file) with the real face models."""
+    from attune.vision.detector import FaceDetector
+    from attune.vision.embedder import FaceEmbedder
+
+    # on the CPU: this runs beside a live engine that owns the GPU
+    detector = FaceDetector(f"{ROOT}/models/faces/buffalo_l/det_10g.onnx", 640, use_gpu=False)
+    embedder = FaceEmbedder(f"{ROOT}/models/faces/buffalo_l/w600k_r50.onnx", use_gpu=False)
+    glasses = reel_prints(detector, embedder, f"{REELS}/{glasses_reel}.mp4", (9.0, 10.5, 12.0))
+    bus = Bus()
+    states, previews, mismatches = [], [], []
+    bus.subscribe(C.ENROLL_STATE, states.append)
+    bus.subscribe(C.ENROLL_PREVIEW, previews.append)
+    bus.subscribe(C.ENROLL_MISMATCH, mismatches.append)
+    saved = []
+    cfg = {
+        "engine": {"data_dir": str(tmp_path / "data")},
+        "vision": {"camera_name": "Brio 101"},
+        "voice": {"enroll_s": 1.0},
+        "enroll": {"face_s": 2.0, "camera_source": f"{REELS}/grandpa.mp4", "preview_fps": 8},
+    }
+    enroller = StationEnroller(
+        bus,
+        cfg,
+        detector,
+        embedder,
+        VisionHooks(
+            lambda: ("Brio 101", True),
+            lambda tap: None,
+            lambda r: saved.append(r) or {"person_id": "p1"},
+        ),
+        root=str(tmp_path),
+        mic_factory=lambda: FakeMic(speech_like(3.0)),
+        extractor=lambda audio: np.eye(1, 192, dtype=np.float32)[0],
+        vad_factory=lambda: energy_vad,
+    )
+    try:
+        enroller.command(
+            {
+                "action": "start",
+                "name": "Grandpa",
+                "consent": True,
+                "consent_t": 1.0,
+                "track_id": 3,
+            },
+            glasses,
+        )
+        end = time.monotonic() + 40
+        while time.monotonic() < end and not enroller.session.closed.is_set():
+            if mismatches:
+                enroller.command({"action": "cancel"})
+            time.sleep(0.05)
+        assert enroller.session.closed.is_set(), [s["phase"] for s in states]
+    finally:
+        enroller.stop()
+    face = next(s for s in states if s["phase"] == "face")
+    assert face["camera"] == "grandpa.mp4" and face["shared"] is False
+    jpeg = cv2.imdecode(np.frombuffer(previews[0]["jpeg"], np.uint8), cv2.IMREAD_COLOR)
+    assert jpeg.shape[:2] == (480, 360)
+    boxes = [p["face"] for p in previews if p["face"]]
+    assert boxes and 0.25 < boxes[-1][0] + boxes[-1][2] / 2 < 0.75  # his face, mid-preview
+    if same:
+        assert not mismatches and states[-1]["phase"] == "done"
+        assert saved[0]["track_id"] == 3 and 5 <= len(saved[0]["prints"]) <= 8
+    else:
+        assert mismatches and mismatches[0]["score"] < 0.35 and not saved
+        assert states[-1]["phase"] == "cancelled"
