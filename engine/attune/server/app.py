@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from .speech_settings import create_router as speech_settings_router
 from .ws import Hub
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ def create_app(
         return RedirectResponse("/lens/")
 
     app.add_api_websocket_route("/ws", hub.endpoint)
+    app.include_router(speech_settings_router(Path(data_root) if data_root else Path.cwd()))
 
     if history_router is not None:
         app.include_router(history_router, prefix="/api/history")

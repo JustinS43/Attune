@@ -64,6 +64,28 @@ the keys you change. Secrets (ElevenLabs) go in `.env`, never in the toml.
 - Only `data/reels/film/` is served over HTTP (for demo reels); people, profiles,
   sessions and history files never are.
 
+## ElevenLabs settings
+
+On the laptop, open `/phone/`, then **Settings → Speak for me → ElevenLabs voice**.
+Enter your API key and optional voice ID, choose **Save voice settings**, then restart
+Attune. Leave the key blank to keep it; leave the voice ID blank for the default voice.
+The saved key is never returned to the browser. It is cleared from the input after
+submission and is not stored in browser storage or sent through the event bus.
+
+The form updates only `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in the engine
+working directory's `.env`, preserving other entries. Direct `.env` editing still
+works. Nonblank environment variables retain precedence; the form indicates when
+they manage a value. Secrets are only editable from the laptop using `localhost`
+or a loopback address; a remote phone shows instructions to use the laptop.
+Demo mode disables credential entry. Saving does not contact ElevenLabs or verify
+that the account has credits or access to the chosen voice.
+
+The page uses `GET /api/settings/elevenlabs` for nonsecret status and
+`POST /api/settings/elevenlabs` with optional `api_key` and `voice_id` strings to save.
+Writes require same-origin JSON requests. Responses contain `key_configured`,
+`key_source`, `voice_id`, `voice_from_environment`, and, after saving,
+`restart_required`; never the key. These routes are local settings, not bus commands.
+
 ## Windows notes
 
 - **Keep the virtual environment on a short path** (for example `C:\venvs\attune`, via
