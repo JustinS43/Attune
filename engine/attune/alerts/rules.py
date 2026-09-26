@@ -1,13 +1,138 @@
-"""Alert rules, direction, acknowledge and clear
+"""Deterministic alert decisions and acknowledgement lifecycle."""
 
-Section 2 - Audio & Language
-TODO: A-10
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Sound alerts
+from __future__ import annotations
 
-What to build:
-- The 'Fires when' table in the plan; watch mode 0.3-0.5; side from sensor levels while the tone is on (>= 3 dB).
-- Tap acknowledges; re-alert after 30 s; clear after 15 s quiet; ignore windows with our own motor running.
+import math
+from collections import deque
+from uuid import uuid4
 
-Placeholder only - no code yet (MLH: project code is written during the event).
-"""
+from .rhythm import RhythmEvidence
+
+
+class AlertRules:
+    """Fuse recent model scores with independent alarm rhythm evidence."""
+
+    def __init__(self, config: dict, side_db: float):
+        self.cfg, self.side_db = config, side_db
+        self.history = deque(maxlen=3)
+        self.active: dict = {}
+        self.last_bell = float("-inf")
+        self.watch_until = float("-inf")
+
+    def side(self, left: float, right: float) -> str:
+        delta = 20 * math.log10(max(left, 1e-6) / max(right, 1e-6))
+        return "left" if delta >= self.side_db else "right" if delta <= -self.side_db else "none"
+
+    def _event(self, kind: str, state: str) -> tuple[str, dict]:
+        a = self.active[kind]
+        return "alert", {
+            "alert_id": a["id"],
+            "kind": kind,
+            "side": a["side"],
+            "confidence": a["score"],
+            "state": state,
+        }
+
+    def _pattern(self, kind: str) -> tuple[str, dict]:
+        return "hw.pattern", {
+            "name": {"smoke": "T3", "co": "T4", "doorbell": "BELL"}[kind],
+            "side": {"left": "L", "right": "R", "none": "B"}[self.active[kind]["side"]],
+        }
+
+    def evaluate(
+        self,
+        t: float,
+        scores: dict,
+        rhythm: RhythmEvidence,
+        levels: tuple = (0, 0),
+        motor_on: bool = False,
+    ) -> list:
+        """Ignore motor-contaminated windows, then apply the plan's firing table."""
+        if motor_on:
+            self.history.clear()
+            return self.tick(t)
+        smoke = max(
+            scores.get("Smoke detector, smoke alarm", scores.get("Smoke detector", 0)),
+            scores.get("Fire alarm", 0),
+        )
+        self.history.append(smoke >= self.cfg["smoke_score"])
+        fires = {}
+        if (sum(self.history) >= 2 and rhythm.beeps >= 2) or rhythm.t3_cycles >= 2:
+            fires["smoke"] = max(smoke, 1.0 if rhythm.t3_cycles >= 2 else smoke)
+        if rhythm.t4_cycles >= 2:
+            fires["co"] = 1.0
+        bell = max(scores.get("Doorbell", 0), scores.get("Ding-dong", 0))
+        if (
+            bell >= self.cfg["doorbell_score"]
+            and scores.get("Speech", 0) < self.cfg["speech_music_block"]
+            and scores.get("Music", 0) < self.cfg["speech_music_block"]
+        ):
+            fires["doorbell"] = bell
+        output = []
+        if (
+            self.cfg["watch_score"] <= smoke < self.cfg["smoke_score"]
+            and t >= self.watch_until
+            and "smoke" not in self.active
+        ):
+            self.watch_until = t + self.cfg["watch_s"]
+            output.append(
+                (
+                    "status.part",
+                    {
+                        "part": "alerts.watch",
+                        "ok": True,
+                        "detail": "watching for alarm rhythm",
+                        "metrics": {"expires_t": self.watch_until},
+                    },
+                )
+            )
+        for kind, score in fires.items():
+            if kind not in self.active:
+                if kind == "doorbell" and t - self.last_bell < self.cfg["doorbell_rest_s"]:
+                    continue
+                self.active[kind] = {
+                    "id": str(uuid4()),
+                    "side": self.side(*levels),
+                    "score": score,
+                    "seen": t,
+                    "ack": None,
+                }
+                output.extend([self._event(kind, "start"), self._pattern(kind)])
+                if kind == "doorbell":
+                    self.last_bell = t
+            else:
+                a = self.active[kind]
+                a["seen"], a["score"] = t, score
+                new_side = self.side(*levels)
+                if new_side != a["side"] and a["ack"] is None:
+                    a["side"] = new_side
+                    output.append(self._event(kind, "update"))
+                if a["ack"] is not None and t - a["ack"] >= self.cfg["realert_s"]:
+                    a["ack"] = None
+                    output.extend([self._event(kind, "start"), self._pattern(kind)])
+        output.extend(self.tick(t))
+        return output
+
+    def acknowledge(self, alert_id: str, t: float) -> list:
+        for kind, a in self.active.items():
+            if a["id"] == alert_id and a["ack"] is None:
+                a["ack"] = t
+                return [self._event(kind, "acknowledged"), ("hw.stop", {})]
+        return []
+
+    def tick(self, t: float) -> list:
+        output = []
+        for kind in list(self.active):
+            if t - self.active[kind]["seen"] >= self.cfg["clear_quiet_s"]:
+                output.append(self._event(kind, "clear"))
+                del self.active[kind]
+        if output and not self.active:
+            output.append(("hw.stop", {}))
+        return output
+
+    def clear(self) -> list:
+        output = [self._event(kind, "clear") for kind in self.active]
+        self.active.clear()
+        self.history.clear()
+        self.last_bell = self.watch_until = float("-inf")
+        return output + [("hw.stop", {})]

@@ -33,24 +33,24 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 2 – Audio & Language
 
-- [ ] A-01 Mic reader: WASAPI 48 kHz, 10 ms blocks, 16 kHz + 32 kHz streams, ring buffer, laptop-mic fallback · M0
-- [ ] A-02 Silero VAD with the plan's thresholds; publishes `audio.vad` · M1
-- [ ] A-03 Captions: Nemotron via sherpa-onnx, drafts/finals, language, word times; publishes `audio.transcript` · M1
-- [ ] A-04 Whisper fallback (faster-whisper large-v3-turbo) · M2
-- [ ] A-05 Mute mic captions while `speech_out.playing`, plus 0.5 s · M2
-- [ ] A-06 Voice prints (CAM++): enroll, match ≥ 0.5, session harvesting; publishes `audio.voice_match` · M2
-- [ ] A-07 Text language check (Lingua) · M2
-- [ ] A-08 Sound model (EfficientAT mn10_as), classes by name · M2
-- [ ] A-09 Rhythm detector (T3 / T4) · M2
-- [ ] A-10 Alert rules, direction, acknowledge, re-alert, clear; publishes `alert` and `hw.pattern` · M2
-- [ ] A-11 Ollama client with priority queue and warm-up (qwen3.5:4b, think off, keep_alive -1) · M1
-- [ ] A-12 Name learning: phrase filter, JSON answer, stop-list, proposal lifecycle · M2
-- [ ] A-13 Translation of non-English finals · M2
-- [ ] A-14 Garment descriptions from the fixed lists · M2
-- [ ] A-15 Suggested replies for keys 7–9 · M2
-- [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3
-- [ ] A-17 Test tone generator (T3, T4) · M2
-- [ ] A-18 Tests in tests/audio_language · M2
+- [ ] A-01 Mic reader: WASAPI 48 kHz, 10 ms blocks, 16 kHz + 32 kHz streams, ring buffer, laptop-mic fallback · M0 — capture timestamps, WASAPI fallback/reconnect, overflow handling, resampling and health tested; real Windows device acceptance and PR pending
+- [ ] A-02 Silero VAD with the plan's thresholds; publishes `audio.vad` · M1 — implemented and deterministic tests pass; local Silero acceptance and PR pending
+- [ ] A-03 Captions: Nemotron via sherpa-onnx, drafts/finals, language, word times; publishes `audio.transcript` · M1 — English Nemotron adapter, stable utterance gain and runtime Whisper recovery tested; real-model acceptance and PR pending
+- [ ] A-04 Whisper fallback (faster-whisper large-v3-turbo) · M2 — local-agreement fallback and whole-utterance retry after Nemotron failure tested; real-model acceptance and PR pending
+- [x] A-05 Mute mic captions while `speech_out.playing`, plus 0.5 s · M2 — implemented and tested; PR number pending GitHub access
+- [ ] A-06 Voice prints (CAM++): enroll, match ≥ 0.5, session harvesting; publishes `audio.voice_match` · M2 — consent, matching, harvesting and deletion implemented; shared enrollment correlation and model acceptance pending
+- [ ] A-07 Text language check (Lingua) · M2 — local constrained language adapter implemented; installed-model acceptance and PR pending
+- [ ] A-08 Sound model (EfficientAT mn10_as), classes by name · M2 — local scorer and export wrapper implemented; EfficientAT export/model acceptance and PR pending
+- [x] A-09 Rhythm detector (T3 / T4) · M2 — both patterns and frequency bands implemented and tested; PR number pending GitHub access
+- [ ] A-10 Alert rules, direction, acknowledge, re-alert, clear; publishes `alert` and `hw.pattern` · M2 — rules and replayed PCM service tests pass; rig acceptance and PR pending
+- [ ] A-11 Ollama client with priority queue and warm-up (qwen3.5:4b, think off, keep_alive -1) · M1 — priority client and warm-up implemented and tested; local Ollama acceptance and PR pending
+- [ ] A-12 Name learning: phrase filter, JSON answer, stop-list, proposal lifecycle · M2 — validation and proposal lifecycle implemented and tested; model acceptance and PR pending
+- [ ] A-13 Translation of non-English finals · M2 — translation jobs implemented and tested with injected responses; model acceptance and PR pending
+- [ ] A-14 Garment descriptions from the fixed lists · M2 — allowlisted descriptions implemented and tested; local vision-model acceptance and PR pending
+- [ ] A-15 Suggested replies for keys 7–9 · M2 — reply jobs implemented and validated; model acceptance and PR pending
+- [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3 — wizard, profiles and guide implemented; manual clap annotations and Section 4 integration/venue run pending
+- [x] A-17 Test tone generator (T3, T4) · M2 — generator implemented and both frequency bands tested; PR number pending GitHub access
+- [x] A-18 Tests in tests/audio_language · M2 — 50 tests pass, including real soxr resampling and simulated capture recovery; live-model acceptance remains in relevant items; PR number pending GitHub access
 
 ## Section 3 – Hardware & Services
 

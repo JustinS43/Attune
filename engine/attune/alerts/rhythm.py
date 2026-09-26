@@ -1,12 +1,106 @@
-"""T3 / T4 rhythm detector
+"""Pure-tone T3/T4 detection in the high and low alarm bands."""
 
-Section 2 - Audio & Language
-TODO: A-09
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 05 Sound alerts
+from __future__ import annotations
 
-What to build:
-- Tone energy in 2.8-3.4 kHz and 470-570 Hz every 10 ms; T3 and T4 timing within +/-20%, pure tone.
+from collections import deque
+from dataclasses import dataclass
 
-Placeholder only - no code yet (MLH: project code is written during the event).
-"""
+import numpy as np
+
+
+@dataclass
+class RhythmEvidence:
+    tone_on: bool = False
+    beeps: int = 0
+    t3_cycles: int = 0
+    t4_cycles: int = 0
+
+
+class RhythmDetector:
+    """Match alternating tone/silence runs, not arbitrary energy spikes."""
+
+    def __init__(self, config: dict, rate: int = 32000):
+        self.cfg, self.rate = config, rate
+        self.size = round(rate * config["frame_s"])
+        # Sinusoid projection avoids the 100 Hz FFT-bin leakage of a 10 ms window.
+        times = np.arange(self.size) / rate
+        frequencies = np.concatenate(
+            [np.arange(a, b + 1, 10) for a, b in (config["low_band"], config["high_band"])]
+        )
+        self.basis = np.asarray(
+            [
+                np.linalg.qr(
+                    np.column_stack((np.sin(2 * np.pi * f * times), np.cos(2 * np.pi * f * times)))
+                )[0].T
+                for f in frequencies
+            ]
+        )
+        self.reset()
+
+    def reset(self) -> None:
+        self.pending = np.empty(0, np.float32)
+        self.runs: deque = deque(maxlen=40)
+        self.state = False
+        self.length = 0
+        self.noise = 0.0
+        self.evidence = RhythmEvidence()
+
+    def _near(self, actual: float, target: float) -> bool:
+        return abs(actual - target) <= target * self.cfg["tolerance"] + self.cfg["frame_s"] / 2
+
+    def _analyze(self) -> RhythmEvidence:
+        runs = list(self.runs)
+        # Include the current silence only after its expected full duration.
+        runs.append((self.state, self.length * self.cfg["frame_s"]))
+        evidence = RhythmEvidence(tone_on=self.state)
+        for kind, count in (("t3", 3), ("t4", 4)):
+            on, gap, rest = [self.cfg[f"{kind}_{key}_s"] for key in ("on", "gap", "rest")]
+            cycles, partial = 0, 0
+            for state, duration in runs:
+                if state:
+                    if self._near(duration, on):
+                        partial += 1
+                    else:
+                        cycles, partial = 0, 0
+                elif partial:
+                    if partial == count and self._near(duration, rest):
+                        cycles += 1
+                        partial = 0
+                    elif partial < count and self._near(duration, gap):
+                        pass
+                    else:
+                        # A growing final pause must not erase already observed evidence.
+                        if duration > (rest if partial == count else gap) * (
+                            1 + self.cfg["tolerance"]
+                        ):
+                            cycles, partial = 0, 0
+            if kind == "t3":
+                evidence.beeps = min(partial, count)
+                evidence.t3_cycles = cycles
+            else:
+                evidence.t4_cycles = cycles
+        return evidence
+
+    def feed(self, samples: np.ndarray) -> RhythmEvidence:
+        """Accept arbitrary block sizes; score each 10 ms frame once."""
+        self.pending = np.concatenate((self.pending, samples))
+        while len(self.pending) >= self.size:
+            frame, self.pending = self.pending[: self.size], self.pending[self.size :]
+            rms = float(np.sqrt(np.mean(frame * frame)))
+            projections = np.einsum("fkn,n->fk", self.basis, frame)
+            pure = float(np.max(np.sum(projections * projections, axis=1))) / max(
+                float(np.dot(frame, frame)), 1e-12
+            )
+            tone = (
+                rms >= max(self.cfg["min_rms"], self.noise * self.cfg["relative_energy"])
+                and pure >= self.cfg["purity"]
+            )
+            if not tone:
+                self.noise = 0.99 * self.noise + 0.01 * rms
+            if tone == self.state:
+                self.length += 1
+            else:
+                self.runs.append((self.state, self.length * self.cfg["frame_s"]))
+                self.state, self.length = tone, 1
+            self.evidence = self._analyze()
+        return self.evidence
