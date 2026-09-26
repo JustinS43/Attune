@@ -56,7 +56,8 @@ export function createColorMode() {
       ctx.beginPath();
       ctx.rect(R.x, R.y, R.w, R.h);
       ctx.clip();
-      bubbles.render(ctx, view, { ...env, obstacles });
+      bubbles.render(ctx, view, { ...env, obstacles: view.save ? [...obstacles, ...view.save.obstacles] : obstacles });
+      view.save?.drawColor(ctx, env, bubbles); // P-29: save this person (save.js)
       // status top-left, then toasts, then alerts stacked below them (top centre)
       const toastRects = drawToasts(ctx, env.blur, view, env.anim, R.y + 88);
       const alertTop = toastRects.length ? Math.max(...toastRects.map((r) => r.y + r.h)) + 12 : R.y + 88;

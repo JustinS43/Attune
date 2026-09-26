@@ -18,6 +18,7 @@ import { createMonoMode, MONO_LEVELS, MONO_DEFAULT_LEVEL } from './modes/mono.js
 import { createCornerMode } from './modes/corner.js';
 import { createLiveSource } from './live.js';
 import { createFilmSource } from './film/film.js';
+import { createSaveFlow } from './save.js';
 
 const params = new URLSearchParams(location.search);
 const MODE_ALIASES = {
@@ -289,6 +290,7 @@ function step(now, at, dtOverride) {
     else store.state.clock = anim;
     store.prune();
     const view = build(dt, anim, sourceKind);
+    saveFlow.decorate(view, dt);
     const rendering = layers.filter((l) => l.id === modeId || now < l.until);
     if (rendering.some((l) => modes[l.id].blur)) updateBlur(source?.blurSource ?? null);
     const env = { anim, dt, blur: blurReady ? blurCanvas : null, chrome: !chromeHidden, px: scale, monoLevel };
@@ -378,6 +380,8 @@ onKey('Y', () => answer(true), 'Yes, that\'s their name', { priority: 10 });
 onKey('N', () => answer(false), 'No, wrong name', { priority: 10 });
 onKey('A', acknowledge, 'Acknowledge the sound alert');
 onKey('P', () => send('pause.toggle'), 'Pause or resume recognition');
+// P-29: D (or Y twice) is the double tap on the glasses: save this person (save.js)
+const saveFlow = createSaveFlow(store, { send, source: () => sourceKind });
 onKey('F', forget, 'Forget this session');
 onKey('Space', () => {
   if (sourceKind !== 'film' || !film) return false;
@@ -506,7 +510,7 @@ async function renderAt(t, mode) {
 
 // debugging and scripted demos: attuneLens.seek(33), attuneLens.setMode('mono')
 window.attuneLens = {
-  store, setMode, setSource, setMonoLevel, modes,
+  store, setMode, setSource, setMonoLevel, modes, saveFlow,
   seek: (t) => film?.seek(t),
   get film() {
     return film;
