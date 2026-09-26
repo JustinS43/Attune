@@ -581,6 +581,7 @@ class GpuLock:
 
     def __init__(self, owner: str, stale_s: float = 20 * 60) -> None:
         self.owner, self.stale_s, self.held = owner, stale_s, False
+        self._seen = ""
 
     def __enter__(self):
         while True:
@@ -602,8 +603,10 @@ class GpuLock:
                     )
                     shutil.rmtree(LOCK, ignore_errors=True)
                     continue
-                log.info("GPU lock held by %r; waiting", text)
-                time.sleep(25)
+                if text != self._seen:
+                    log.info("GPU lock held by %r; waiting", text)
+                    self._seen = text
+                time.sleep(0.5)  # poll often: others take it again right after releasing
         (LOCK / "owner.txt").write_text(
             f"{self.owner} {time.strftime('%Y-%m-%d %H:%M:%S')}", encoding="utf-8"
         )

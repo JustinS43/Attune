@@ -44,7 +44,7 @@ class LLMService:
         metrics = {"warm": warm, "pending": len(self.jobs)}
         stats = getattr(self.client, "stats", None)
         if stats:
-            metrics["jobs"] = {kind: dict(s) for kind, s in stats.items()}
+            metrics["jobs"] = {kind: dict(s) for kind, s in list(stats.items())}
         return {
             "ok": warm and not error,
             "detail": error or ("ready" if warm else "warming local language model"),
