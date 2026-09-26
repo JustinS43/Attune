@@ -8,7 +8,6 @@
  * (linked on each card). A fact we could not confirm is left out rather than guessed.
  */
 
-import { glassesSvg } from './glasses-art.js';
 
 // ------------------------------------------------------------------ the three looks
 // Regions are in the lens view's 1920x1080 frame (about 75° wide); see docs/glasses-realism.md.
@@ -300,7 +299,6 @@ function card(key, style) {
   const facts = d.facts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
   return `<li class="gcard${d.model ? ' is-model' : ''}${d.oneEye ? ' one-eye' : ''}">
     <article aria-labelledby="gc-${key}">
-      <div class="gart">${glassesSvg(key, d.alt)}</div>
       <div class="gbody">
         <div class="ghead">
           <div>
