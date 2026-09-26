@@ -72,7 +72,7 @@ Nothing is downloaded or installed.
 | `alerts` | T3 and T4 recordings: the right alert and side on the glasses and phone, `PAT T3`/`PAT T4` to the rig on that side, "Got it" acknowledges everywhere and stops the rig |
 | `station` | the laptop enrollment station's phone screens against `tests/pages_engine/station_e2e/fake_engine.py` (the real hub, save flow and station with a fake camera, mic and models; nothing opened, prints in a temp folder): its own flow test (`phone_station.mjs`), then every station screen at 390x844 and 360x740, Apricot and dark: layout, contrast, names, focus, buttons reachable, the mismatch and no-camera screens, Escape, and asking the same person again right after a cancel |
 | `robustness` | no mic, no camera, a `--source` typo, a missing model, bad config values, a broken TOML: clear log lines, no crash loop; a typo or a broken config stops at once with exit code 2 |
-| `soak` | looping speech for `--soak-min` minutes: engine memory, CPU, threads, handles, GPU, fps, caption delay, message rates, outside connections, and the pages' JS heap and DOM size |
+| `soak` | looping speech for `--soak-min` minutes: the engine's memory, threads, handles and its own GPU memory (Windows' per-process counter) stay steady after a 3-minute warm-up (models load lazily), CPU, fps, caption delay, message rates, outside connections, and the pages' JS heap and DOM size |
 
 A failing check names what a judge or a wearer would notice; `results.json` has the details
 and the screenshot for each. A few checks fail on purpose until another stream fixes its part
