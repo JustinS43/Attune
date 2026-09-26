@@ -291,8 +291,17 @@ class Engine:
 
     @property
     def lens_url(self) -> str:
+        return f"{self.base_url}/lens/"
+
+    @property
+    def demo_url(self) -> str:
+        """The demo page: glasses view and phone app side by side."""
+        return f"{self.base_url}/demo/"
+
+    @property
+    def base_url(self) -> str:
         host = "localhost" if self.host in ("127.0.0.1", "0.0.0.0") else self.host
-        return f"http://{host}:{self.port}/lens/"
+        return f"http://{host}:{self.port}"
 
 
 def _load_module(module: str):
@@ -323,9 +332,13 @@ def run(opts: Options) -> int:
     try:
         engine.start()
         if engine.web is not None:
-            log.info("Attune is running: %s (Ctrl+C to stop)", engine.lens_url)
+            log.info(
+                "Attune is running: %s (glasses + phone), %s (glasses only). Ctrl+C to stop",
+                engine.demo_url,
+                engine.lens_url,
+            )
             if not opts.no_browser:
-                webbrowser.open(engine.lens_url)
+                webbrowser.open(engine.demo_url)
         if engine.failed:
             log.warning("Running without: %s", ", ".join(sorted(engine.failed)))
         engine.wait()

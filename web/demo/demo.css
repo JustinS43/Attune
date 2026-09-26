@@ -1,0 +1,179 @@
+/*
+ * Demo page: the glasses view and the phone app side by side, or one of them full size.
+ *
+ * Section 4 - Pages, Engine & Demo. TODO: P-17.
+ */
+
+:root {
+  --bar-h: 52px;
+  --gap: 18px;
+  --phone-w: 390px; /* the phone page's own CSS size (iPhone 14/15) */
+  --phone-h: 844px;
+  --bezel: 11px;
+  --ease: cubic-bezier(0.22, 0.8, 0.24, 1);
+  --dur: 480ms;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 700px at 78% 60%, rgba(106, 184, 255, 0.07), transparent 60%),
+    radial-gradient(900px 600px at 12% 10%, rgba(124, 245, 214, 0.06), transparent 60%),
+    var(--attune-ink, #07080b);
+  color: var(--attune-text, #f4f7fa);
+  font-family: var(--attune-font-text, "Segoe UI", system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------ top bar */
+.bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--bar-h);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 18px;
+  z-index: 5;
+  background: linear-gradient(180deg, rgba(7, 8, 11, 0.92), rgba(7, 8, 11, 0.72));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(14px);
+}
+
+.brand { display: flex; align-items: center; gap: 9px; font-size: 14px; white-space: nowrap; }
+.brand .mark {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--attune-brand, linear-gradient(135deg, #7cf5d6, #6ab8ff));
+  box-shadow: 0 0 14px rgba(124, 245, 214, 0.45);
+}
+.brand .word { font-family: var(--attune-font-display, inherit); font-weight: 650; letter-spacing: 0.01em; }
+.brand .sep { color: var(--attune-text-3, rgba(255, 255, 255, 0.46)); }
+.brand .sub { color: var(--attune-text-2, rgba(255, 255, 255, 0.68)); }
+
+.views {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.views button {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 15px;
+  border: 0; border-radius: 999px;
+  background: transparent;
+  color: var(--attune-text-2, rgba(255, 255, 255, 0.68));
+  font: 600 13px/1 var(--attune-font-text, inherit);
+  cursor: pointer;
+  transition: background 180ms, color 180ms;
+}
+.views button:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.views button[aria-checked="true"] {
+  color: #06201b;
+  background: var(--attune-brand, linear-gradient(135deg, #7cf5d6, #6ab8ff));
+  box-shadow: 0 4px 18px rgba(124, 245, 214, 0.25);
+}
+.views button:focus-visible { outline: 2px solid var(--attune-mint, #7cf5d6); outline-offset: 2px; }
+.views svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
+
+.hint { justify-self: end; font-size: 12px; color: var(--attune-text-3, rgba(255, 255, 255, 0.46)); white-space: nowrap; }
+.hint kbd {
+  display: inline-block; min-width: 20px; padding: 2px 6px; margin-right: 4px;
+  border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 11px/1.3 var(--attune-font-mono, monospace); text-align: center; color: #fff;
+}
+
+/* ------------------------------------------------------------------ stage */
+.stage {
+  position: fixed;
+  inset: var(--bar-h) 0 0 0;
+  display: flex;
+  gap: var(--gap);
+  padding: var(--gap);
+}
+
+.pane {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  transition: flex-basis var(--dur) var(--ease), opacity var(--dur) var(--ease), margin var(--dur) var(--ease);
+}
+
+.lens-pane {
+  flex: 1 1 0;
+  border-radius: 16px;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.lens-pane iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+
+.phone-pane {
+  flex: 0 0 var(--phone-pane-w, 440px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-fit {
+  width: calc((var(--phone-w) + 2 * var(--bezel)) * var(--phone-scale, 1));
+  height: calc((var(--phone-h) + 2 * var(--bezel)) * var(--phone-scale, 1));
+  flex: none;
+}
+
+.device {
+  width: calc(var(--phone-w) + 2 * var(--bezel));
+  height: calc(var(--phone-h) + 2 * var(--bezel));
+  padding: var(--bezel);
+  border-radius: 62px;
+  transform: scale(var(--phone-scale, 1));
+  transform-origin: top left;
+  background: linear-gradient(125deg, #3c4244, #080b0e 24%, #51595b 48%, #0d1012 74%, #384044);
+  box-shadow:
+    inset 0 0 0 2px #808681,
+    inset 0 0 0 5px #090e10,
+    0 40px 90px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.device iframe {
+  width: var(--phone-w);
+  height: var(--phone-h);
+  border: 0;
+  border-radius: 51px;
+  display: block;
+  background: #faf9f6;
+}
+
+.caption {
+  margin: 12px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--attune-text-3, rgba(255, 255, 255, 0.46));
+  transition: opacity var(--dur) var(--ease);
+}
+
+/* ------------------------------------------------------------------ views */
+body[data-view="lens"] .phone-pane { flex-basis: 0; opacity: 0; margin-left: calc(-1 * var(--gap)); pointer-events: none; }
+body[data-view="phone"] .lens-pane { flex-basis: 0; flex-grow: 0; opacity: 0; margin-right: calc(-1 * var(--gap)); pointer-events: none; }
+body[data-view="phone"] .phone-pane { flex: 1 1 0; }
+
+/* the glasses view full size: edge to edge like the real recording */
+body[data-view="lens"] .stage { padding: 0; }
+body[data-view="lens"] .lens-pane { border-radius: 0; box-shadow: none; }
+
+@media (max-width: 900px) {
+  .hint, .brand .sep, .brand .sub { display: none; }
+  .views span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane, .caption, .views button { transition: none; }
+}

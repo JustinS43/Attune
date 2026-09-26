@@ -88,6 +88,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] P-14 Setup: docs/setup.md, check_setup.py, download_models.py, start script with auto-restart · M3
 - [ ] P-15 OBS setup, demo script, backup video, Devpost write-up and slides · M3 – M4
 - [x] P-16 Tests in tests/pages_engine (bus, WebSocket hub, commands) · M2 (#20)
+- [x] P-17 Demo page (/demo/): glasses view and phone app side by side, or either one full size · M3 (#26)
 
 ## Gates and end-to-end checks (whole team)
 

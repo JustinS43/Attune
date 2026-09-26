@@ -20,6 +20,7 @@ strip, and skipped; the rest keep running. Ctrl+C stops everything in about 3 se
 
 | Page | URL |
 |---|---|
+| Demo: glasses view and phone side by side (opens on start; `` ` `` or Alt+1/2/3 switches to one full size) | http://localhost:8000/demo/ |
 | Lens (full screen, what OBS records) | http://localhost:8000/lens/ |
 | Panels (console, speak, history) | http://localhost:8000/panels/ |
 | Phone preview | http://localhost:8000/phone/ |
