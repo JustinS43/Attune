@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from attune.audio.asr import NemotronASR, Recognition, hold_back
+from attune.audio.asr_whisper import WhisperASR
 from attune.audio.service import AudioService, _is_16k
 from attune.audio.vad import Segmenter
 
@@ -36,6 +37,20 @@ class GrowingASR:
         return Recognition(
             text, "en", [(f"w{i}", 0.1 * i, 0.1 * i + 0.1) for i in range(self.words)]
         )
+
+
+class GrowingWhisper(WhisperASR):
+    """Measure fallback pacing without loading model weights."""
+
+    def __init__(self):
+        self.fed = []
+
+    def reset(self):
+        pass
+
+    def feed(self, samples, final=False):
+        self.fed.append((len(samples), final))
+        return Recognition("heard", "en", [("heard", 0.0, 0.2)])
 
 
 class Voices:
@@ -83,6 +98,19 @@ def test_every_frame_is_fed_so_drafts_come_as_soon_as_decoded(config, bus):
     assert len(asr.fed) >= 20
     assert all(n <= 512 for n, _ in asr.fed[1:])
     assert len(drafts) == len({d["text"] for d in drafts})  # only changed text is sent
+
+
+def test_whisper_fallback_uses_its_own_draft_interval_and_still_finalizes(config, bus):
+    cfg = config | {"whisper": {"draft_interval_ms": 560}}
+    asr = GrowingWhisper()
+    s = service(cfg, bus, asr)
+    audio(s, 10.0, 1.2, SPEECH)
+    audio(s, 11.2, 0.6, QUIET)
+    drafts = [entry for entry in asr.fed if not entry[1]]
+    finals = [entry for entry in asr.fed if entry[1]]
+    assert 1 <= len(drafts) <= 3  # one decode per 560 ms, not per 32 ms
+    assert len(finals) == 1
+    assert transcripts(bus, final=True)
 
 
 def test_a_capture_gap_finishes_the_utterance_instead_of_dropping_it(config, bus):
