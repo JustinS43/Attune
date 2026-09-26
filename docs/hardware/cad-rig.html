@@ -157,8 +157,16 @@ ul.notes li::marker { color: var(--ink-3); }
 .warnbox b { color: var(--warn); font-weight: 600; }
 .unused { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 110ch; }
 .unused b { font-weight: 500; color: var(--ink); }
+.w-n { background: #6B4226; }
+code { font: 500 0.9em/1 var(--f-mono); color: var(--ink); }
+.kit { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--rule); font-size: 14px; color: var(--ink-2); }
+.kit b { color: var(--ink); font-weight: 600; }
+.build { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 32px; align-items: start; }
+.build h3 { font: 500 11px/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+ol.steps li b { font-weight: 600; color: var(--ink); }
+.tag { display: inline-block; font: 500 11px/1.4 var(--f-mono); padding: 0 5px; border-radius: 4px; border: 1px dashed var(--rule-2); background: var(--warn-soft); color: var(--ink); white-space: nowrap; }
 @media (max-width: 960px) { .workspace { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .two, .build { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) {
   table.pins { min-width: 0; font-size: 12.5px; }
   .pins th, .pins td { padding: 7px 5px; }
@@ -172,15 +180,15 @@ ul.notes li::marker { color: var(--ink-3); }
     <div>
       <div class="eyebrow">Hackathon prototype · CAD view</div>
       <h1>Attune prototype rig</h1>
-      <p class="lede">A webcam and sensors taped to your own glasses, wired to a small Arduino pack on your chest, feeding the Attune app on your laptop. Every electronic part comes from the MLH Hardware Lab menu.</p>
+      <p class="lede">A webcam and Grove sensors taped to a pair of wraparound sunglasses, with a servo that taps behind your right ear, wired to an Arduino UNO R3 pack on your chest and feeding the Attune app on your laptop. Built from the parts the team actually has on the table.</p>
     </div>
     <dl class="tb">
       <div><dt>Dwg no.</dt><dd>ATN-RIG-01</dd></div>
-      <div><dt>Rev</dt><dd>A</dd></div>
+      <div><dt>Rev</dt><dd>B</dd></div>
       <div><dt>Units</dt><dd>mm</dd></div>
       <div><dt>Scale</dt><dd>1:1 model</dd></div>
-      <div><dt>Worn mass</dt><dd>≈150 g est.</dd></div>
-      <div><dt>Date</dt><dd>2026-09-25</dd></div>
+      <div><dt>Board</dt><dd>UNO R3</dd></div>
+      <div><dt>Date</dt><dd>2026-09-26</dd></div>
     </dl>
   </header>
 
@@ -216,30 +224,34 @@ ul.notes li::marker { color: var(--ink-3); }
       </div>
       <div class="grp">
         <h3>Worn on the glasses</h3>
-        <button type="button" class="row" data-item="1"><span class="num">1</span><span class="name">Logitech Webcam</span><span class="qty">×1</span><span class="where">Camera and microphone, clipped over the bridge</span></button>
-        <button type="button" class="row" data-item="2"><span class="num">2</span><span class="name">Sound Sensor</span><span class="qty">×2</span><span class="where">Outside each temple; comparing left and right loudness gives the direction of a sound</span></button>
-        <button type="button" class="row" data-item="3"><span class="num">3</span><span class="name">LED Socket Kit</span><span class="qty">×2</span><span class="where">On each hinge, LED bent to face your eye; flashes on the side an alarm came from</span></button>
-        <button type="button" class="row" data-item="4"><span class="num">4</span><span class="name">Touch Sensor</span><span class="qty">×1</span><span class="where">Right temple; tap to confirm a name</span></button>
-        <button type="button" class="row" data-item="5"><span class="num">5</span><span class="name">130 Mini DC Brushless Motor</span><span class="qty">×1</span><span class="where">Right temple tip, tape weight on the shaft so it buzzes on alerts</span></button>
+        <button type="button" class="row" data-item="1"><span class="num">1</span><span class="name">Logitech C922-type webcam</span><span class="qty">×1</span><span class="where">Camera and microphone, clipped to the centre of the bridge</span></button>
+        <button type="button" class="row" data-item="2"><span class="num">2</span><span class="name">Grove Sound Sensor</span><span class="qty">×2</span><span class="where">Left arm near the hinge on A0, right arm near the hinge on A1, microphones facing outward; left vs right loudness gives the direction of a sound</span></button>
+        <button type="button" class="row" data-item="3"><span class="num">3</span><span class="name">Grove LED Socket</span><span class="qty">×2</span><span class="where">Outer front corner of each lens, LED bent to face your eye: left on D5, right on D6. Flashes on the side an alarm came from</span></button>
+        <button type="button" class="row" data-item="4"><span class="num">4</span><span class="name">Grove Touch Sensor</span><span class="qty">×1</span><span class="where">Right arm, on D2. Tap = yes, hold = no, double tap = save this person, triple tap = pause</span></button>
+        <button type="button" class="row" data-item="5"><span class="num">5</span><span class="name">Tower Pro SG92R micro servo</span><span class="qty">×1</span><span class="where">The buzzer: taped at the right temple tip, with a small taped bump on the horn that taps your head. Signal on D9</span></button>
       </div>
       <div class="grp">
         <h3>Control pack, on your chest</h3>
-        <button type="button" class="row" data-item="6"><span class="num">6</span><span class="name">Arduino Kit</span><span class="qty">×1</span><span class="where">Reads the sensors, drives the LEDs and motor, talks to the laptop over USB</span></button>
-        <button type="button" class="row" data-item="7"><span class="num">7</span><span class="name">Solderless Breadboard</span><span class="qty">×1</span><span class="where">5 V and ground rails; every module plugs in here</span></button>
-        <button type="button" class="row" data-item="8"><span class="num">8</span><span class="name">Motor/Servo Driver Board</span><span class="qty">×1</span><span class="where">Powers the motor, which an Arduino pin can't do on its own</span></button>
-        <button type="button" class="row" data-item="9"><span class="num">9</span><span class="name">Grove Jumper Wires</span><span class="qty">×6</span><span class="where">One per sensor or LED, taped along the temples, plus one for the driver board</span></button>
-        <button type="button" class="row" data-item="10"><span class="num">10</span><span class="name">Male to Male Jumper Wires</span><span class="qty">≈25</span><span class="where">Pushed into the far end of each Grove cable, then into the breadboard and Arduino pins</span></button>
-        <button type="button" class="row" data-item="15"><span class="num">15</span><span class="name">Ceramic Capacitor, 0.1 µF</span><span class="qty">×1</span><span class="where">Marked "104"; clamped in the driver's M1 terminal with the motor leads, to stop motor noise reaching the sound sensors <span class="off">Not in model</span></span></button>
+        <button type="button" class="row" data-item="6"><span class="num">6</span><span class="name">Arduino UNO R3 (Rev3e)</span><span class="qty">×1</span><span class="where">Square USB-B port, no LED matrix. Reads the sensors, drives the LEDs and servo, talks to the laptop over USB. Its status shows on the built-in "L" LED (pin 13)</span></button>
+        <button type="button" class="row" data-item="7"><span class="num">7</span><span class="name">Grove Base Shield</span><span class="qty">×1</span><span class="where">Stacks on the UNO; every Grove cable plugs straight into a labelled port. Its 5V and GND header pins feed the breadboard</span></button>
+        <button type="button" class="row" data-item="8"><span class="num">8</span><span class="name">Mini breadboard</span><span class="qty">×1</span><span class="where">5 V and GND rails for the servo only</span></button>
+        <button type="button" class="row" data-item="9"><span class="num">9</span><span class="name">Grove 4-pin cables</span><span class="qty">×5</span><span class="where">One per sensor or LED, taped along the arms, plugged into the shield</span></button>
+        <button type="button" class="row" data-item="10"><span class="num">10</span><span class="name">Male to male jumper wires</span><span class="qty">×5</span><span class="where">Shield 5V and GND to the rails, servo brown and red to the rails, servo orange to D9 (there is no Grove port for D9)</span></button>
+        <button type="button" class="row" data-item="15"><span class="num">15</span><span class="name">Electrolytic capacitor, 100–470 µF</span><span class="qty">0–1</span><span class="where">Optional. Across the 5V/GND rails, stripe (−) to GND, only if the board resets when the servo moves <span class="off">Not in model</span></span></button>
       </div>
       <div class="grp">
         <h3>For the demo</h3>
         <button type="button" class="row" data-item="11"><span class="num">11</span><span class="name">JBL Go Speaker</span><span class="qty">×1</span><span class="where">Plays doorbell and smoke-alarm recordings. Not worn. <span class="off">Not in model</span></span></button>
       </div>
       <div class="grp">
-        <h3>Yours, not from the lab</h3>
-        <button type="button" class="row own" data-item="12"><span class="num">12</span><span class="name">Glasses</span><span class="qty">×1</span><span class="where">Any pair; sunglasses or safety glasses work</span></button>
-        <button type="button" class="row own" data-item="13"><span class="num">13</span><span class="name">Tape</span><span class="qty">1 roll</span><span class="where">Holds everything on, and doubles as the motor's off-center weight</span></button>
-        <button type="button" class="row own" data-item="14"><span class="num">14</span><span class="name">Laptop</span><span class="qty">×1</span><span class="where">Runs the Attune engine and every model; both USB cables plug in here</span></button>
+        <h3>Frame, tape and laptop</h3>
+        <button type="button" class="row own" data-item="12"><span class="num">12</span><span class="name">Wraparound black sunglasses</span><span class="qty">×1</span><span class="where">The frame everything is taped to</span></button>
+        <button type="button" class="row own" data-item="13"><span class="num">13</span><span class="name">Tape and cable labels</span><span class="qty">1 roll</span><span class="where">Holds everything on, makes the bump on the servo horn, and labels both ends of every cable</span></button>
+        <button type="button" class="row own" data-item="14"><span class="num">14</span><span class="name">Laptop + USB A-to-B cable</span><span class="qty">×1</span><span class="where">Runs the Attune engine and every model; the webcam and the UNO (A-to-B cable) plug in here</span></button>
+      </div>
+      <div class="grp">
+        <h3>In the kit, not used</h3>
+        <p class="unused" style="margin: 0 8px 4px">DC motor, 0.1 µF motor capacitor ("104"), and the Grove I²C Motor Driver (the L298 V1.3 board). The servo replaces all three. <span class="off">Not in model</span></p>
       </div>
     </aside>
   </section>
@@ -247,39 +259,40 @@ ul.notes li::marker { color: var(--ink-3); }
   <section class="two">
     <div class="card">
       <h2>Wiring</h2>
-      <p class="sub">Pin map for the Arduino. The menu's Grove cables have a plug at both ends, so push Male to Male jumper wires into the far plug to reach the breadboard. Yellow is signal, red is 5 V, black is ground; white is unused except on the driver.</p>
+      <p class="sub">Pin map for the UNO R3 with the Grove Base Shield on top. Grove cables plug straight into the shield port with the same name; only the servo needs jumper wires and the breadboard. It matches <code>firmware/attune_rig/rig_config.h</code>.</p>
       <div class="scroll-x">
         <table class="pins">
           <thead><tr><th>Part</th><th>Part pin</th><th>Goes to</th><th>Wire</th></tr></thead>
           <tbody>
-            <tr><td>Sound Sensor, left</td><td>SIG</td><td class="pin">A0</td><td><span class="w w-y"></span>Grove</td></tr>
-            <tr><td>Sound Sensor, right</td><td>SIG</td><td class="pin">A1</td><td><span class="w w-y"></span>Grove</td></tr>
-            <tr><td>Touch Sensor</td><td>SIG</td><td class="pin">D2</td><td><span class="w w-y"></span>Grove</td></tr>
-            <tr><td>LED Socket, left</td><td>SIG</td><td class="pin">D5</td><td><span class="w w-y"></span>Grove</td></tr>
-            <tr><td>LED Socket, right</td><td>SIG</td><td class="pin">D6</td><td><span class="w w-y"></span>Grove</td></tr>
-            <tr><td>Motor/Servo Driver</td><td>Grove port, I²C</td><td class="pin">SDA / SCL</td><td><span class="w w-w"></span><span class="w w-y"></span>Grove</td></tr>
-            <tr><td>Every Grove cable</td><td>VCC / GND</td><td class="pin">5V / GND rails</td><td><span class="w w-r"></span><span class="w w-k"></span>Grove</td></tr>
-            <tr><td>Breadboard rails</td><td>+ / −</td><td class="pin">5V / GND</td><td><span class="w w-r"></span><span class="w w-k"></span>Jumpers</td></tr>
-            <tr><td>Motor/Servo Driver</td><td>Power terminal</td><td class="pin">5V / GND rails</td><td><span class="w w-r"></span><span class="w w-k"></span>Jumpers</td></tr>
-            <tr><td>130 Mini DC Brushless Motor</td><td>Two leads</td><td class="pin">Driver M1</td><td><span class="w w-r"></span><span class="w w-k"></span>Motor leads</td></tr>
-            <tr><td>Ceramic Capacitor, 0.1 µF</td><td>Two legs</td><td class="pin">Driver M1</td><td>Clamped with the motor leads</td></tr>
-            <tr><td>Arduino</td><td>USB</td><td class="pin">Laptop</td><td><span class="w w-u"></span>Kit cable</td></tr>
-            <tr><td>Logitech Webcam</td><td>USB</td><td class="pin">Laptop</td><td><span class="w w-u"></span>Built-in cable</td></tr>
+            <tr><td>Sound Sensor, left</td><td>Grove</td><td class="pin">A0 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>Sound Sensor, right</td><td>Grove</td><td class="pin">A1 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>Touch Sensor, right arm</td><td>Grove</td><td class="pin">D2 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>LED Socket, left</td><td>Grove</td><td class="pin">D5 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>LED Socket, right</td><td>Grove</td><td class="pin">D6 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>SG92R servo</td><td>Orange, signal</td><td class="pin">D9 header pin</td><td><span class="w w-o"></span>Jumper (no Grove port for D9)</td></tr>
+            <tr><td>SG92R servo</td><td>Red, 5 V</td><td class="pin">Breadboard + rail</td><td><span class="w w-r"></span>Jumper</td></tr>
+            <tr><td>SG92R servo</td><td>Brown, GND</td><td class="pin">Breadboard − rail</td><td><span class="w w-n"></span>Jumper</td></tr>
+            <tr><td>Breadboard + rail</td><td>+</td><td class="pin">Shield 5V pin</td><td><span class="w w-r"></span>Jumper</td></tr>
+            <tr><td>Breadboard − rail</td><td>−</td><td class="pin">Shield GND pin</td><td><span class="w w-k"></span>Jumper</td></tr>
+            <tr><td>Capacitor, 100–470 µF (optional)</td><td>+ leg / − stripe</td><td class="pin">+ rail / − rail</td><td>Only if the board resets when the servo moves</td></tr>
+            <tr><td>Status LED "L"</td><td>On the board</td><td class="pin">D13</td><td>Built in, nothing to wire</td></tr>
+            <tr><td>Arduino UNO R3</td><td>USB-B</td><td class="pin">Laptop USB</td><td><span class="w w-u"></span>USB A-to-B cable</td></tr>
+            <tr><td>Logitech C922 webcam</td><td>USB</td><td class="pin">Laptop USB</td><td><span class="w w-u"></span>Built-in cable</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="fine">The driver in the menu photo has a Grove port, so it runs over I²C; the model name printed on the board tells you which library to install. If yours has no Grove port, use D9 for speed and D8 for direction instead. The menu calls the motor brushless, but the photo shows a regular two-wire motor. If yours has three wires, the driver can't run it, so use the menu's Servo Motor on D9 as a tapper instead.</p>
+      <p class="fine">Grove cables: yellow is signal, red 5 V, black ground, white unused. If the Base Shield has a 3.3 V / 5 V switch, set it to 5 V. The shield passes every UNO pin through to its own header, so the D9, 5V and GND jumpers go into the shield's header sockets. Not used: the DC motor, its 0.1 µF capacitor and the Grove I²C Motor Driver (L298 V1.3); nothing goes on SDA/SCL.</p>
     </div>
 
     <div class="card">
       <h2>Signal flow</h2>
-      <p class="sub">The laptop does the thinking. The glasses only see and hear; the pack handles touch, lights and buzz.</p>
+      <p class="sub">The laptop does the thinking. The glasses see, hear and feel your taps; the pack reads them and drives the lights and the servo tapper.</p>
       <div class="flow">
         <div class="fn" style="grid-area: jbl"><b>JBL Go Speaker</b><span>Plays doorbell and smoke-alarm recordings</span></div>
         <div class="fa dash" style="grid-area: a1"><i></i><em>sound</em></div>
-        <div class="fn" style="grid-area: rig"><b>Glasses rig</b><span>Webcam, 2 sound sensors, touch sensor, 2 LEDs, motor</span></div>
-        <div class="fh" style="grid-area: a2"><i class="l"></i><i class="r"></i><em>Grove + jumper wires</em></div>
-        <div class="fn" style="grid-area: pack"><b>Control pack</b><span>Arduino, breadboard, motor driver</span></div>
+        <div class="fn" style="grid-area: rig"><b>Glasses rig</b><span>C922 webcam, 2 sound sensors, touch sensor, 2 LEDs, SG92R servo tapper</span></div>
+        <div class="fh" style="grid-area: a2"><i class="l"></i><i class="r"></i><em>Grove cables + servo lead</em></div>
+        <div class="fn" style="grid-area: pack"><b>Control pack</b><span>UNO R3 + Grove Base Shield, mini breadboard for servo power</span></div>
         <div class="fa" style="grid-area: a3"><i></i><em>USB video + audio</em></div>
         <div class="fa" style="grid-area: a4"><i class="up"></i><i></i><em>USB serial</em></div>
         <div class="fn brain" style="grid-area: lap"><b>Laptop</b><span>Attune engine: faces, captions, who's talking, alerts, conversation history</span></div>
@@ -291,37 +304,69 @@ ul.notes li::marker { color: var(--ink-3); }
     </div>
   </section>
 
-  <section class="two">
-    <div class="card">
-      <h2>Assembly</h2>
-      <p class="sub">About an hour with two people. Test each part on the laptop before taping the next one on.</p>
-      <ol class="steps">
-        <li>Clip the webcam over the top of the frame at the bridge, then wrap two strips of tape around the clip and frame. Aim it straight ahead using the laptop preview.</li>
-        <li>Tape a sound sensor to the outside of each temple, microphone facing out, about 2 cm behind the hinge.</li>
-        <li>Tape an LED socket on top of each hinge. Bend the LED legs so the LED points back at your eye; the Needle Nose Pliers at the lab's workbench make this easy.</li>
-        <li>Tape the touch sensor to the right temple where your finger naturally lands.</li>
-        <li>Wrap a lump of tape off-center on the motor shaft so it wobbles, then tape the motor to the right temple tip.</li>
-        <li>Run every cable along the temples, with a strip of tape every few centimetres, and let them drop behind your ears. Where each Grove cable ends, push Male to Male jumper wires into its plug and tape the joint.</li>
-        <li>Build the pack: breadboard, driver board and Arduino side by side, wired per the table. Tape it to your shirt at chest height.</li>
-        <li>Plug the webcam and the Arduino into the laptop, start the Attune engine, then open the lens view in Chrome.</li>
-      </ol>
+  <section class="card" aria-labelledby="asm-h">
+    <h2 id="asm-h">Assembly, step by step</h2>
+    <p class="sub">About an hour with two people at the table. Do the steps in order and don't plug the USB cable into the laptop until step 12. Numbers in brackets are the parts list.</p>
+    <p class="kit"><b>On the table first:</b> sunglasses, C922 webcam, UNO R3, Grove Base Shield, 2 sound sensors, touch sensor, 2 LED sockets, SG92R servo with its horns, mini breadboard, 5 Grove cables, 5 male to male jumpers, USB A-to-B cable, tape, a marker, and the laptop. Leave the DC motor, the 0.1 µF capacitor and the motor driver board in the box.</p>
+    <div class="build">
+      <div>
+        <h3>Build</h3>
+        <ol class="steps">
+          <li><div><b>Label every cable, both ends.</b> Wrap a masking-tape flag near each end and write on it: <span class="tag">L SOUND A0</span> <span class="tag">R SOUND A1</span> <span class="tag">TOUCH D2</span> <span class="tag">L LED D5</span> <span class="tag">R LED D6</span> on the Grove cables, and <span class="tag">SERVO D9</span> <span class="tag">5V</span> <span class="tag">GND</span> on the jumpers. Swapped left and right is the most likely wiring mistake.</div></li>
+          <li><div><b>Stack the Base Shield on the UNO.</b> Line up every pin, check none is bent outside a socket, then press both ends down evenly. If the shield has a 3.3 V / 5 V switch, set it to 5 V.</div></li>
+          <li><div><b>Webcam [1].</b> Clip it to the centre of the bridge, then wrap two strips of tape around the clip and the frame. You'll aim it in step 19.</div></li>
+          <li><div><b>Sound sensors [2].</b> Tape one to the outside of each arm, just behind the hinge, microphone facing outward. Tape above and below the microphone, never over it. Plug in <span class="tag">L SOUND A0</span> on the left and <span class="tag">R SOUND A1</span> on the right.</div></li>
+          <li><div><b>LED sockets [3].</b> Tape one at the outer front corner of each lens and bend the LED so it points back at your eye. <span class="tag">L LED D5</span> on the left, <span class="tag">R LED D6</span> on the right.</div></li>
+          <li><div><b>Touch sensor [4].</b> Tape it to the right arm, behind the right sound sensor, where your finger lands naturally. One thin layer of tape over the pad is fine. Plug in <span class="tag">TOUCH D2</span>.</div></li>
+          <li><div><b>Servo tapper [5].</b> Push the single-arm horn on loosely (you'll set it in step 18) and fold a small bump of tape onto its tip. Tape the servo body to the outside of the right temple tip, shaft pointing down, so the horn swings under the arm and the bump reaches the skin behind your ear.</div></li>
+          <li><div><b>Route the cables.</b> Run every cable along the arms with a strip of tape every few centimetres, then let them drop behind your ears to the chest. Tape the servo lead with the right-side cables.</div></li>
+          <li><div><b>Grove cables into the shield [7, 9].</b> Plug each labelled cable into the shield port with the same name: A0, A1, D2, D5, D6. The plugs only fit one way round.</div></li>
+          <li><div><b>Breadboard and servo [8, 10].</b> Jumper the shield's <b>5V</b> pin to the breadboard <b>+</b> rail (red) and a <b>GND</b> pin to the <b>−</b> rail (black). Plug the servo lead into the breadboard, then run brown to <b>−</b>, red to <b>+</b>, and orange to the shield's <b>D9</b> header socket with the <span class="tag">SERVO D9</span> jumper. Keep the optional capacitor [15] ready for step 17.</div></li>
+          <li><div><b>Check before power.</b> Read every label against the pin map, and make sure no bare jumper end touches another. Then tape the UNO, shield and breadboard together and tape the pack to your shirt at chest height, leaving slack in the cables so a head turn can't pull them out.</div></li>
+        </ol>
+      </div>
+      <div>
+        <h3>First power-up, in this order</h3>
+        <ol class="steps" style="counter-reset: step 11">
+          <li><div><b>USB only.</b> Plug the UNO into the laptop with the USB A-to-B cable, webcam still unplugged. The ON LED lights and the "L" LED (pin 13) shows the firmware status. Nothing lit, or the laptop warns about the USB port: unplug at once and look for a 5V-to-GND short on the breadboard.</div></li>
+          <li><div><b>Firmware.</b> If the board is new, upload <code>firmware/attune_rig</code> as described in <code>firmware/README.md</code>. Open the Serial Monitor at 115200: a READY line, then a stream of level lines. Close the Serial Monitor before starting the engine.</div></li>
+          <li><div><b>Sound.</b> Start the engine (<code>docs/hardware/wiring.md</code> has the commands) and clap beside each ear in turn. The left level must jump for a left clap. If it's the other way round, swap the A0 and A1 plugs.</div></li>
+          <li><div><b>Touch.</b> Tap, hold, double tap and triple tap the pad; each gesture should show up in the console.</div></li>
+          <li><div><b>LEDs.</b> Send the left test pattern, then the right. Each must light on its own side, visible without dazzling you.</div></li>
+          <li><div><b>Servo, last.</b> Send a test pattern and watch the horn move and return. If the board resets or the USB link drops when it moves, put the 100–470 µF capacitor across the rails (stripe to −) and try again.</div></li>
+          <li><div><b>Set the tap.</b> With the servo at rest, pull the horn off and push it back on at the angle where the bump just clears your head, so each move gives a light tap. Tighten the horn screw.</div></li>
+          <li><div><b>Webcam.</b> Plug it into the laptop, open the lens view in Chrome and aim it straight ahead. Then do the bench tests in <code>docs/hardware/wiring.md</code> and log the results there.</div></li>
+        </ol>
+      </div>
     </div>
+  </section>
+
+  <section class="two">
     <div class="card">
       <h2>Notes</h2>
       <p class="sub">Things that will bite on demo day.</p>
       <ul class="notes">
-        <li>It's front-heavy, mostly from the webcam. The motor at the back helps balance it; take the rig off between demos.</li>
-        <li>Everything runs from the two USB cables, so stay within reach of the laptop. Keep motor buzzes short, because USB can't run it continuously.</li>
-        <li>Two sound sensors assume the lab lends two. With only one, skip left/right direction; the alerts still work.</li>
-        <li>The Grove cables probably won't reach your chest on their own. The jumpers pushed into their plugs make up the distance; tape each joint so it can't pull apart.</li>
+        <li>It's front-heavy, mostly from the webcam. The servo at the back helps a little; take the rig off between demos.</li>
+        <li>Everything runs from the two USB cables, so stay within reach of the laptop. The servo draws its current from the UNO's USB 5 V; keep taps short and don't let the horn jam against your head.</li>
+        <li>If a Grove cable doesn't reach your chest, push male to male jumpers into its plug to extend it and tape the joint so it can't pull apart.</li>
+        <li>The UNO R3 has no LED matrix. Its status shows only on the small "L" LED beside pin 13, under the shield's edge.</li>
         <li>Only enroll teammates who agree to it. Strangers stay session-only.</li>
-        <li>Sizes in the model are approximate and depend on the exact parts the lab hands you.</li>
+        <li>Sizes in the model are approximate.</li>
       </ul>
       <div class="warnbox"><b>Never set off a real alarm at the venue.</b> Play doorbell and smoke-alarm recordings from the JBL Go instead. The alerts are a demo, not a smoke alarm.</div>
     </div>
+    <div class="card">
+      <h2>Gestures and signals</h2>
+      <p class="sub">What the wearer does and feels.</p>
+      <ul class="notes">
+        <li><b>Tap</b> the touch sensor = yes. <b>Hold</b> = no.</li>
+        <li><b>Double tap</b> = save this person (they are asked to consent first).</li>
+        <li><b>Triple tap</b> = pause.</li>
+        <li>An alarm flashes the LED on the side it came from, and the servo taps with it.</li>
+      </ul>
+      <p class="fine">In the kit but not used: the DC motor, the 0.1 µF motor capacitor and the Grove I²C Motor Driver (L298 V1.3). The servo on D9 does the buzzing, so there is no motor driver on I²C.</p>
+    </div>
   </section>
-
-  <p class="unused"><b>Not used from the menu:</b> Buzzer, Gear Stepper Motor Driver Pack, Thumb Joystick, I2C Color Sensor, Air Quality Sensor, NFC/RFID tag board, LCD RGB Backlight, Red Quad Alphanumeric Display, Ultrasonic Distance Sensor, 3-Axis Digital Accelerometer, Rotary Angle Sensor, Temperature and Barometer Sensor, UV Sensor, Light Sensor, Infrared Reflective Sensor, Soil Moisture Sensor, Micro Switch, Button, Raspberry Pi Kit, Google Nest Mini, Resistors, Female to Male Jumper Wires, Female to female Jumper Wires. The Servo Motor is the backup haptic if the driver board can't run the motor. The workbench tools, such as the multimeter and wire stripper, stay at the lab and can't be rented.</p>
 </div>
 
 <script>
@@ -366,7 +411,7 @@ try {
 }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.domElement.setAttribute('role', 'img');
-renderer.domElement.setAttribute('aria-label', '3D model of glasses with a webcam clipped over the bridge, a sound sensor on each temple, LEDs on the hinges, a touch sensor on the right temple, a vibration motor at the right temple tip, and cables running down to an Arduino pack on the chest.');
+renderer.domElement.setAttribute('aria-label', '3D model of wraparound sunglasses with a webcam clipped to the centre of the bridge, a sound sensor on each arm near the hinge, an LED at the outer front corner of each lens, a touch sensor on the right arm, a micro servo tapper at the right temple tip, and cables running down to an Arduino UNO R3 with a Grove Base Shield and a mini breadboard on the chest.');
 vpEl.prepend(renderer.domElement);
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.domElement.className = 'labels';
@@ -430,18 +475,20 @@ function lensShape(w, h, rt, rb) {
   return s;
 }
 const GL = part('glasses');
-const frameM = mat(0x23272d, { r: 0.5 });
-const lensM = mat(0xa8c3d8, { r: 0.08, op: 0.2 });
+const frameM = mat(0x16181b, { r: 0.35 });
+const lensM = mat(0x1c2530, { r: 0.05, m: 0.3, op: 0.62 });
 const tipDir = V(0, -Math.sin(35 * DEG), -Math.cos(35 * DEG));
+const WRAP = 14 * DEG; // wraparound: each lens turns back toward the temple
 for (const sx of [-1, 1]) {
   const outer = lensShape(54, 40, 9, 16);
   outer.holes.push(lensShape(47, 33, 6, 13));
   const rimGeo = new THREE.ExtrudeGeometry(outer, { depth: 4, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.8, bevelSegments: 2, curveSegments: 18 });
   rimGeo.translate(0, 0, -2);
-  mesh(GL, rimGeo, frameM, V(sx * 36, 0, 0));
+  const lensPos = V(sx * 36, 0, -3), lensRot = [0, sx * WRAP, 0];
+  mesh(GL, rimGeo, frameM, lensPos, lensRot);
   const lensGeo = new THREE.ExtrudeGeometry(lensShape(47.6, 33.6, 6.2, 13.2), { depth: 1.4, bevelEnabled: false, curveSegments: 18 });
   lensGeo.translate(0, 0, -0.7);
-  const lens = mesh(GL, lensGeo, lensM, V(sx * 36, 0, 0), null, false); lens.renderOrder = 2;
+  const lens = mesh(GL, lensGeo, lensM, lensPos, lensRot, false); lens.renderOrder = 2;
   mesh(GL, rbox(7, 12, 9, 1.5), frameM, V(sx * 66.5, 10, -2.5));
   mesh(GL, rbox(3.5, 7, 113, 1.2), frameM, V(sx * 69, 10, -62));
   mesh(GL, rbox(3.5, 6, 40, 1.2), frameM, V(sx * 69, 10, -118.5).addScaledVector(tipDir, 20), [-35 * DEG, 0, 0]);
@@ -449,16 +496,18 @@ for (const sx of [-1, 1]) {
 }
 mesh(GL, rbox(20, 5, 5, 1.5), frameM, V(0, 10, 0));
 
-/* ---------------- 1 webcam ---------------- */
+/* ---------------- 1 webcam (Logitech C922 type) ---------------- */
 const WC = part('webcam', [0, 72, 36]);
 const camBody = mat(0x1b1d21, { r: 0.42 });
-mesh(WC, rbox(73, 30, 26, 7), camBody, V(0, 36, 2));
-mesh(WC, rbox(64, 22, 1.2, 0.6), mat(0x08090b, { r: 0.12 }), V(0, 36, 15.2), null, false);
-mesh(WC, cyl(7.2, 2.6, 36), mat(0x3a4049, { r: 0.3, m: 0.7 }), V(0, 36, 16.2), [90 * DEG, 0, 0]);
-mesh(WC, new THREE.CircleGeometry(5, 36), mat(0x0c1a2b, { r: 0.05, m: 0.4 }), V(0, 36, 17.55), null, false);
-mesh(WC, new THREE.CircleGeometry(1.6, 20), mat(0x2f5a86, { r: 0.05, m: 0.2 }), V(1.4, 37.4, 17.6), null, false);
-for (const sx of [-1, 1]) mesh(WC, cyl(0.9, 0.6, 12), mat(0x2a2e34), V(sx * 24, 36, 15.9), [90 * DEG, 0, 0], false);
-mesh(WC, new THREE.SphereGeometry(1.1, 12, 10), mat(0x3a3f45, { r: 0.2 }), V(13, 36, 15.9), null, false);
+mesh(WC, rbox(94, 29, 24, 11), camBody, V(0, 36, 2));
+mesh(WC, rbox(84, 22, 1.2, 0.6), mat(0x08090b, { r: 0.12 }), V(0, 36, 14.2), null, false);
+mesh(WC, cyl(8.2, 2.6, 36), mat(0x3a4049, { r: 0.3, m: 0.7 }), V(0, 36, 15.2), [90 * DEG, 0, 0]);
+mesh(WC, new THREE.CircleGeometry(6, 36), mat(0x0c1a2b, { r: 0.05, m: 0.4 }), V(0, 36, 16.55), null, false);
+mesh(WC, new THREE.CircleGeometry(1.8, 20), mat(0x2f5a86, { r: 0.05, m: 0.2 }), V(1.6, 37.6, 16.6), null, false);
+for (const sx of [-1, 1]) {
+  for (let k = 0; k < 3; k++) mesh(WC, cyl(0.7, 0.6, 12), mat(0x2a2e34), V(sx * (31 + k * 2.4), 36, 14.9), [90 * DEG, 0, 0], false);
+  mesh(WC, cyl(1.1, 0.6, 16), mat(0xe7ecf0, { r: 0.3 }), V(sx * 14, 36, 14.9), [90 * DEG, 0, 0], false);
+}
 mesh(WC, rbox(30, 5, 13, 1.5), camBody, V(0, 18.5, -4));
 mesh(WC, rbox(30, 19, 3, 1.2), camBody, V(0, 11, -9.5));
 
@@ -513,73 +562,107 @@ ledSocket('ledR', 1);
   groveConnector(T, V(x0 + 3.4, 10, -88.5), [0, 0, -90 * DEG]);
 })();
 
-/* ---------------- 5 motor (right temple tip) ---------------- */
+/* ---------------- 5 servo tapper (right temple tip) ---------------- */
+// Local frame of the right temple tip: -z runs back along the tip, +y is "up" off the arm, +x is outward.
 const tipStart = V(69, 10, -118.5);
-const motorC = tipStart.clone().addScaledVector(tipDir, 17).add(V(12.3, 0, 0));
-const motorCap = motorC.clone().addScaledVector(tipDir, -13.3);
-(function motorPart() {
-  const Mo = part('motor', [62, -28, -28]);
-  const q = alongQ(tipDir);
-  mesh(Mo, cyl(10, 25, 36), mat(0xc3c8cf, { r: 0.32, m: 0.85 }), motorC, q);
-  mesh(Mo, cyl(9.2, 2.2, 36), mat(0xe9e3d6, { r: 0.7 }), motorCap, q);
-  for (const o of [-5, 5]) mesh(Mo, box(1.4, 3, 2.6), mat(0xc9a55a, { r: 0.35, m: 0.8 }), motorCap.clone().add(V(o, 0, 0)).addScaledVector(tipDir, -1.9), q, false);
-  mesh(Mo, cyl(1, 8, 12), mat(0xd9dde2, { r: 0.25, m: 0.9 }), motorC.clone().addScaledVector(tipDir, 16.5), q, false);
-  mesh(Mo, new THREE.CylinderGeometry(6, 6, 4, 24, 1, false, 0, Math.PI), mat(0x9ea5ae, { r: 0.9 }), motorC.clone().addScaledVector(tipDir, 19), q);
+const svT = new THREE.Object3D();
+svT.position.copy(tipStart).addScaledVector(tipDir, 17); svT.rotation.x = -35 * DEG; svT.updateMatrixWorld(true);
+const SW = (x, y, z) => svT.localToWorld(V(x, y, z));
+// Tower Pro SG92R: body 23 x 12.2 x 22.5 mm, tabs 32 mm; taped to the outside of the tip, shaft pointing down.
+const SV = { x: 8.4, top: 5, bot: -17.5, shaftZ: 5.5 };
+let hornG = null;
+(function servoPart() {
+  const S = part('servo', [62, -28, -28]);
+  const G = new THREE.Group(); G.position.copy(svT.position); G.quaternion.copy(svT.quaternion); S.add(G);
+  const shell = mat(0x2a63c9, { r: 0.35, op: 0.9, dw: true });
+  const H = SV.top - SV.bot;
+  mesh(G, box(12.2, H, 23), shell, V(SV.x, (SV.top + SV.bot) / 2, 0));
+  mesh(G, box(12.2, 2.4, 32), shell, V(SV.x, SV.bot + 6.5, 0));
+  for (const z of [-14, 14]) mesh(G, cyl(1, 2.6, 10), mat(0x0d1a33), V(SV.x, SV.bot + 6.5, z), null, false);
+  mesh(G, cyl(5.9, 4, 30), shell, V(SV.x, SV.bot - 2, SV.shaftZ));
+  mesh(G, cyl(2.4, 3, 18), mat(0xf0efe8, { r: 0.5 }), V(SV.x, SV.bot - 4.8, SV.shaftZ), null, false);
+  mesh(G, box(0.3, 8, 14), mat(0xe8e8e2, { r: 0.6 }), V(SV.x + 6.15, (SV.top + SV.bot) / 2 + 2, -2), null, false);
+  // Horn: single arm reaching inward under the arm, with a lump of tape on its tip that taps the head.
+  hornG = new THREE.Group(); hornG.position.copy(V(SV.x, SV.bot - 6.8, SV.shaftZ)); G.add(hornG);
+  const hornM = mat(0xf0efe8, { r: 0.55 });
+  mesh(hornG, cyl(3.6, 1.8, 24), hornM, V(0, 0, 0));
+  mesh(hornG, rbox(16, 1.8, 4.4, 0.6), hornM, V(-7.5, 0, 0));
+  mesh(hornG, rbox(6, 5.5, 6, 2.2), mat(0x9ea5ae, { r: 0.92 }), V(-14.5, 0.8, 0));
+  hornG.rotation.y = -8 * DEG;
 })();
 
 /* ---------------- control pack ---------------- */
-const AX = 45, AZ = 2;
-const DX = -58, DY = 3, DZ = 13;
-const BX = -38;
+// Pack layout (pack-local mm). The UNO lies with its USB-B and power jack on the +x edge, so its digital
+// header runs along the bottom (-y) edge and the power/analog header along the top (+y) edge.
+const AX = 45, AZ = 2;          // UNO R3 board centre
+const SZ = AZ + 12.4;           // Grove Base Shield PCB, stacked on the UNO's headers
+const SHT = SZ + 0.8 + 8.5;     // top of the shield's pass-through header sockets
+const BX = -24, BY = 0;         // mini breadboard centre
+const P = 2.54;
+// Header pin x positions (pack-local), from the shield's pass-through sockets.
+const PIN = { D9: AX + 8.1, V5: AX + 14.7, GND: AX + 12.2 };
+const HDR_Y = { dig: -24.6, pwr: 24.6 };
+// Grove ports on the shield (only the ones the rig uses are named; the rest are spares).
+const PORT = { D2: [AX - 20, 12], D5: [AX - 20, 0], D6: [AX - 8, 0], A0: [AX - 20, -12], A1: [AX - 8, -12] };
+const SPARE = [[AX - 8, 12], [AX + 4, 12], [AX + 16, 12], [AX + 4, 0], [AX + 16, 0], [AX + 4, -12], [AX + 16, -12]];
+const hdrM = () => mat(0x17181b, { r: 0.6 });
+function headers(parent, z, h) {
+  const m = hdrM();
+  mesh(parent, box(10 * P + 0.6, 2.6, h), m, V(AX + 17, HDR_Y.dig, z));
+  mesh(parent, box(8 * P + 0.6, 2.6, h), m, V(AX - 10, HDR_Y.dig, z));
+  mesh(parent, box(8 * P + 0.6, 2.6, h), m, V(AX + 16, HDR_Y.pwr, z));
+  mesh(parent, box(6 * P + 0.6, 2.6, h), m, V(AX - 10, HDR_Y.pwr, z));
+}
 (function arduino() {
-  const A = part('arduino', [72, -16, 38], { pack: true });
-  mesh(A, rbox(68.6, 53.4, 1.6, 0.8), mat(0x0f8c95, { r: 0.5 }), V(AX, 0, AZ));
-  mesh(A, rbox(7.5, 9.2, 3.3, 1.2), mat(0xc7ccd2, { r: 0.3, m: 0.85 }), V(AX + 32, 10, AZ + 2.45));
-  mesh(A, box(13, 9, 11), mat(0x151619, { r: 0.6 }), V(AX + 28, -14, AZ + 6.3));
-  const hdr = mat(0x17181b, { r: 0.6 });
-  mesh(A, box(26, 2.6, 8.5), hdr, V(AX - 14, 24.6, AZ + 5.05));
-  mesh(A, box(21, 2.6, 8.5), hdr, V(AX + 12, 24.6, AZ + 5.05));
-  mesh(A, box(21, 2.6, 8.5), hdr, V(AX - 18, -24.6, AZ + 5.05));
-  mesh(A, box(16, 2.6, 8.5), hdr, V(AX + 8, -24.6, AZ + 5.05));
-  mesh(A, box(16, 22, 2.6), mat(0xbfc4cb, { r: 0.35, m: 0.8 }), V(AX - 22, 3, AZ + 2.1));
-  mesh(A, box(8, 8, 1.2), mat(0x141517, { r: 0.45 }), V(AX + 2, -9, AZ + 1.4));
-  mesh(A, box(3.5, 3.5, 1.4), mat(0xe5e7ea, { r: 0.5 }), V(AX - 30, -15, AZ + 1.5));
-  const ledIM = new THREE.InstancedMesh(box(1.3, 1.3, 0.5), mat(0x8e2a24, { r: 0.45 }), 96);
-  const m4 = new THREE.Matrix4(); let i = 0;
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 12; c++) { m4.makeTranslation(AX + 1 + c * 1.9, 4 - r * 1.9, AZ + 1.05); ledIM.setMatrixAt(i++, m4); }
-  A.add(ledIM);
+  const A = part('arduino', [84, -52, 14], { pack: true });
+  mesh(A, rbox(68.6, 53.4, 1.6, 0.8), mat(0x0e7f95, { r: 0.5 }), V(AX, 0, AZ));
+  const metal = mat(0xc7ccd2, { r: 0.3, m: 0.85 });
+  // Square USB-B port, sticking out past the board edge.
+  mesh(A, box(16, 12.2, 11), metal, V(AX + 32.6, -11, AZ + 6.3));
+  mesh(A, box(0.4, 8.2, 7), mat(0x1a1b1e, { r: 0.6 }), V(AX + 40.7, -11, AZ + 6.3), null, false);
+  mesh(A, box(13, 9, 11), mat(0x151619, { r: 0.6 }), V(AX + 28, 15, AZ + 6.3));
+  headers(A, AZ + 5.05, 8.5);
+  // ATmega328P in its DIP socket, the USB chip, crystal, reset button.
+  mesh(A, box(35.5, 9.8, 3.6), mat(0x141517, { r: 0.45 }), V(AX - 6, -6, AZ + 2.6));
+  mesh(A, box(5, 5, 1), mat(0x141517, { r: 0.45 }), V(AX + 20, -4, AZ + 1.3));
+  mesh(A, box(11, 4.5, 3.5), metal, V(AX + 2, 6, AZ + 2.5));
+  mesh(A, box(6, 6, 3), metal, V(AX + 27, 3, AZ + 2.3));
+  mesh(A, cyl(1.6, 1.2, 16), mat(0xd23b30, { r: 0.5 }), V(AX + 27, 3, AZ + 4.2), [90 * DEG, 0, 0], false);
+  // Built-in "L" LED on pin 13, and the ON LED.
+  mesh(A, box(1.8, 1, 0.8), mat(0xf2a93b, { r: 0.3 }), V(AX + 16, -18.5, AZ + 1.2), null, false);
+  mesh(A, box(1.8, 1, 0.8), mat(0x38c060, { r: 0.3 }), V(AX + 22, 19, AZ + 1.2), null, false);
+})();
+(function shield() {
+  const S = part('shield', [84, 26, 84], { pack: true });
+  mesh(S, rbox(68.6, 53.4, 1.6, 0.8), mat(0x1f64b5, { r: 0.55 }), V(AX, 0, SZ));
+  headers(S, SZ + 0.8 + 4.25, 8.5);
+  const pins = mat(0xc9b07a, { r: 0.35, m: 0.8 });
+  mesh(S, box(10 * P, 0.64, 7), pins, V(AX + 17, HDR_Y.dig, SZ - 4.3), null, false);
+  mesh(S, box(8 * P, 0.64, 7), pins, V(AX + 16, HDR_Y.pwr, SZ - 4.3), null, false);
+  const white = mat(0xf1f0ea, { r: 0.55 });
+  for (const [x, y] of [...Object.values(PORT), ...SPARE]) mesh(S, box(10, 5.2, 7.2), white, V(x, y, SZ + 0.8 + 3.6));
+  mesh(S, box(6, 3, 3), mat(0x16181b, { r: 0.5 }), V(AX + 28, 8, SZ + 2.3));
 })();
 (function breadboard() {
   const B = part('breadboard', [-70, -24, 0], { pack: true });
-  mesh(B, rbox(82.5, 54.5, 8.5, 1.2), mat(0xf3f1ea, { r: 0.75 }), V(BX, 0, 0));
+  mesh(B, rbox(55, 44, 8.5, 1.2), mat(0xf3f1ea, { r: 0.75 }), V(BX, BY, 0));
   const railR = mat(0xd0342c, { r: 0.6 }), railB = mat(0x2b5bd7, { r: 0.6 });
-  for (const sy of [1, -1]) {
-    mesh(B, box(76, 0.6, 0.3), railR, V(BX, sy * 25.2, 4.35), null, false);
-    mesh(B, box(76, 0.6, 0.3), railB, V(BX, sy * 17.9, 4.35), null, false);
-  }
-  mesh(B, box(76, 1.6, 0.3), mat(0xd9d6cc, { r: 0.8 }), V(BX, 0, 4.3), null, false);
+  mesh(B, box(50, 0.6, 0.3), railR, V(BX, BY + 20.1, 4.35), null, false);
+  mesh(B, box(50, 0.6, 0.3), railB, V(BX, BY + 13, 4.35), null, false);
+  mesh(B, box(50, 1.6, 0.3), mat(0xd9d6cc, { r: 0.8 }), V(BX, BY - 5.5, 4.3), null, false);
   const holes = [];
-  for (let c = 0; c < 30; c++) for (let r = 0; r < 5; r++) for (const sy of [1, -1]) holes.push([BX - 36.8 + c * 2.54, sy * (3.81 + r * 2.54)]);
-  for (let c = 0; c < 29; c++) { if (c % 6 === 5) continue; for (const ry of [20.3, 22.84]) for (const sy of [1, -1]) holes.push([BX - 35.5 + c * 2.54, sy * ry]); }
+  for (let c = 0; c < 17; c++) {
+    const x = BX - 8 * P + c * P;
+    for (let r = 0; r < 5; r++) { holes.push([x, BY - 1.7 + r * P * 0.8]); holes.push([x, BY - 9.3 - r * P * 0.8]); }
+    if (c % 6 !== 5) for (const ry of [BY + 18.4, BY + 14.7]) holes.push([x, ry]);
+  }
   const holeIM = new THREE.InstancedMesh(box(1.05, 1.05, 0.4), mat(0x3b3e44, { r: 0.9 }), holes.length);
   const m4 = new THREE.Matrix4();
   holes.forEach(([x, y], k) => { m4.makeTranslation(x, y, 4.3); holeIM.setMatrixAt(k, m4); });
   B.add(holeIM);
 })();
-(function driver() {
-  const D = part('driver', [-64, 30, 46], { pack: true });
-  mesh(D, rbox(40, 40, 1.6, 0.8), mat(0x1d4f9a, { r: 0.55 }), V(DX, DY, DZ));
-  mesh(D, box(25, 2.6, 8.4), mat(0x17181b, { r: 0.6 }), V(DX, DY - 16, DZ - 5));
-  const term = mat(0x1f8a4c, { r: 0.55 }), screw = mat(0xc9ced4, { r: 0.3, m: 0.85 });
-  for (const o of [-8, 8]) {
-    mesh(D, box(10, 7.5, 9), term, V(DX + o, DY + 15.5, DZ + 5.3));
-    for (const s of [-2.5, 2.5]) mesh(D, cyl(1.5, 0.8, 16), screw, V(DX + o + s, DY + 15.5, DZ + 10.2), [90 * DEG, 0, 0], false);
-  }
-  mesh(D, box(10, 6.5, 1.5), mat(0x131417, { r: 0.45 }), V(DX - 2, DY - 2, DZ + 1.55));
-  mesh(D, cyl(2.6, 5.5, 20), mat(0x2b3e8f, { r: 0.4 }), V(DX + 9, DY - 7, DZ + 3.55), [90 * DEG, 0, 0]);
-  mesh(D, cyl(2.6, 5.5, 20), mat(0x2b3e8f, { r: 0.4 }), V(DX + 9, DY + 2, DZ + 3.55), [90 * DEG, 0, 0]);
-  groveConnector(D, V(DX + 16, DY - 6, DZ + 3.6), [0, 0, 90 * DEG]);
-})();
+// Breadboard spots the servo uses (pack-local).
+const BB = { plus: BY + 18.4, minus: BY + 14.7, plugY: BY + 4.4, jmpY: BY + 0.33, col: (c) => BX - 8 * P + c * P };
 
 /* ---------------- cables ---------------- */
 class OffsetCurve extends THREE.Curve {
@@ -602,7 +685,7 @@ function wires(parent, pts, colors, matFor, r = 0.52, pitch = 1.1) {
     parent.add(new THREE.Mesh(new THREE.TubeGeometry(new OffsetCurve(base, frames, n, off), n, r, 6, false), matFor(col)));
   });
 }
-const WIRE = { y: 0xe4be22, w: 0xe8e8e2, r: 0xd23b30, k: 0x1c1d20, g: 0x2e9d57, b: 0x2f6fd6, o: 0xe9892b, usb: 0x16171a };
+const WIRE = { y: 0xe4be22, w: 0xe8e8e2, r: 0xd23b30, k: 0x1c1d20, n: 0x6b4226, o: 0xe9892b, usb: 0x16171a };
 const GROVE = [WIRE.k, WIRE.r, WIRE.w, WIRE.y];
 function drop(sx, lane, tail) {
   return [
@@ -614,47 +697,52 @@ function drop(sx, lane, tail) {
     ...tail,
   ];
 }
-const intoBoard = (ex) => [PW(ex, 62, 30), PW(ex, 24, 14), PW(ex, 11.43, 5.6)];
+// A Grove cable ends in a plug pushed down into its port on the Base Shield.
+const intoPort = ([x, y]) => [PW(x, 62, 48), PW(x, y + 9, SZ + 30), PW(x, y, SZ + 0.8 + 7.2 + 6.5)];
 
 const GC = part('groveCables', [0, 0, 0], { fade: true });
 const gMat = matCache({ r: 0.55 });
-wires(GC, [V(-66.5, 26.2, -9.2), V(-68.3, 19.5, -17), V(-68.2, 15.1, -30), V(-68.2, 15.1, -70), ...drop(-1, 0, intoBoard(-34))], GROVE, gMat);
-wires(GC, [V(66.5, 26.2, -9.2), V(68.3, 19.5, -17), V(68.2, 15.1, -30), V(68.2, 15.1, -70), ...drop(1, 0, intoBoard(-11))], GROVE, gMat);
-wires(GC, [V(-75.4, 10, -59.5), V(-74.4, 6.5, -64), V(-68.8, 3.2, -69), V(-68.6, 3.2, -92), ...drop(-1, 1, intoBoard(-31.5))], GROVE, gMat);
-wires(GC, [V(75.4, 10, -59.5), V(74.4, 6.5, -64), V(68.8, 3.2, -69), V(68.6, 3.2, -92), ...drop(1, 1, intoBoard(-8.5))], GROVE, gMat);
-wires(GC, [V(75.2, 10, -95.2), V(74.4, 11, -100), ...drop(1, 2, intoBoard(-6))], GROVE, gMat);
+wires(GC, [V(-66.5, 26.2, -9.2), V(-68.3, 19.5, -17), V(-68.2, 15.1, -30), V(-68.2, 15.1, -70), ...drop(-1, 0, intoPort(PORT.D5))], GROVE, gMat);
+wires(GC, [V(66.5, 26.2, -9.2), V(68.3, 19.5, -17), V(68.2, 15.1, -30), V(68.2, 15.1, -70), ...drop(1, 0, intoPort(PORT.D6))], GROVE, gMat);
+wires(GC, [V(-75.4, 10, -59.5), V(-74.4, 6.5, -64), V(-68.8, 3.2, -69), V(-68.6, 3.2, -92), ...drop(-1, 1, intoPort(PORT.A0))], GROVE, gMat);
+wires(GC, [V(75.4, 10, -59.5), V(74.4, 6.5, -64), V(68.8, 3.2, -69), V(68.6, 3.2, -92), ...drop(1, 1, intoPort(PORT.A1))], GROVE, gMat);
+wires(GC, [V(75.2, 10, -95.2), V(74.4, 11, -100), ...drop(1, 2, intoPort(PORT.D2))], GROVE, gMat);
+const plugM = mat(0xf7f6f0, { r: 0.55 });
+for (const [x, y] of [PORT.D2, PORT.D5, PORT.D6, PORT.A0, PORT.A1]) mesh(GC, box(9.4, 4.6, 6.5), plugM, PW(x, y, SZ + 0.8 + 7.2 + 3.25), packT.quaternion);
 
-const ML = part('motorLeads', [0, 0, 0], { fade: true });
-wires(ML, [motorCap.clone().add(V(0, 1.2, 0)).addScaledVector(tipDir, -3.5), V(79.5, 9.8, -113), V(75.5, 8.4, -114),
-  ...drop(1, 3, [PW(DX - 8, 62, 30), PW(DX - 8, 32, 24), PW(DX - 8, DY + 17.5, DZ + 10.5)])], [WIRE.r, WIRE.k], matCache({ r: 0.5 }), 0.55, 1.2);
+// Servo lead: brown / red / orange, down the right arm to a 3-pin plug in the breadboard.
+const SL = part('servoLeads', [0, 0, 0], { fade: true });
+const svCol = BB.col(7);
+wires(SL, [SW(SV.x, -8, 11.6), SW(SV.x - 1.5, -3, 15.5), ...drop(1, 3, [PW(svCol, 62, 52), PW(svCol, BB.plugY + 9, 32), PW(svCol, BB.plugY, 17)]).slice(1)],
+  [WIRE.n, WIRE.r, WIRE.o], matCache({ r: 0.5 }), 0.5, 1.05);
+mesh(SL, box(7.6, 2.6, 12), mat(0x16181b, { r: 0.55 }), PW(svCol, BB.plugY, 4.3 + 6.2), packT.quaternion);
 
 const US = part('usb', [0, 0, 0], { fade: true });
 const uMat = matCache({ r: 0.5 });
 wires(US, [V(-9, 33, -11.3), V(-24, 29.5, -15.5), V(-50, 24.5, -17.5), V(-64.5, 21.2, -21), V(-68.8, 18.4, -32), V(-68.9, 18.2, -70),
   V(-70.2, 17.4, -98), V(-72, 7, -122), V(-71.5, -42, -130), V(-66, -122, -104), V(-60, -205, -28), V(-94, -262, 12),
   V(-78, -318, 58), V(10, -346, 98), V(150, -350, 108)], [WIRE.usb], uMat, 1.9);
-wires(US, [PW(AX + 35.5, 10, AZ + 2.45), PW(AX + 44, 9, 3), V(118, -292, 62), V(136, -334, 104), V(150, -350, 132)], [WIRE.usb], uMat, 1.9);
+// USB A-to-B cable: square B plug in the UNO, A plug at the laptop.
+mesh(US, rbox(12, 14.5, 13, 1.5), mat(0x1a1b1e, { r: 0.55 }), PW(AX + 46.6, -11, AZ + 6.3), packT.quaternion);
+wires(US, [PW(AX + 52.6, -11, AZ + 6.3), PW(AX + 62, -12, 6), V(118, -292, 62), V(136, -334, 104), V(150, -350, 132)], [WIRE.usb], uMat, 1.9);
 for (const z of [108, 132]) {
   mesh(US, rbox(22, 8.5, 15.5, 2), mat(0x1a1b1e, { r: 0.55 }), V(161, -350, z));
   mesh(US, box(12, 4.6, 12), mat(0xc2c7cd, { r: 0.3, m: 0.85 }), V(178, -350, z));
 }
 
+// Five male to male jumpers: shield 5V/GND to the rails, servo brown/red to the rails, servo orange to D9.
 const JP = part('jumpers', [0, 0, 0], { pack: true, fade: true });
 const jMat = matCache({ r: 0.5 });
-const jump = (a, b, col) => {
-  const c = new THREE.QuadraticBezierCurve3(V(...a), V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(a[2], b[2]) + 13), V(...b));
+const jump = (a, b, col, lift = 13) => {
+  const c = new THREE.QuadraticBezierCurve3(V(...a), V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(a[2], b[2]) + lift), V(...b));
   JP.add(new THREE.Mesh(new THREE.TubeGeometry(c, 28, 0.62, 6, false), jMat(col)));
 };
-const TOP = 11.3;
-jump([AX - 20, 24.6, TOP], [BX + 30, 22.84, 4.3], WIRE.r);
-jump([AX - 17.5, 24.6, TOP], [BX + 32.5, 20.3, 4.3], WIRE.k);
-jump([AX + 5, 24.6, TOP], [BX + 16.5, 13.97, 4.3], WIRE.y);
-jump([AX + 7.5, 24.6, TOP], [BX + 19, 13.97, 4.3], WIRE.y);
-jump([AX + 10, -24.6, TOP], [BX + 16.5, -13.97, 4.3], WIRE.g);
-jump([AX + 2.5, -24.6, TOP], [BX + 21.6, -13.97, 4.3], WIRE.b);
-jump([AX, -24.6, TOP], [BX + 24.1, -13.97, 4.3], WIRE.b);
-jump([AX - 26, 24.6, TOP], [DX + 16, DY - 7.3, DZ + 6.4], WIRE.w);
-jump([AX - 23.5, 24.6, TOP], [DX + 16, DY - 4.7, DZ + 6.4], WIRE.y);
+const BBZ = 4.3;
+jump([PIN.V5, HDR_Y.pwr, SHT], [BB.col(1), BB.plus, BBZ], WIRE.r, 16);
+jump([PIN.GND, HDR_Y.pwr, SHT], [BB.col(2), BB.minus, BBZ], WIRE.k, 12);
+jump([BB.col(6), BB.jmpY, BBZ], [BB.col(4), BB.minus, BBZ], WIRE.n, 9);
+jump([BB.col(7), BB.jmpY, BBZ], [BB.col(9), BB.plus, BBZ], WIRE.r, 9);
+jump([BB.col(8), BB.jmpY, BBZ], [PIN.D9, HDR_Y.dig, SHT], WIRE.o, 34);
 
 /* ---------------- tape (yours) ---------------- */
 const TP = part('tape', [0, 0, 0], { fade: true });
@@ -667,7 +755,7 @@ for (const sx of [-1, 1]) {
   mesh(TP, rbox(8.5, 11, 5, 1.2), tapeM, V(sx * 70.4, 12.2, -100));
 }
 mesh(TP, rbox(6.6, 21.6, 5, 1.2), tapeM, V(69.8, 10, -74.5));
-for (const o of [-6.5, 6.5]) mesh(TP, box(25.5, 6, 21.5), tapeM, V(79.3, motorC.y, motorC.z).addScaledVector(tipDir, o), alongQ(tipDir));
+for (const z of [-6.5, 6.5]) mesh(TP, rbox(18.5, 11.5, 5, 1.2), tapeM, SW(6.6, 0.4, z), svT.quaternion);
 
 /* ---------------- head reference ---------------- */
 const head = new THREE.Group(); scene.add(head);
@@ -683,8 +771,8 @@ ghost(new THREE.SphereGeometry(1, 48, 24).scale(178, 64, 104), V(0, -304, -72));
 for (const p of Object.values(parts)) p.group.traverse((o) => { if (o.isMesh) p.mats.add(o.material); });
 
 /* ---------------- callouts ---------------- */
-const ITEM_PARTS = { 1: ['webcam'], 2: ['soundL', 'soundR'], 3: ['ledL', 'ledR'], 4: ['touch'], 5: ['motor', 'motorLeads'], 6: ['arduino'], 7: ['breadboard'], 8: ['driver'], 9: ['groveCables'], 10: ['jumpers'], 12: ['glasses'], 13: ['tape'], 14: ['usb'] };
-const WORN = ['glasses', 'webcam', 'soundL', 'soundR', 'ledL', 'ledR', 'touch', 'motor'];
+const ITEM_PARTS = { 1: ['webcam'], 2: ['soundL', 'soundR'], 3: ['ledL', 'ledR'], 4: ['touch'], 5: ['servo', 'servoLeads'], 6: ['arduino'], 7: ['shield'], 8: ['breadboard'], 9: ['groveCables'], 10: ['jumpers'], 12: ['glasses'], 13: ['tape'], 14: ['usb'] };
+const WORN = ['glasses', 'webcam', 'soundL', 'soundR', 'ledL', 'ledR', 'touch', 'servo'];
 const SVGNS = 'http://www.w3.org/2000/svg';
 const calloutLayer = document.createElement('div');
 calloutLayer.className = 'callouts';
@@ -715,19 +803,19 @@ function callout(item, key, text, anchor, at, own = false) {
   calloutLayer.appendChild(el);
   callouts.push({ item, key, anchor, at, el, line, dot, w: 0, h: 0, x: 0, y: 0, ax: 0, ay: 0 });
 }
-callout(1, 'webcam', 'Logitech Webcam', V(22, 51, 6), V(70, 112, 44));
-callout(2, 'soundR', 'Sound Sensor ×2', V(79.4, 13, -26), V(150, 62, -6));
-callout(3, 'ledR', 'LED Socket ×2', V(56, 27.6, -17), V(104, 96, -30));
-callout(4, 'touch', 'Touch Sensor', V(73, 13, -79), V(160, 12, -84));
-callout(5, 'motor', '130 Mini DC Brushless Motor', V(91.2, -1, -136), V(178, -50, -150));
-const arA = PW(AX, 14, 4), brA = PW(BX + 20, -20, 4.4), drA = PW(DX, 12, 15), jpA = PW(AX - 6, 24.6, 20);
-callout(6, 'arduino', 'Arduino Kit', arA, arA.clone().add(V(112, 34, 46)));
-callout(7, 'breadboard', 'Breadboard', brA, brA.clone().add(V(-104, -62, 56)));
-callout(8, 'driver', 'Motor/Servo Driver', drA, drA.clone().add(V(-122, 48, 44)));
-callout(9, 'groveCables', 'Grove Jumper Wires', V(-66.5, -118, -101), V(-172, -104, -60));
-callout(10, 'jumpers', 'Male to Male Jumper Wires', jpA, jpA.clone().add(V(40, 70, 66)));
-callout(12, 'glasses', 'Your glasses', V(-52, -19.5, 2), V(-150, -34, 60), true);
-callout(13, 'tape', 'Tape', V(-70.4, 17.5, -100), V(-150, 62, -118), true);
+callout(1, 'webcam', 'Logitech C922 webcam', V(30, 51, 6), V(78, 112, 44));
+callout(2, 'soundR', 'Grove Sound Sensor ×2', V(79.4, 13, -26), V(150, 62, -6));
+callout(3, 'ledR', 'Grove LED Socket ×2', V(56, 27.6, -17), V(104, 96, -30));
+callout(4, 'touch', 'Grove Touch Sensor', V(73, 13, -79), V(160, 12, -84));
+callout(5, 'servo', 'SG92R servo tapper', SW(SV.x + 6.1, -6, 0), V(178, -50, -150));
+const arA = PW(AX + 40, -11, AZ + 9), shA = PW(AX + 16, 12, SZ + 8), brA = PW(BX - 12, -14, 4.4), jpA = PW(10, 21.5, 22);
+callout(6, 'arduino', 'Arduino UNO R3', arA, arA.clone().add(V(96, -14, 60)));
+callout(7, 'shield', 'Grove Base Shield', shA, shA.clone().add(V(84, 62, 50)));
+callout(8, 'breadboard', 'Mini breadboard', brA, brA.clone().add(V(-104, -62, 56)));
+callout(9, 'groveCables', 'Grove cables', V(-66.5, -118, -101), V(-172, -104, -60));
+callout(10, 'jumpers', 'Jumper wires', jpA, jpA.clone().add(V(-20, 84, 62)));
+callout(12, 'glasses', 'Your sunglasses', V(-52, -19.5, 2), V(-150, -34, 60), true);
+callout(13, 'tape', 'Tape + labels', V(-70.4, 17.5, -100), V(-150, 62, -118), true);
 callout(14, 'usb', 'To laptop USB', V(184, -350, 120), V(252, -326, 124), true);
 
 const _pv = new THREE.Vector3(), _off = new THREE.Vector3();
@@ -826,9 +914,9 @@ function dim(a, b, e1, e2, text) {
   const lab = new CSS2DObject(el); lab.position.copy(a).lerp(b, 0.5); dims.add(lab);
 }
 dim(V(-70, 66, 0), V(70, 66, 0), V(-70, 20, 0), V(70, 20, 0), '140');
-dim(V(-36.5, 58, 2), V(36.5, 58, 2), V(-36.5, 52, 2), V(36.5, 52, 2), '73');
+dim(V(-47, 60, 2), V(47, 60, 2), V(-47, 44, 2), V(47, 44, 2), '94');
 dim(V(76, 36, -6), V(76, 36, -151), V(71, 15, -6), V(71, -11, -151), '145');
-dim(PW(-79.25, 40, 6), PW(79.3, 40, 6), PW(-79.25, 28, 5), PW(79.3, 28, 5), '159');
+dim(PW(BX - 27.5, 40, 6), PW(AX + 34.3, 40, 6), PW(BX - 27.5, 23, 5), PW(AX + 34.3, 28, 5), '131');
 
 /* ---------------- alert glow ---------------- */
 const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 64;
@@ -958,7 +1046,7 @@ function runAlert() {
   alertStart = performance.now();
   activeView = null; pressView(null);
   frameBox(boxOf(WORN), V(-0.62, 0.34, 0.9), 20);
-  toastEl.textContent = 'Smoke alarm on your left. The left sound sensor hears it louder, so the left LED flashes the three-beep pattern and the motor buzzes with it.';
+  toastEl.textContent = 'Smoke alarm on your left. The left sound sensor hears it louder, so the left LED flashes the three-beep pattern and the servo taps behind your right ear with it.';
   toastEl.hidden = false;
   needsRender = true;
 }
@@ -971,10 +1059,9 @@ function tickAlert(now) {
   const lp = parts.ledL;
   glow.position.set(-56, 25, -21.4).addScaledVector(lp.explode, explodeT);
   glow.visible = on;
-  const mp = parts.motor;
-  mp.group.position.copy(mp.base).addScaledVector(mp.explode, explodeT);
-  if (on) mp.group.position.add(V((Math.random() - 0.5) * 2.4, (Math.random() - 0.5) * 2.4, (Math.random() - 0.5) * 2.4));
-  if (t > 3.3) { alertStart = -1; glow.visible = false; toastEl.hidden = true; setHot(hot); }
+  // Servo: the horn swings from rest (90 deg) to tap (110 deg) and back, a few taps per flash.
+  hornG.rotation.y = (-8 + (on && (t * 8) % 2 < 1 ? 20 : 0)) * DEG;
+  if (t > 3.3) { alertStart = -1; glow.visible = false; toastEl.hidden = true; hornG.rotation.y = -8 * DEG; setHot(hot); }
   needsRender = true;
 }
 
