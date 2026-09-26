@@ -1,15 +1,42 @@
-# Attune phone preview
+# Attune phone app
 
-An interactive, laptop-run phone simulator for the Attune interface. It uses plain HTML, CSS, and JavaScript with no install or build step.
+The wearer's phone view of Attune: live captions, people, name proposals, sound alerts, "speak for me" and conversation history. Plain HTML, CSS and JavaScript (ES modules), no install or build step.
 
-From the repository root, run:
+## Open it
+
+**From the Attune engine (live).** The engine serves this page at `/phone/`. On the laptop, open `http://localhost:8000/phone/`. For the demo the phone is simulated on the laptop: on a desktop-sized window the page draws itself inside a phone frame, so put it in its own browser window beside the lens view. No real phone or app install is involved.
+
+**Against an engine elsewhere.** Add `?engine=host:port`, for example when serving the pages from another port during development:
 
 ```sh
-python3 -m http.server 8765 --bind 127.0.0.1 --directory web/phone
+python -m http.server 8021 --bind 127.0.0.1 --directory .
+# then open http://127.0.0.1:8021/web/phone/?engine=localhost:8000
 ```
 
-Open `http://127.0.0.1:8765/` in a browser. Use the four tabs to explore the preview. On a narrow browser window, the layout fills the viewport.
+**Demo only.** Add `?demo` to skip connecting and use the built-in sample data.
 
-The simulator has sample captions and people only. Its feature switches, name proposal, search, quick replies, pause, power, and forget controls update the preview state. **It does not connect to the Attune engine or control hardware.** Speech uses a locally installed English system voice when the browser exposes one; it never sends text to ElevenLabs.
+## Live and demo
 
-Privacy in this preview: conversation text, names, settings, and theme stay in memory and disappear when the tab closes. The page makes no network requests beyond its own three local files, asks for no camera or microphone access, and has a restrictive Content Security Policy. Dynamic text is inserted as text rather than HTML. A production app needs authenticated transport, device pairing, encrypted storage, and full integration with the engine. The engine contract specifies a 24-hour history limit, which takes precedence over the seven-day text in the reference images.
+The page connects to the engine's WebSocket through `web/shared/ws.js` with role `phone` (docs/contracts.md, sections 3 and 4). The corner label and the pill under the logo show the state:
+
+- **LIVE · Connected**: every screen shows engine data, and every control sends the matching command.
+- **OFFLINE · Reconnecting**: the link dropped after being live. The last data stays on screen, the link retries on its own, and commands are queued (up to 20) until it is back.
+- **DEMO · Not connected**: the page has not reached an engine yet (or `?demo` is set). Sample captions and people only; controls change the page, nothing else.
+
+| On the phone | Live behaviour |
+|---|---|
+| Home, Live view | `caption` messages (speaker, text, the English translation with the original shown small and an ES tag) |
+| People | `people`, `person_changed`; Rename sends `person.rename`, Remove sends `person.delete` after a confirm |
+| Name proposal ("Sam?") | `name_proposal`; Confirm / Not Sam send `name.answer` |
+| Alert banner | `alert`; Got it sends `alert.ack` |
+| Speak | typed text, presets (from `welcome.config.presets`) and suggested replies (`reply_suggestions`) send `speak` with source `typed`, `preset` or `suggestion`; `reply_spoken` confirms it |
+| Pause, Turn off glasses | `pause.toggle`; state from `welcome.paused` and `paused` |
+| Forget this session | `session.forget` after a confirm |
+| Sound alerts, Translation switches | `switch.set` with key `alerts` / `translation` (Captions and Name labels only change this phone) |
+| Conversations | `GET /api/history/sessions`, `/sessions/{id}` and `/search?q=`; falls back to this session's captions if the history API isn't there |
+
+## Privacy
+
+Captions, names and settings live in the page's memory and disappear when the tab closes; nothing is written to the phone. The page talks only to the Attune engine (WebSocket and `/api/history`), asks for no camera or microphone, and inserts all engine text as text, never as HTML. Its Content Security Policy allows scripts and styles from its own origin only, and network connections to its own origin, WebSockets, and `localhost` (for `?engine=` during development). Only text the wearer sends to speak leaves the laptop (to ElevenLabs), and history is deleted after 24 hours, as the engine contract says.
+
+The engine listens on `127.0.0.1` only, so just the laptop itself can open this page. The link has no pairing or authentication, which is fine while the phone is simulated on the laptop.

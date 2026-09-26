@@ -1,0 +1,44 @@
+<!doctype html>
+<!--
+  Operator console for a second screen: console, speak and history side by side.
+  Section 4 - Pages, Engine & Demo. TODO: P-09 to P-11.
+  Served by the engine at /panels/. Add ?engine=host:port to reach an engine elsewhere,
+  or ?slide to try the slide-over version (C, S, Y, Esc) on an empty page.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Attune · Console</title>
+  <link rel="stylesheet" href="./panels.css">
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body {
+      background:
+        radial-gradient(1200px 700px at 12% -10%, rgba(124, 245, 214, 0.14), transparent 60%),
+        radial-gradient(1000px 700px at 110% 110%, rgba(106, 184, 255, 0.14), transparent 60%),
+        #0b0e14;
+      color: #f4f7fb;
+      font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+    }
+    .hint { position: fixed; inset: 0; display: grid; place-items: center; color: rgba(235, 242, 250, 0.5); font-size: 15px; text-align: center; line-height: 1.8; }
+    .hint kbd { padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); font-size: 12px; font-weight: 600; color: #f4f7fb; }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import { mountPanels } from './panels.js';
+    const params = new URLSearchParams(location.search);
+    if (params.has('slide')) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.innerHTML = '<div>Slide-over panels<br><kbd>C</kbd> console · <kbd>S</kbd> speak · <kbd>Y</kbd> history · <kbd>E</kbd> enroll · <kbd>Esc</kbd> close<br><kbd>1</kbd>–<kbd>5</kbd> presets · <kbd>7</kbd>–<kbd>9</kbd> suggestions</div>';
+      document.body.append(hint);
+      window.attunePanels = mountPanels({ open: params.get('slide') || undefined });
+    } else {
+      window.attunePanels = mountPanels({ docked: true });
+    }
+  </script>
+</body>
+</html>
