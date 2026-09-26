@@ -1,12 +1,6 @@
-"""Attune engine package
+"""Attune engine: AR captions for deaf and hard-of-hearing people.
 
-Section 4 - Pages, Engine & Demo
-TODO: P-02
-Contracts: docs/contracts.md
-Plan: docs/attune-build-plan.html, section 03
-
-What to build:
-- Package marker. Keep the version string here.
-
-Placeholder only - no code yet (MLH: project code is written during the event).
+Run it with `python -m attune` (see attune/main.py and docs/setup.md).
 """
+
+__version__ = "0.1.0"
