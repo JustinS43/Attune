@@ -30,6 +30,8 @@ const stage = document.querySelector('.stage');
 const buttons = [...document.querySelectorAll('.views button')];
 const guide = document.querySelector('#guide');
 const povRoot = document.querySelector('#pov');
+const lensPane = document.querySelector('.lens-pane');
+const phonePane = document.querySelector('.phone-pane');
 
 // ------------------------------------------------------------------ frames
 function pass(keys) {
@@ -73,6 +75,9 @@ function setView(next) {
   guide.inert = view !== 'guide';
   povRoot.inert = view !== 'pov';
   stage.inert = view === 'guide' || view === 'pov';
+  // a pane faded out by the view (opacity 0) must not keep the keyboard focus either
+  lensPane.inert = view === 'phone';
+  phonePane.inert = view === 'lens';
   pov.setVisible(view === 'pov');
   fit();
 }

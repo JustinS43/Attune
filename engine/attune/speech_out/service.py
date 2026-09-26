@@ -21,7 +21,7 @@ from attune.hardware.common import fields, section, shared_clock
 
 from .elevenlabs_tts import ElevenLabsTTS
 from .kokoro_tts import KokoroTTS
-from .player import SoundDevicePlayer
+from .player import NullPlayer, SoundDevicePlayer, is_silent_device
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,12 @@ class SpeechOutService:
             else:
                 logger.warning("speech_out: Kokoro model missing: %s", kokoro.missing())
         if self.player is None:
-            self.player = SoundDevicePlayer(self.cfg.get("device"), self.cfg.get("volume", 1.0))
+            device = self.cfg.get("device")
+            if is_silent_device(device):
+                logger.info("speech_out: device %r: replies are not played aloud", device)
+                self.player = NullPlayer()
+            else:
+                self.player = SoundDevicePlayer(device, self.cfg.get("volume", 1.0))
         for topic, handler in (("command", self._on_command), ("session.forget", self._on_forget)):
             self._unsubs.append(self.bus.subscribe(topic, handler))
         self._stop.clear()
@@ -295,5 +300,10 @@ class SpeechOutService:
             "part": self.part,
             "ok": ok,
             "detail": detail,
-            "metrics": {**self.metrics, "voices": voices, "queued": self.jobs.qsize()},
+            "metrics": {
+                **self.metrics,
+                "voices": voices,
+                "queued": self.jobs.qsize(),
+                "output": "none" if isinstance(self.player, NullPlayer) else "speakers",
+            },
         }

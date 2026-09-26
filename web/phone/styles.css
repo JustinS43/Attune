@@ -25,3 +25,8 @@
 @keyframes pulse-dot{50%{opacity:.35}}@keyframes pulse-btn{50%{opacity:.55}}@keyframes alert-glow{50%{box-shadow:0 14px 40px #ff4d4f80}}
 @media (prefers-reduced-motion:reduce){.alert-banner,.alert-banner.show,.hint-dot.off,.primary.busy{animation:none;transition:none}}
 .primary.speak-live{margin-top:14px}
+/* P-39: the active tab's bar sits on the tab bar's top edge; it used to be placed from the
+   screen's bottom and struck through the label ("Home" looked crossed out) */
+.tab-bar .tab{position:relative}
+.tab-bar .tab.active::after{top:-3px;bottom:auto;left:50%;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px}
+.lang-tag,.side-tag{font-size:11px}

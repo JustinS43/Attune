@@ -21,6 +21,7 @@ from . import protocol as p
 logger = logging.getLogger(__name__)
 
 FIRMWARE_VERSION = "1.0.0-sim"
+RECEIVED_KEEP = 2000  # laptop lines kept in FakeArduino.received
 
 # (duration ms, light level 0..1 or "fade", motor on) - mirrors firmware/attune_rig/patterns.h
 Step = tuple[int, float | str, bool]
@@ -118,6 +119,9 @@ class FakeArduino:
         self.rng = random.Random(seed)
         self.out: queue.Queue[str] = queue.Queue()
         self.received: list[str] = []
+        self.counts: dict[str, int] = {}  # laptop lines by command (HB, PAT, STOP, MX, CFG)
+        self.acks_sent = 0
+        self.reboots = 0
         self.cfg = {"rate": 50, "tap_ms": 400, "hold_ms": 800, "led": 180}
         self.icon = "LOST"
         self.background: _Player | None = None
@@ -144,7 +148,28 @@ class FakeArduino:
             raise SimulatedUnplug("simulated cable pulled")
         with self._lock:
             self.received.append(line)
+            if len(self.received) > RECEIVED_KEEP * 2:  # a long run must not grow forever
+                del self.received[:-RECEIVED_KEEP]
+            head = line.split(" ", 1)[0]
+            self.counts[head] = self.counts.get(head, 0) + 1
             self._handle(line.strip())
+
+    def snapshot(self, tail: int = 40) -> dict:
+        """What the board has seen and is doing, for the status strip and the e2e tests."""
+        with self._lock:
+            light, motor = self._state(self._ms())
+            return {
+                "linked": self.linked,
+                "icon": self.icon,
+                "pattern": self.active_pattern,
+                "light": round(light, 2),
+                "motor": motor,
+                "cfg": dict(self.cfg),
+                "counts": dict(self.counts),
+                "received": [line for line in self.received if line != "HB"][-tail:],
+                "sent_acks": self.acks_sent,
+                "reboots": self.reboots,
+            }
 
     def read_line(self, timeout: float) -> str | None:
         if self.unplugged:
@@ -171,6 +196,22 @@ class FakeArduino:
 
     def unplug(self) -> None:
         self.unplugged = True
+
+    def reboot(self) -> None:
+        """Reset like a brown-out would: millis() starts again from 0, patterns, link and CFG
+        are gone, READY is printed at boot (and again when the laptop's heartbeat links)."""
+        with self._lock:
+            self._t0 = self.clock()
+            self.cfg = {"rate": 50, "tap_ms": 400, "hold_ms": 800, "led": 180}
+            self.linked = False
+            self.icon = "LOST"
+            self.background = self.foreground = self.lost_player = None
+            self._last_hb_ms = -(10**9)
+            self._next_lv = 0
+            self._next_hb = 1000
+            self._window_motor = False
+            self.reboots += 1
+        self._emit(p.format_message(p.Ready(FIRMWARE_VERSION, self.driver)))
 
     @property
     def motor_on(self) -> bool:
@@ -217,16 +258,20 @@ class FakeArduino:
                 self.background, self.foreground = player, None
             else:
                 self.foreground = player
-            self._emit(f"ACK {msg.n}")
+            self._ack(msg.n)
         elif isinstance(msg, p.Stop):
             self.background = self.foreground = None
-            self._emit(f"ACK {msg.n}")
+            self._ack(msg.n)
         elif isinstance(msg, p.Matrix):
             self.icon = msg.icon
         elif isinstance(msg, p.Config):
             self.cfg[msg.key] = msg.value
         else:
             self._emit(f"ERR unexpected {line.split()[0]}")
+
+    def _ack(self, n: int) -> None:
+        self.acks_sent += 1
+        self._emit(f"ACK {n}")
 
     def _state(self, now: int) -> tuple[float, bool]:
         for attr in ("foreground", "background", "lost_player"):

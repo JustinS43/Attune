@@ -39,10 +39,11 @@ import struct
 import threading
 import time
 from collections import OrderedDict, deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import numpy as np
 from starlette.websockets import WebSocket
@@ -61,6 +62,47 @@ class _Drop:
 
 
 _DROP = _Drop()
+
+
+def host_of(value: str | None) -> str:
+    """'http://Host:8000', 'host:8000' or '[::1]:8000' -> 'host' / '::1' ('' if unparsable)."""
+    if not value:
+        return ""
+    text = value.strip()
+    if "://" not in text:
+        text = "//" + text
+    try:
+        return (urlsplit(text).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def is_loopback_host(host: str) -> bool:
+    """localhost, *.localhost, 127.x.x.x and ::1: names that only ever reach this laptop."""
+    return (
+        host in ("localhost", "::1")
+        or host.endswith(".localhost")
+        or (host.startswith("127.") and host.replace(".", "").isdigit())
+    )
+
+
+def origin_allowed(origin: str | None, host: str | None, allowed: Iterable[str] = ()) -> bool:
+    """May a page from `origin` use the hub? `host` is the Host header of the request (P-38).
+
+    A browser always sends `Origin` on a WebSocket. Allowed: a loopback origin, the address
+    the page itself used to reach the engine (the phone on the LAN), or one listed in
+    `[pages] allowed_origins`. So other websites open in the same browser can't read
+    captions and faces or send commands. Clients without `Origin` are not browsers.
+    """
+    if origin is None:
+        return True  # not a browser: every browser sends Origin on a WebSocket
+    origin = origin.strip()
+    if origin in allowed:
+        return True
+    if origin.lower() == "null" or "://" not in origin:
+        return False  # sandboxed frames, file:// pages, junk
+    name = host_of(origin)
+    return bool(name) and (is_loopback_host(name) or name == host_of(host))
 
 
 def to_jsonable(obj: Any) -> Any:
@@ -238,6 +280,9 @@ class Hub:
         self.frames_encoded = 0
         self.encode_ms: float | None = None  # moving average, written by the encoder only
         self._health_mark = (time.monotonic(), 0)
+        # P-38: browser pages from other websites are refused (see origin_allowed)
+        self.allowed_origins = [str(o).strip() for o in pages.get("allowed_origins", []) or []]
+        self._refused_origins: set[str] = set()
 
     # ------------------------------------------------------------------ lifecycle
     def connect(self) -> None:
@@ -721,6 +766,17 @@ class Hub:
 
     async def endpoint(self, websocket: WebSocket) -> None:
         """The `/ws` route."""
+        origin = websocket.headers.get("origin")
+        if not origin_allowed(origin, websocket.headers.get("host"), self.allowed_origins):
+            if origin not in self._refused_origins and len(self._refused_origins) < 50:
+                self._refused_origins.add(str(origin))
+                log.warning(
+                    "Refused a WebSocket from %s: only the laptop's own pages may connect "
+                    "(add it to [pages] allowed_origins if it is yours)",
+                    origin,
+                )
+            await websocket.close(code=1008)
+            return
         await websocket.accept()
         client = self.add_client(websocket)
         task = asyncio.create_task(self.sender(client))

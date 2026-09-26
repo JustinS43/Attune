@@ -260,6 +260,47 @@ def test_weak_voice_match_stays_someone():
     assert sim.f.current.kind == "someone"
 
 
+def test_new_no_match_replaces_older_offscreen_voice_and_exit_side():
+    sim = Sim()
+    for _ in range(10):
+        sim.step({3: (40, 0.1, 0.005, "maya-1", "Maya", "enrolled")})
+    sim.f.on_track_lost({"track_id": 3, "t": sim.t, "side": "left"})
+    for _ in range(40):
+        sim.step({}, speech=True, sensors=(150, 400))
+    sim.f.on_voice_match({"utt_id": "u1", "person_id": "maya-1", "score": 0.8})
+    sim.step({}, speech=True, sensors=(150, 400))
+    assert (sim.f.current.kind, sim.f.current.side) == ("offscreen", "left")
+
+    # Later speech from the same draft is no longer a confident voice match.
+    # The old result must not keep naming the offscreen voice or its exit side.
+    sim.f.on_voice_match({"utt_id": "u1", "person_id": None, "score": 0.2})
+    scene, _, _ = sim.step({}, speech=True, sensors=(150, 400))
+    assert (sim.f.current.kind, sim.f.current.side) == ("someone", "right")
+    assert [(s.label, s.side) for s in scene.offscreen] == [("Someone", "right")]
+
+    # New caption words use the updated decision, so the bubble does not inherit
+    # the older person's label or exit direction.
+    sim.step({}, speech=True, sensors=(150, 400))
+    sim.f.on_transcript(
+        {
+            "utt_id": "u1",
+            "t_start": sim.t - 0.02,
+            "t_end": sim.t,
+            "text": "hello",
+            "final": True,
+            "words": [("hello", sim.t - 0.02, sim.t)],
+        },
+        sim.t,
+    )
+    captions = []
+    for _ in range(12):
+        _, emitted, _ = sim.step({}, speech=True, sensors=(150, 400))
+        captions.extend(emitted)
+    assert [(c.speaker.kind, c.speaker.side) for c in captions] == [
+        ("someone", "right")
+    ]
+
+
 # ---------------- captions ----------------
 def test_caption_goes_to_the_speaker_and_splits_at_a_change():
     sim = Sim()
