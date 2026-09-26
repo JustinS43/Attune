@@ -50,6 +50,7 @@ export function createStore() {
     proposals: new Map(),
     alerts: new Map(),
     people: new Map(), // person_id -> { name, color, relation }
+    trackNames: new Map(), // track_id -> name confirmed for the session (name_proposal confirmed)
     toasts: [],
     lastStatus: new Map(), // track_id -> status (for "learned" toasts)
     replySeq: 0,
@@ -144,6 +145,8 @@ export function createStore() {
       case 'name_proposal': {
         if (msg.proposal_id == null) break;
         const prev = s.proposals.get(msg.proposal_id);
+        // a confirmed name is theirs from now on, even before the scene's label catches up
+        if (msg.state === 'confirmed' && msg.track_id != null && msg.name) s.trackNames.set(msg.track_id, String(msg.name));
         s.proposals.set(msg.proposal_id, {
           ...msg,
           tStart: prev?.tStart ?? s.clock,
@@ -209,6 +212,7 @@ export function createStore() {
     s.alerts.clear();
     s.toasts = [];
     s.lastStatus.clear();
+    s.trackNames.clear();
     if (!keepPeople) s.people.clear();
   }
 
@@ -237,6 +241,14 @@ const FLIP_HOLD_S = 0.6; // a new speaker for an utterance must persist this lon
 const TRACK_HOLD_S = 1.5; // a face the tracker lost keeps its place (and its bubble) this long
 const MAX_BUBBLES = 3; // more than this and the oldest fade once they have been read
 const SEG_RE = /^(.*)\.(\d+)$/; // "<utt_id>.<n>": the n-th speaker segment of one utterance
+// A line in another language waits for its translation (contracts: 0.5-1.2 s after its final)
+// small and dimmed; if none has come this long after the final (translation switched off, or the
+// job failed), the original takes the main line after all.
+const TRANSLATE_WAIT_S = 3.5;
+/** Whether an utterance snapshot is still waiting for its English translation. */
+const awaitingTranslation = (u, clock) => u.lang !== 'en' && !u.translation && !(u.final && u.tFinal != null && clock - u.tFinal > TRANSLATE_WAIT_S);
+/** The language a resolved utterance shows in on the main line. */
+const shownLang = (u) => (u.lang === 'en' || u.translation ? 'en' : u.lang);
 
 // One Euro filter (Casiez, Roussel & Vogel, CHI 2012): heavy smoothing while a face is still,
 // little lag while it moves. Values in design px, time in seconds.
@@ -382,7 +394,15 @@ export function createViewBuilder(store) {
       const person = f.person_id != null ? s.people.get(String(f.person_id)) : null;
       let proposal = null;
       for (const p of s.proposals.values()) if (p.track_id === f.track_id) proposal = { ...p, age: clock - p.tState };
-      const status = f.status || 'unknown';
+      let status = f.status || 'unknown';
+      let label = f.label || (NAMED.has(status) ? 'Someone you know' : 'Someone new');
+      let named = null;
+      if (!NAMED.has(status) && s.trackNames.has(f.track_id)) {
+        // their name was confirmed a moment ago: use it now, not the description
+        label = s.trackNames.get(f.track_id);
+        status = 'named';
+        for (const p of s.people.values()) if (p.name === label) named = p;
+      }
       const face = {
         key,
         track_id: f.track_id,
@@ -392,11 +412,11 @@ export function createViewBuilder(store) {
         born: m.born,
         tiny: f.box[2] < 40,
         ghost: false,
-        label: f.label || (NAMED.has(status) ? 'Someone you know' : 'Someone new'),
+        label,
         status,
         known: NAMED.has(status),
-        relation: person?.relation ?? null,
-        color: store.colorOf(f.person_id, f.track_id, status),
+        relation: person?.relation ?? named?.relation ?? null,
+        color: named?.color ?? store.colorOf(f.person_id, f.track_id, status),
         isSpeaker: !!f.is_speaker,
         dashed: !!f.dashed,
         lip: clamp(Number(f.lip_score) || 0),
@@ -470,7 +490,7 @@ export function createViewBuilder(store) {
       if (!snap || snap.src !== c) {
         th.utts.set(c.utt_id, {
           src: c, id: c.utt_id, text: c.text, translation: c.translation, lang: c.lang, final: c.final,
-          tFirst: c.tFirst, tUpdate: c.tUpdate, order,
+          tFirst: c.tFirst, tUpdate: c.tUpdate, tFinal: c.tFinal, order,
         });
       } else snap.order = order;
       uttThread.set(c.utt_id, o.key);
@@ -504,17 +524,27 @@ export function createViewBuilder(store) {
       }
       const utts = [...th.utts.values()].sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
       const latest = utts.reduce((a, u) => (u.tFirst >= a.tFirst ? u : a), utts[0]);
+      // the main line never mixes languages: a line still waiting for its translation stays off
+      // it (shown small and dimmed as `pending`), and only lines in the newest shown language join
+      const waiting = utts.filter((u) => awaitingTranslation(u, clock));
+      const resolved = utts.filter((u) => !waiting.includes(u));
+      const lastResolved = resolved.reduce((a, u) => (!a || u.tFirst >= a.tFirst ? u : a), null);
+      const lang = lastResolved ? shownLang(lastResolved) : 'en';
       const tokens = [];
       for (const u of utts) {
         const tr = !!u.translation && u.lang !== 'en';
-        u.tokens = String(tr ? u.translation : u.text).split(/\s+/).filter(Boolean).map((w) => ({ text: w, final: u.final }));
-        tokens.push(...u.tokens);
+        const wait = waiting.includes(u);
+        // u.tokens: this utterance's own line (the compact displays give each utterance its own)
+        u.tokens = wait ? [] : String(tr ? u.translation : u.text).split(/\s+/).filter(Boolean).map((w) => ({ text: w, final: u.final }));
+        u.pending = wait && u.text ? u.text : null;
+        if (!wait && shownLang(u) === lang) tokens.push(...u.tokens);
       }
-      if (!tokens.length) continue;
+      const pendingText = waiting.map((u) => u.text).filter(Boolean).join(' ');
+      if (!tokens.length && !pendingText) continue;
       const age = clock - th.tLast;
-      const read = readTime(tokens.length);
+      const read = readTime(tokens.length + (pendingText ? pendingText.split(/\s+/).length : 0));
       const hold = Math.max(fade, read);
-      alive.push({ key, th, utts, latest, tokens, age, read, alpha: age < hold ? 1 : clamp(1 - (age - hold) / 0.5) });
+      alive.push({ key, th, utts, latest, lastResolved, pendingText, tokens, age, read, alpha: age < hold ? 1 : clamp(1 - (age - hold) / 0.5) });
     }
     // no more than MAX_BUBBLES at once: the oldest ones leave early, once they have been read
     const ranked = alive.filter((x) => x.key !== 'you').sort((a, b) => b.th.tLast - a.th.tLast);
@@ -523,7 +553,7 @@ export function createViewBuilder(store) {
     });
     const current = ranked.find((x) => x.alpha > 0)?.th.id ?? null;
     for (const x of alive) {
-      const { key, th, latest, tokens, age, alpha } = x;
+      const { key, th, latest, lastResolved, pendingText, tokens, age, alpha } = x;
       x.b = null;
       if (alpha <= 0) {
         for (const id of th.utts.keys()) uttThread.delete(id);
@@ -531,14 +561,18 @@ export function createViewBuilder(store) {
         continue;
       }
       const sp = th.speaker || {};
-      const translated = !!latest.translation && latest.lang !== 'en';
+      const pending = !!pendingText;
+      // the language tag and the small original line: the line waiting for its translation, else
+      // the newest translated one
+      const translated = !pending && !!lastResolved?.translation && lastResolved.lang !== 'en';
+      const tagLang = pending ? [...x.utts].reverse().find((u) => u.pending)?.lang ?? latest.lang : (lastResolved ?? latest).lang;
       const text = tokens.map((t) => t.text).join(' ');
       let lines = wrapChars(text, cfg.bubble_chars);
       const cut = lines.length > cfg.bubble_lines;
       if (cut) lines = lines.slice(-cfg.bubble_lines);
       const b = {
         key, id: th.id, utt_id: latest.id, kind: sp.kind || 'someone', text, tokens, lines, cut, tFirst: th.tFirst,
-        orig: translated ? latest.text : null, lang: latest.lang, translated, pending: latest.lang !== 'en' && !latest.translation,
+        orig: pending ? pendingText : translated ? lastResolved.text : null, lang: tagLang, translated, pending,
         final: latest.final, alpha, tUpdate: th.tLast, age, current: th.id === current,
         speaking: !latest.final && clock - th.tLast < 1.2,
         dashed: sp.kind === 'probable_face',
@@ -601,7 +635,7 @@ export function createViewBuilder(store) {
         if (retired.has(id)) continue;
         let f = famMem.get(id);
         if (!f) famMem.set(id, (f = { id, segs: new Map(), tFirst: u.tFirst, tUpdate: u.tUpdate }));
-        f.segs.set(segOf(u.id), { tokens: u.tokens, final: u.final, b: x.b, own: u.id === id });
+        f.segs.set(segOf(u.id), { tokens: u.tokens, pending: u.pending, lang: u.lang, final: u.final, b: x.b, own: u.id === id });
         f.tFirst = Math.min(f.tFirst, u.tFirst);
         f.tUpdate = Math.max(f.tUpdate, u.tUpdate);
       }
@@ -611,22 +645,27 @@ export function createViewBuilder(store) {
     for (const [id, f] of famMem) {
       const segs = [...f.segs.entries()].sort((p, q) => p[0] - q[0]).map((e) => e[1]);
       const tokens = segs.flatMap((g) => g.tokens);
+      const pending = segs.map((g) => g.pending).filter(Boolean).join(' ');
       const age = clock - f.tUpdate;
-      const hold = Math.max(fade, readTime(tokens.length));
+      const hold = Math.max(fade, readTime(tokens.length + (pending ? pending.split(/\s+/).length : 0)));
       const alpha = age < hold ? 1 : clamp(1 - (age - hold) / 0.5);
-      if (!tokens.length || alpha <= 0 || clock < f.tFirst - 1) {
+      if ((!tokens.length && !pending) || alpha <= 0 || clock < f.tFirst - 1) {
         famMem.delete(id);
         retired.add(id);
         continue;
       }
       // its speaker: whoever holds most of its words (ties go to the utterance's own segment)
       const words = new Map();
-      for (const g of segs) words.set(g.b.key, (words.get(g.b.key) ?? 0) + g.tokens.length + (g.own ? 0.5 : 0));
+      for (const g of segs) words.set(g.b.key, (words.get(g.b.key) ?? 0) + g.tokens.length + (g.pending ? 0.25 : 0) + (g.own ? 0.5 : 0));
       const key = [...words.entries()].sort((p, q) => q[1] - p[1])[0][0];
       const b = segs.filter((g) => g.b.key === key).pop().b;
-      utterances.push({ id, b, key, tokens, tFirst: f.tFirst, tUpdate: f.tUpdate, alpha, final: segs.every((g) => g.final) });
+      const lang = segs.find((g) => g.pending)?.lang ?? null;
+      utterances.push({ id, b, key, tokens, pending: pending || null, lang, tFirst: f.tFirst, tUpdate: f.tUpdate, alpha, final: segs.every((g) => g.final) });
     }
     utterances.sort((a, b) => a.tFirst - b.tFirst);
+    // the newest line still waiting for its translation, for the compact displays' small line
+    const waitingUtt = [...utterances].reverse().find((u) => u.pending);
+    const translating = waitingUtt ? { text: waitingUtt.pending, lang: waitingUtt.lang ?? waitingUtt.b.lang, name: waitingUtt.b.name, key: waitingUtt.key, alpha: waitingUtt.alpha } : null;
 
     // direction of every caption relative to the wearer (mono and corner), with hysteresis
     for (const b of feed) {
@@ -684,7 +723,7 @@ export function createViewBuilder(store) {
     return {
       clock, anim, dt, sourceKind, config: cfg, paused: s.paused, pausedAge: anim - s.tPaused,
       connected: s.connected, status, speaking,
-      faces, bubbles, offscreen: [...offMap.values()], lower, you, feed, utterances,
+      faces, bubbles, offscreen: [...offMap.values()], lower, you, feed, utterances, translating,
       alerts, activeAlert, proposals, pendingProposal,
       toasts: s.toasts.map((t) => ({ ...t, age: anim - t.t })),
     };
