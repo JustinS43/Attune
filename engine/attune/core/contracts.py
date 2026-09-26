@@ -11,3 +11,26 @@ What to build:
 
 Placeholder only - no code yet (MLH: project code is written during the event).
 """
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True)
+class AudioBlock:
+    """Local-only mono PCM; t is the first sample on the shared clock."""
+
+    t: float
+    sample_rate: int
+    samples: Any
+
+
+@dataclass(frozen=True)
+class EnrollResult:
+    """Echo track_id so voice enrollment cannot reuse another person's consent."""
+
+    person_id: str
+    part: str
+    ok: bool
+    reason: str
+    track_id: int | None = None

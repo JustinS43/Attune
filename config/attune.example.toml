@@ -49,6 +49,8 @@ end_silence_ms = 400
 asr_chunk_ms = 560
 languages = ["en", "es"]        # empty = auto-detect
 mute_after_reply_s = 0.5
+max_utterance_s = 30
+target_rms = 0.1
 
 [alerts]
 window_s = 1.0
@@ -59,6 +61,8 @@ doorbell_score = 0.4
 doorbell_rest_s = 5
 realert_s = 30
 clear_quiet_s = 15
+watch_s = 10
+speech_music_block = 0.5
 
 [llm]
 model = "qwen3.5:4b"
@@ -68,6 +72,10 @@ keep_alive = -1
 think = false
 temperature = 0
 proposal_expiry_s = 10
+name_confidence = 0.8
+timeout_s = 1.5
+max_queue = 32
+reply_context_lines = 6
 
 # ---------- Section 3 - Hardware & Services ----------
 [hardware]
@@ -101,3 +109,51 @@ jpeg_quality = 80
 bubble_chars = 42
 bubble_lines = 2
 bubble_fade_s = 4
+
+# Section 2 runtime/model settings. Paths must already exist; services never download.
+[nemotron]
+tokens = "models/nemotron/tokens.txt"
+encoder = "models/nemotron/encoder.int8.onnx"
+decoder = "models/nemotron/decoder.onnx"
+joiner = "models/nemotron/joiner.int8.onnx"
+provider = "cpu"
+num_threads = 2
+flush_s = 0.8
+
+[whisper]
+model_path = "models/faster-whisper-large-v3-turbo"
+device = "cpu"
+compute_type = "int8"
+
+[voice]
+model_path = "models/cam++.onnx"
+provider = "cpu"
+enroll_s = 5.0
+match_s = 1.0
+
+[rhythm]
+low_band = [470, 570]
+high_band = [2800, 3400]
+frame_s = 0.01
+purity = 0.7
+min_rms = 0.01
+relative_energy = 5.0
+tolerance = 0.2
+t3_on_s = 0.5
+t3_gap_s = 0.5
+t3_rest_s = 1.5
+t4_on_s = 0.1
+t4_gap_s = 0.1
+t4_rest_s = 5.0
+
+[sound_model]
+# TorchScript waveform -> 527 logits, including EfficientAT's mel frontend.
+# Export locally using the upstream EfficientAT project; never load untrusted weights.
+model_path = "models/efficientat-mn10-as.ts"
+labels_path = "models/audioset-labels.json"
+device = "cpu"
+
+[calibration]
+profile = "venue"
+room_noise_s = 30
+face_min_score = 0.5
