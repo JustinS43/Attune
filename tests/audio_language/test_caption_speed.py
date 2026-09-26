@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from attune.audio.asr import NemotronASR, Recognition, hold_back
 from attune.audio.service import AudioService, _is_16k
-from attune.audio.vad import Segmenter
+from attune.audio.vad import InputGain, Segmenter
 
 SPEECH, QUIET = 0.5, 0.0  # sample values: the fake VAD hears speech above 0.1
 
@@ -313,3 +313,52 @@ def test_after_a_split_the_next_frame_starts_speech_and_the_pause_counts():
     seg.resume(0.1)
     active, _, ended = seg.feed(2.0, 0.9)
     assert active and not ended and seg.silence_s == 0
+
+
+def _db(frame):
+    return 20 * np.log10(float(np.sqrt(np.mean(frame * frame))) + 1e-9)
+
+
+def _tone(db, n=512):
+    return (np.sin(np.arange(n) * 0.3) * np.sqrt(2) * 10 ** (db / 20)).astype(
+        np.float32
+    )
+
+
+def test_quiet_speech_is_raised_for_the_vad_but_not_the_room_floor():
+    gain = InputGain({})  # -26 dBFS target, +30 dB at most, floor kept under -45 dBFS
+    rng = np.random.default_rng(0)
+    floor = lambda: rng.normal(0, 10 ** (-65 / 20), 512).astype(np.float32)
+    for _ in range(100):
+        gain(floor())
+    speech = [gain(_tone(-56) + floor()) for _ in range(40)]
+    # the quiet talker comes out ~20 dB louder: the floor (-65) may rise to -45, no more
+    assert 18 < _db(speech[-1]) - _db(_tone(-56)) < 21
+    assert _db(gain(floor())) < -44
+
+
+def test_a_loud_talker_gets_no_gain_and_a_sudden_loud_sound_drops_it_fast():
+    gain = InputGain({"vad_gain_floor_dbfs": 0})  # no floor cap here
+    for _ in range(100):
+        gain(_tone(-56))
+    assert gain.gain_db > 25
+    loud = [gain(_tone(-20)) for _ in range(12)]
+    assert gain.gain_db < 5  # a few frames (the 90th percentile needs ~5), not seconds
+    assert np.max(np.abs(loud[0])) <= 1.0
+    for _ in range(50):
+        out = gain(_tone(-20))
+    assert abs(_db(out) - _db(_tone(-20))) < 0.1
+
+
+def test_the_vad_hears_the_gained_frame_when_it_is_on(config, bus):
+    heard = []
+    s = service(config, bus, GrowingASR(), vad_gain=True)
+    s.vad = lambda frame: heard.append(_db(frame)) or 0.1
+    rng = np.random.default_rng(0)
+    for i in range(160):
+        noise = rng.normal(0, 10 ** (-65 / 20), 512).astype(np.float32)
+        tone = _tone(-56) if i >= 100 else 0  # the room's floor, then a quiet talker
+        s._audio({"t": 10 + i * 0.032, "samples": tone + noise}, 0)
+    assert heard[-1] > -40  # raised ~20 dB
+    s2 = service(config, bus, GrowingASR())
+    assert s2.vad_gain is None  # off unless configured

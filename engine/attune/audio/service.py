@@ -23,7 +23,7 @@ from .asr_whisper import WhisperASR
 from .language_id import LanguageID
 from .mic import AudioRing, MicReader
 from .runtime import Worker, engine_clock
-from .vad import Segmenter, SileroVAD
+from .vad import InputGain, Segmenter, SileroVAD
 from .voiceprint import CAMExtractor, VoicePrints
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,8 @@ class AudioService:
         )
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(cfg)
+        # gain before the VAD only: quiet or distant speech must be detected at all (A-24)
+        self.vad_gain = InputGain(cfg) if cfg.get("vad_gain") else None
         self.ring = AudioRing()
         self.speech_intervals: deque[tuple[float, float]] = deque()
         self.paused = False
@@ -70,7 +72,9 @@ class AudioService:
         self.continued = False  # this utterance carries on the last one's recogniser stream
         self.speech_audio: list[np.ndarray] = []
         self.sent = 0
-        self.level = UtteranceLevel(cfg["target_rms"])
+        self.level = UtteranceLevel(
+            cfg["target_rms"], cfg.get("level_window_s", 1.0), cfg.get("level_rise_db_s", 0.0)
+        )
         self.normalized: list[np.ndarray] = []
         self.utt_id = ""
         self.shown: Recognition | None = None  # the last draft published for this utterance
@@ -397,7 +401,7 @@ class AudioService:
 
     def _frame(self, frame: np.ndarray, t: float, generation: int) -> None:
         cfg = self.config["audio"]
-        prob = self.vad(frame)
+        prob = self.vad(self.vad_gain(frame) if self.vad_gain else frame)
         active, _began, ended = self.segmenter.feed(t, prob)
         if active:
             self.speech_audio.append(frame.copy())

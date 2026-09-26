@@ -216,6 +216,8 @@ class LLMService:
                 if event:
                     self.worker.publish(topic, event, generation)
                 self._error = ""
+            except TimeoutError:
+                continue  # a slow answer, skipped: the client logged it (A-23)
             except Exception:
                 self._error = "local language job failed"
                 logger.exception("local language job failed")
