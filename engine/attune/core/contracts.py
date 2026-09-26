@@ -47,6 +47,11 @@ HW_LINK = "hw.link"
 SPEECH_OUT_PLAYING = "speech_out.playing"
 REPLY_SPOKEN = "reply.spoken"
 ENROLL_RESULT = "enroll.result"
+# Save a person (double tap, P-29): progress of a running enrollment, and the consent request
+# the engine sends to the phone and console after a double tap (and its cancellation).
+ENROLL_PROGRESS = "enroll.progress"
+SAVE_REQUEST = "save.request"
+SAVE_CANCEL = "save.cancel"
 PERSON_CHANGED = "person.changed"
 SESSION_FORGET = "session.forget"
 PAUSED = "paused"
@@ -87,6 +92,9 @@ TOPICS = frozenset(
         SPEECH_OUT_PLAYING,
         REPLY_SPOKEN,
         ENROLL_RESULT,
+        ENROLL_PROGRESS,
+        SAVE_REQUEST,
+        SAVE_CANCEL,
         PERSON_CHANGED,
         SESSION_FORGET,
         PAUSED,
@@ -120,6 +128,9 @@ WS_ENROLL_RESULT = "enroll_result"
 WS_PERSON_CHANGED = "person_changed"
 WS_HW_LINK = "hw_link"
 WS_CAMERA = "camera"
+WS_ENROLL_PROGRESS = "enroll_progress"
+WS_SAVE_REQUEST = "save_request"
+WS_SAVE_CANCEL = "save_cancel"
 
 _ALL = frozenset(ROLES)
 # Which roles receive each JSON message type. Frames go to pages that asked for them.
@@ -136,10 +147,14 @@ WS_AUDIENCE: dict[str, frozenset[str]] = {
     WS_PEOPLE: frozenset({"console", "phone"}),
     WS_THUMBNAILS: frozenset({"console"}),
     WS_EVENT_LOG: frozenset({"console"}),
-    WS_ENROLL_RESULT: frozenset({"console", "phone"}),
+    # the lens shows the save flow's result too (P-29), so enroll results go to every page
+    WS_ENROLL_RESULT: _ALL,
     WS_PERSON_CHANGED: frozenset({"console", "phone"}),
     WS_HW_LINK: frozenset({"console", "phone"}),
     WS_CAMERA: _ALL,
+    WS_ENROLL_PROGRESS: _ALL,
+    WS_SAVE_REQUEST: _ALL,
+    WS_SAVE_CANCEL: _ALL,
 }
 
 FRAME_HEADER_FORMAT = "<Qd"  # little-endian uint64 frame_no, float64 capture t
@@ -164,7 +179,23 @@ COMMAND_NAMES = frozenset(
         "alert.ack",
         "mark",
         "camera.set",
+        "save.start",
+        "save.cancel",
     }
+)
+
+# Touch gestures (sensors.touch) and what the touch router makes of them (touch.action target).
+GESTURES = ("tap", "hold", "double", "triple")
+TOUCH_TARGETS = ("alert", "name", "save", "pause")
+# Why a save request ended without an enrollment (save.cancel reason).
+SAVE_CANCEL_REASONS = (
+    "declined",
+    "timeout",
+    "lost",
+    "replaced",
+    "cancelled",
+    "no_name",
+    "already_saved",
 )
 
 
@@ -369,12 +400,12 @@ class SensorLevels:
 @dataclass
 class SensorTouch:
     t: float
-    gesture: str  # tap, hold, double
+    gesture: str  # tap, hold, double, triple
 
 
 @dataclass
 class TouchAction:
-    target: str  # alert, name, pause
+    target: str  # alert, name, save, pause
     id: str | None
     accept: bool
 
@@ -414,6 +445,40 @@ class EnrollResult:
     ok: bool
     reason: str = ""
     track_id: int | None = None
+
+
+@dataclass(frozen=True)
+class EnrollProgress:
+    """How far a running enrollment is (0..1); `hint` is a short tip such as "more light"."""
+
+    track_id: int | None
+    part: str  # face, voice
+    fraction: float
+    person_id: str | None = None
+    hint: str = ""
+
+
+@dataclass
+class SaveRequest:
+    """A double tap asked to save this person; the phone and console ask them for consent."""
+
+    request_id: str
+    track_id: int
+    name: str
+    t: float
+    expires_t: float = 0.0
+    person_id: str | None = None
+    proposal_id: str | None = None
+
+
+@dataclass
+class SaveCancel:
+    """A save request ended without an enrollment, or a double tap found nobody to save."""
+
+    request_id: str | None
+    reason: str  # see SAVE_CANCEL_REASONS
+    track_id: int | None = None
+    name: str = ""
 
 
 @dataclass

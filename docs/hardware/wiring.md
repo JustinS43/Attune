@@ -12,7 +12,7 @@
 |---|---|---|
 | Arduino UNO R4 WiFi | 1 | Reads sensors, plays light/buzz patterns, talks USB serial to the laptop. Built-in 12×8 LED matrix shows status. |
 | Grove Sound Sensor | 2 | Left/right loudness (direction of sounds) |
-| Grove Touch Sensor (TTP223) | 1 | Tap = yes, hold = no, double tap = pause |
+| Grove Touch Sensor (TTP223) | 1 | Tap = yes, hold = no, double tap = save this person, triple tap = pause |
 | Grove LED Socket Kit | 2 | Alert light in the corner of each eye |
 | Grove I²C Motor Driver: TB6612FNG (0x14) or V1.3 L298 (0x0F) | 1 | Powers the buzz motor |
 | Mini DC motor (two leads) | 1 | Buzz, right temple tip, tape lump off-centre on the shaft |
@@ -55,12 +55,17 @@ never let it stall. If the board resets during a buzz: lower `MOTOR_SPEED_*` in
 3. **Levels:** clap near each side; the console/`status.part` hardware metrics `left`/`right` jump.
 4. **Patterns from the console** ("test pattern" buttons send command `pattern.test`):
    T3 L, T3 R, T4 B, BELL R, NAME R, OK R, NO R. Then STOP (`hw.stop`).
-5. **Touch:** tap / hold / double on the pad → `sensors.touch` events; with a fake alert active a
-   tap sends `touch.action {target: alert}`; double tap sends `pause.toggle` and the matrix shows `P`.
+5. **Touch:** tap / hold / double / triple on the pad → `sensors.touch` events; with a fake alert
+   active a tap sends `touch.action {target: alert}`. A double tap sends `touch.action {target: save}`:
+   with a name proposal or a named person in view the phone asks them to consent to being saved,
+   otherwise the glasses say "Say their name first". A triple tap sends `pause.toggle` and the
+   matrix shows `P`. Timing: every tap must start within `tap_ms` of the last one's release; a
+   single or double tap is reported `tap_ms` after the last release, a triple at once.
 6. **Pull the USB cable:** `hw.link` goes false; the rig stops within 2 s and shows `?` + dim
    LOST blink (it's unpowered, so only when on a hub/battery). Plug back: link returns by itself.
 7. **No rig at all?** `ATTUNE_SIMULATE_HARDWARE=1` (or `hardware.simulate = true`) runs the
-   in-process FakeArduino; bus `hw.sim_touch {gesture: "tap"}` fakes a touch.
+   in-process FakeArduino; bus `hw.sim_touch {gesture: "tap"}` fakes a touch (`hold`, `double`,
+   `triple` too).
 
 Quick standalone check without the engine (from the repo root, board plugged in):
 
@@ -75,7 +80,7 @@ PYTHONPATH=engine python -c "from attune.hardware.serial_link import find_port; 
 | T-H1 | Driver found: the I²C check at power-up | `READY` reports TB6612 (0x14), or L298 (0x0F → V1.3 column: try 5 V, else servo on D9) | [ ] | |
 | T-H2 | Connections: multimeter continuity on every pins-in-plug joint, then wiggle each cable while watching the readings | No dropouts or jumps while wiggling | [ ] | |
 | T-H3 | Sound sensors: quiet room, speech at 1 m, a clap, then the JBL at 90° left and right, 20 plays | Louder side correct in ≥ 18/20 plays by ≥ 3 dB; left sensor really on A0 | [ ] | |
-| T-H4 | Touch: 20 taps, 10 holds, 10 double taps through the tape; then 10 min untouched with the motor buzzing | ≥ 95 % classified right; no phantom touches | [ ] | |
+| T-H4 | Touch: 20 taps, 10 holds, 10 double taps, 10 triple taps through the tape; then 10 min untouched with the motor buzzing | ≥ 95 % classified right; no phantom touches | [ ] | |
 | T-H5 | LEDs: every pattern, worn, in a bright room | Noticeable at the edge of vision without dazzling; `led` brightness set (CFG / `hardware.led_brightness`) | [ ] | |
 | T-H6 | Motor and power: 50 T3 cycles; current with the multimeter in series if possible | Clearly felt; no Arduino resets; current within budget; stops within 2 s when the laptop link is cut | [ ] | |
 | T-H7 | Motor noise: sensor levels with the motor off, then on | With the capacitor the jump is small, and flagged (`motor_on`) readings are ignored | [ ] | |

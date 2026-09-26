@@ -50,14 +50,17 @@ A service reports its health by publishing `status.part` about once per second. 
 | `alert` | 2 Audio & Lang | `alert_id, kind, side, confidence, state` | `kind`: smoke, co, doorbell; `state`: start, update, watch, acknowledged, clear |
 | `reply.suggestions` | 2 Audio & Lang | `options: [str, str, str]` | For keys 7–9 |
 | `sensors.levels` | 3 Hardware | `t, left, right, motor_on` | Every 50 ms, 0–1023 |
-| `sensors.touch` | 3 Hardware | `t, gesture` (`tap`, `hold`, `double`) | Raw gesture |
-| `touch.action` | 3 Hardware | `target` (`alert`, `name`, `pause`), `id, accept` | After the priority rules |
+| `sensors.touch` | 3 Hardware | `t, gesture` (`tap`, `hold`, `double`, `triple`) | Raw gesture |
+| `touch.action` | 3 Hardware | `target` (`alert`, `name`, `save`, `pause`), `id, accept` | After the priority rules; `save` (double tap) carries the pending `proposal_id` or None |
 | `hw.pattern` | anyone | `name` (T3, T4, BELL, NAME, OK, NO), `side` (L, R, B) | Section 3 sends it to the Arduino |
 | `hw.stop` | anyone | — | Stop all patterns |
 | `hw.link` | 3 Hardware | `connected, firmware, driver` | On change |
 | `speech_out.playing` | 3 Hardware | `state` (`start`, `end`), `t` | Section 2 mutes mic captions until end + 0.5 s |
 | `reply.spoken` | 3 Hardware | `text, voice` (`elevenlabs`, `kokoro`), `t` | Shown as "You (typed)" and saved to history |
 | `enroll.result` | 1 Vision / 2 Audio & Lang | `person_id, part` (`face`, `voice`), `ok, reason, track_id=None` | "more light", "come closer"; face enrollment echoes the requested track_id to correlate voice consent |
+| `enroll.progress` | 1 Vision / 2 Audio & Lang | `track_id, part` (`face`, `voice`), `fraction` (0–1), `person_id=None, hint=""` | While an enrollment runs; see "Save a person" |
+| `save.request` | 4 Pages & Engine | `request_id, track_id, name, t, expires_t, person_id=None, proposal_id=None` | A double tap asked to save this person; pages ask them for consent |
+| `save.cancel` | 4 Pages & Engine | `request_id` (or None), `reason, track_id=None, name=""` | The request ended without an enrollment, or nobody could be saved |
 | `person.changed` | 1 Vision | `person_id, name, action` (`enrolled`, `renamed`, `deleted`) | Everyone updates their caches |
 | `session.forget` | 4 Pages & Engine | — | Every section wipes session-only data |
 | `paused` | 4 Pages & Engine | `paused` (bool) | All recognition pauses |
@@ -97,7 +100,9 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 
 | name | args | Handled by |
 |---|---|---|
-| `enroll.start` | track_id, name, consent (true), consent_t | 1 Vision (face) then 2 Audio & Lang (voice) |
+| `enroll.start` | track_id, name, consent (true), consent_t (epoch seconds), request_id (optional, answers a `save.request`) | 1 Vision (face) then 2 Audio & Lang (voice) |
+| `save.start` | track_id (optional) | 4 Pages & Engine: "save this person" without the touch pad (key D) |
+| `save.cancel` | request_id | 4 Pages & Engine: the person declined on the phone or console |
 | `person.rename` | person_id, name | 1 Vision |
 | `person.delete` | person_id | 1 Vision + 2 Audio & Lang (delete every file) |
 | `session.forget` | — | 4 Pages & Engine publishes `session.forget` |
@@ -132,7 +137,7 @@ Plain text lines, 115200 baud, `\n` endings. Found by USB ID; opened without tog
 |---|---|---|
 | Arduino → laptop | `READY <version> <driver>` | driver = `TB6612`, `L298`, or `NONE` |
 | Arduino → laptop | `LV <ms> <left> <right> <motor 0/1>` | every 50 ms |
-| Arduino → laptop | `TOUCH TAP` / `TOUCH HOLD` / `TOUCH DOUBLE` | gestures |
+| Arduino → laptop | `TOUCH TAP` / `TOUCH HOLD` / `TOUCH DOUBLE` / `TOUCH TRIPLE` | gestures (each tap within `tap_ms` of the last; TRIPLE added for P-29) |
 | Arduino → laptop | `HB <ms>` | every 1 s |
 | Arduino → laptop | `ACK <n>` / `ERR <text>` | command n done / fault |
 | laptop → Arduino | `PAT <n> <L/R/B> <name>` | play pattern (T3, T4, BELL, NAME, OK, NO) |
@@ -198,7 +203,10 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 | `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, presets}` |
 | `paused` | all | `paused` (bool), sent on every change |
 | `camera` | all | `on` (bool), sent on every change |
-| `enroll_result` | console, phone | as the bus event `enroll.result` |
+| `enroll_result` | all (the lens since P-29) | as the bus event `enroll.result` |
+| `enroll_progress` | all | as the bus event `enroll.progress` |
+| `save_request` | all | as the bus event `save.request`; also sent to a page that says hello while one waits |
+| `save_cancel` | all | as the bus event `save.cancel` |
 | `person_changed` | console, phone | as the bus event `person.changed` |
 | `hw_link` | console, phone | as the bus event `hw.link` |
 
@@ -215,3 +223,37 @@ words said before. When a later draft or the final no longer has a segment id th
 sent (for example two segments merged), the engine sends `caption.retract` /
 `caption_retract` with that id once; pages remove its text. The utterance's own
 `utt_id` is never retracted, so translations (keyed by it) always have a caption to join.
+
+## Save a person (P-29)
+
+A double tap on the side of the glasses saves the person in front of the wearer, with that
+person's consent. Gestures: tap = yes (acknowledge an alert, else confirm a name proposal),
+hold = no, **double tap = save this person**, **triple tap = pause** (was double). On the lens,
+Y / N / P are tap / hold / pause and D (or Y twice quickly) is the double tap.
+
+1. The touch router publishes `touch.action` {target: `save`, id: proposal_id or None}; key D
+   sends the command `save.start`. The engine's save flow (`engine/attune/core/save_flow.py`)
+   picks who: the face with an active (or just confirmed) name proposal, which it also
+   confirms with `name.answer`; else the named speaker who talked last; else the most
+   prominent named face in view. Nobody named: `save.cancel` {request_id: None, reason:
+   `no_name`} (the glasses say "Say their name first"); only saved people in view: `already_saved`.
+2. `save.request` goes to every page. The phone and the console show a consent sheet that the
+   person being saved ticks themselves; its Save sends `enroll.start` {track_id, name,
+   consent: true, consent_t, request_id}. Nobody else can consent for them, and nothing is
+   enrolled without that command.
+3. Their Cancel sends `save.cancel` {request_id}; the engine then publishes `save.cancel` with
+   reason `declined`. Other reasons: `timeout` (no answer in `save.consent_timeout_s`, 60 s),
+   `lost` (their face left the view), `replaced` (a double tap on someone else), `cancelled`
+   (pause or forget session).
+4. Vision publishes `enroll.progress` {part: `face`} about 5 times a second while it collects
+   face crops: `fraction` = min(good crops / `enroll_crops`, elapsed / `enroll_s`), `hint` a
+   reason from its list when the latest crops are unusable ("more light", "come closer").
+   Audio then publishes {part: `voice`}: `fraction` = seconds of their attributed speech /
+   `voice.enroll_s`. `enroll.result` keeps its meaning; audio also reports a failed voice
+   result when their face leaves ("stay in view") or `voice.enroll_timeout_s` passes ("not
+   enough speech"). As before, only prints are stored, never photos or audio.
+5. Once the face part succeeds the person is saved: a later voice failure leaves them saved
+   with their face only (every page says so, "voice later"). The saved person replaces the
+   session-only entry the confirmed name made for the same face (vision drops it), so they are
+   recognised as saved from then on. Audio handles `enroll.result` ahead of its audio backlog,
+   and `person.changed` {action: `enrolled`} no longer invalidates it.

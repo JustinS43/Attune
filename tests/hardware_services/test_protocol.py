@@ -10,6 +10,7 @@ ROUND_TRIP = [
     "TOUCH TAP",
     "TOUCH HOLD",
     "TOUCH DOUBLE",
+    "TOUCH TRIPLE",
     "HB 1000",
     "HB",
     "ACK 7",
@@ -37,6 +38,7 @@ def test_parsed_fields():
     assert p.parse("READY 1.2.3 TB6612") == p.Ready("1.2.3", "TB6612")
     assert p.parse("LV 50 10 20 0") == p.Levels(50, 10, 20, False)
     assert p.parse("TOUCH DOUBLE") == p.Touch("double")
+    assert p.parse("touch triple") == p.Touch("triple")
     assert p.parse("HB 2000") == p.Heartbeat(2000)
     assert p.parse("ACK 12") == p.Ack(12)
     assert p.parse("ERR 5 bad pattern") == p.Err("5 bad pattern", 5)

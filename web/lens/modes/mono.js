@@ -190,7 +190,8 @@ export function createMonoMode() {
       } else {
         const prop = view.pendingProposal;
         const toast = view.toasts.find((t) => t.kind === 'learned' && t.age < 3);
-        const footer = !!prop || !!toast;
+        const saving = !!view.save; // P-29: the save line (save.js) takes the fourth line
+        const footer = !!prop || !!toast || saving;
         const footY = BODY_Y + 3 * LH;
         const rows = footer ? 3 : 4;
         const st = log.update(ctx, view, LINE_W, F.body, rows, anim, view.dt);
@@ -252,7 +253,8 @@ export function createMonoMode() {
           if (more[0]) strong(ctx, `+ ${more[0].label} · ${more[0].detail}`, LINE_X, BODY_Y + LH + 14, F.alertMid, 0.9, 'left', 0, 1);
           if (!chip.acked && !footer) strong(ctx, 'A  ACKNOWLEDGE', VW - LINE_X, footY, F.alertSmall, 0.85, 'right', 2.5, 0.8);
         }
-        if (prop) {
+        if (saving) view.save.drawMono(ctx, { x: LINE_X, y: footY, w: LINE_W, vw: VW });
+        else if (prop) {
           const label = `${prop.name.toUpperCase()}?`;
           text(ctx, label, VW / 2 - 70, footY, F.head, 1, 'right', 2);
           monoIcon(ctx, 'check', VW / 2 - 50, footY - 19, 20, 2.4);

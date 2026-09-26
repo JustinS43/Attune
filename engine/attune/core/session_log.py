@@ -63,6 +63,8 @@ LOGGED: dict[str, Callable[[Any], dict | None]] = {
     "alert": _fields("alert_id", "kind", "side", "confidence", "state"),
     "name.proposal": _fields("proposal_id", "track_id", "state"),
     "enroll.result": _fields("part", "ok", "reason"),
+    "save.request": _fields("request_id", "track_id"),
+    "save.cancel": _fields("request_id", "reason"),
     "person.changed": _fields("action"),
     "paused": _fields("paused"),
     "session.forget": lambda ev: {},

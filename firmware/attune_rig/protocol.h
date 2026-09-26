@@ -5,7 +5,7 @@
  *
  * Plain text lines, 115200 baud, '\n' endings.
  *   Arduino -> laptop: READY <version> <driver> | LV <ms> <left> <right> <motor> |
- *                      TOUCH TAP|HOLD|DOUBLE | HB <ms> | ACK <n> | ERR <text>
+ *                      TOUCH TAP|HOLD|DOUBLE|TRIPLE | HB <ms> | ACK <n> | ERR <text>
  *   laptop -> Arduino: PAT <n> <L/R/B> <name> | STOP <n> | HB | MX <icon> | CFG <key> <value>
  */
 #pragma once
@@ -33,6 +33,7 @@
 #define GESTURE_TAP "TAP"
 #define GESTURE_HOLD "HOLD"
 #define GESTURE_DOUBLE "DOUBLE"
+#define GESTURE_TRIPLE "TRIPLE"
 
 // Drivers reported in READY
 #define DRIVER_TB6612 "TB6612"
@@ -51,7 +52,7 @@ enum Icon { ICON_HEART = 0, ICON_ALERT_L, ICON_ALERT_R, ICON_ALERT_B, ICON_PAUSE
 
 // CFG keys and their defaults / limits
 #define CFG_RATE "rate"        // LV report interval, ms
-#define CFG_TAP_MS "tap_ms"    // a touch shorter than this is a tap; also the double-tap window
+#define CFG_TAP_MS "tap_ms"    // a touch shorter than this is a tap; also the gap allowed between taps
 #define CFG_HOLD_MS "hold_ms"  // a touch this long is a hold
 #define CFG_LED "led"          // LED brightness 0..255
 #define DEFAULT_RATE_MS 50

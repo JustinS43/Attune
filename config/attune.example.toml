@@ -110,6 +110,14 @@ bubble_chars = 42
 bubble_lines = 2
 bubble_fade_s = 4
 
+# Save a person with a double tap (P-29, engine/attune/core/save_flow.py)
+[save]
+consent_timeout_s = 60           # the phone's consent sheet waits this long, then save.cancel
+proposal_grace_s = 5             # a name confirmed this recently still counts as "this person"
+speaker_recent_s = 10            # the last named speaker counts as "this person" this long
+scene_stale_s = 2                # faces from an older scene are not "in view"
+enrolling_s = 90                 # a started enrollment blocks a second request for that face
+
 # Section 2 runtime/model settings. Paths must already exist; services never download.
 [nemotron]
 tokens = "models/nemotron/tokens.txt"
@@ -129,6 +137,7 @@ compute_type = "int8"
 model_path = "models/cam++.onnx"
 provider = "cpu"
 enroll_s = 5.0
+enroll_timeout_s = 45.0          # voice enrollment gives up ("not enough speech") after this
 match_s = 1.0
 
 [rhythm]

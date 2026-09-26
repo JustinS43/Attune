@@ -56,6 +56,8 @@ class Worker:
         def receive(event: Any) -> None:
             if self.closed.is_set():
                 return
+            # enroll.result is rare and must never be lost to an audio backlog: it starts the
+            # voice step of an enrollment the person consented to (P-29)
             control = topic in {
                 "session.forget",
                 "paused",
@@ -63,6 +65,7 @@ class Worker:
                 "speech_out.playing",
                 "command",
                 "touch.action",
+                "enroll.result",
             }
             invalidates = topic in {
                 "session.forget",
@@ -72,6 +75,10 @@ class Worker:
             }
             if topic == "command":
                 invalidates = fields(event).get("name") in {"person.delete", "languages.set"}
+            elif topic == "person.changed":
+                # someone new being saved makes nothing in flight wrong; a rename or delete does.
+                # Vision sends "enrolled" right after the face result, which must survive it.
+                invalidates = fields(event).get("action") != "enrolled"
             if invalidates:
                 with self._lock:
                     self.generation += 1

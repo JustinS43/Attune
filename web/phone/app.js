@@ -10,6 +10,7 @@
  */
 
 import { connect } from '../shared/ws.js';
+import { createSaveSheet } from './save.js';
 
 const app = document.querySelector('#app');
 const content = document.querySelector('#screen-content');
@@ -828,6 +829,7 @@ function goLive() {
 }
 
 function onMessage(msg) {
+  saveSheet.onMessage(msg); // P-29: the "Save this person?" sheet over any screen
   switch (msg.type) {
     case 'welcome':
       state.sessionId = msg.session_id ?? state.sessionId;
@@ -936,6 +938,7 @@ function onMessage(msg) {
   }
 }
 
+const saveSheet = createSaveSheet({host: app, send: (name, args) => link.send(name, args)});
 const noopLink = {send() {}, connected: false};
 const link = params.has('demo') ? noopLink : connect({
   role: 'phone',

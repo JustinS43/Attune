@@ -34,6 +34,7 @@ from .config import load_config, section
 from .core import clock
 from .core.bus import Bus
 from .core.contracts import STATUS_PART
+from .core.save_flow import SaveFlow
 from .core.session_log import SessionLog, new_session_id
 from .core.status import StatusAggregator
 from .server.commands import CommandRouter
@@ -154,6 +155,7 @@ class Engine:
             self.bus, self.data_dir / "sessions", self.session_id, clock.now
         )
         self.router = CommandRouter(self.bus, self.session_log)
+        self.save_flow = SaveFlow(self.bus, self.config, clock.now)
         self.hub = Hub(self.bus, self.config, self.session_id, self.router, clock.now)
         self.status = StatusAggregator(self.bus, self.config, clock.now)
         self.running: list[tuple[str, Any]] = []
@@ -197,6 +199,7 @@ class Engine:
     def start(self) -> None:
         # Engine-side listeners subscribe first so they see every service's first events.
         self.router.connect()
+        self.save_flow.start()
         self.hub.connect()
         self.status.start()
         self.session_log.start()
@@ -267,7 +270,11 @@ class Engine:
         """Stop everything in parallel (reverse order of starting), within ~3 s."""
         log.info("Stopping...")
         deadline = time.monotonic() + STOP_BUDGET_S
-        items = list(reversed(self.running)) + [("hub", self.hub), ("status", self.status)]
+        items = list(reversed(self.running)) + [
+            ("hub", self.hub),
+            ("status", self.status),
+            ("save_flow", self.save_flow),
+        ]
         threads = []
         for name, svc in items:
             t = threading.Thread(

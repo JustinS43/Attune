@@ -1,0 +1,30 @@
+/* Console: "Save this person?" card (P-29): web/panels/save.js */
+.atp-save { border-color: rgba(124, 245, 214, 0.4); background: linear-gradient(160deg, rgba(124, 245, 214, 0.1), rgba(106, 184, 255, 0.05) 60%), var(--atp-card); animation: atp-save-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.atp-save[hidden] { display: none; }
+.atp-save[data-phase='failed'], .atp-save[data-phase='cancelled'], .atp-save[data-phase='hint'] { border-color: rgba(255, 200, 87, 0.35); background: rgba(255, 200, 87, 0.06); }
+.atp-save-head { display: flex; align-items: center; gap: 12px; }
+.atp-save-head h3 { margin: 2px 0 0; font: 650 17px/1.2 var(--atp-display); }
+.atp-save-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--atp-mint); }
+.atp-save-face { flex: none; width: 48px; height: 48px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px #0b0e14, 0 0 0 4px var(--atp-mint); }
+.atp-save-initial { display: grid; place-items: center; background: rgba(124, 245, 214, 0.16); color: var(--atp-mint); font: 700 21px/1 var(--atp-display); }
+.atp-save[data-phase='saving'] .atp-save-face { animation: atp-save-pulse 1.4s ease-in-out infinite; }
+.atp-save-lead { margin: 0; color: var(--atp-muted); font-size: 12.5px; line-height: 1.4; }
+.atp-save .atp-row .atp-primary { flex: 1; }
+.atp-save-count { margin-left: auto; color: var(--atp-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.atp-save-steps { display: flex; flex-direction: column; gap: 9px; padding: 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--atp-line); }
+.atp-save-step { display: grid; grid-template-columns: 18px 44px 1fr 46px; align-items: center; gap: 8px; font-size: 13px; color: var(--atp-muted); }
+.atp-save-step small { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.atp-save-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--atp-line-strong); }
+.atp-save-step.run { color: var(--atp-ink); }
+.atp-save-step.run .atp-save-dot { border-color: var(--atp-sky); border-right-color: transparent; animation: atp-spin 0.9s linear infinite; }
+.atp-save-step.ok { color: var(--atp-mint); }
+.atp-save-step.ok .atp-save-dot { border: 0; background: var(--atp-mint); box-shadow: 0 0 10px rgba(124, 245, 214, 0.5); }
+.atp-save-step.fail { color: var(--atp-amber); }
+.atp-save-step.fail .atp-save-dot { border-color: var(--atp-amber); }
+.atp-save-bar { height: 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.atp-save-bar i { display: block; height: 100%; width: calc(var(--p, 0) * 100%); border-radius: 6px; background: var(--atp-grad); transition: width 0.2s ease-out; }
+.atp-save-status { margin: 0; font-size: 13px; color: var(--atp-mint); }
+.atp-save-status.failed, .atp-save-status.cancelled, .atp-save-status.hint { color: var(--atp-amber); }
+@keyframes atp-save-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes atp-save-pulse { 50% { box-shadow: 0 0 0 2px #0b0e14, 0 0 0 7px rgba(124, 245, 214, 0.35); } }
+@media (prefers-reduced-motion: reduce) { .atp-save, .atp-save-face, .atp-save-dot, .atp-save-bar i { animation: none !important; transition: none !important; } }

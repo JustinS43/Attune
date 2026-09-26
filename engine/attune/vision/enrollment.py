@@ -7,6 +7,11 @@ face prints from that track for `enroll_s` seconds (5 s) while the person
 turns their head a little. It keeps the `enroll_crops` (8) most varied good
 prints; with fewer than `enroll_min_crops` (5) it refuses and says why.
 Nothing is stored unless consent is true and carries a time.
+
+While it runs, the service publishes `enroll.progress` {track_id, part: face, fraction, hint}
+(TODO P-29): `progress()` is the smaller of good crops / `enroll_crops` and elapsed /
+`enroll_s`, so the glasses' ring fills over the capture window and stalls while no usable
+crop arrives; `hint()` names what is wrong with the latest crops ("more light").
 """
 
 from __future__ import annotations
@@ -33,6 +38,26 @@ class EnrollJob:
     start_t: float
     prints: list[np.ndarray] = field(default_factory=list)
     rejects: Counter = field(default_factory=Counter)
+    last_progress_t: float = -1e9
+    last_accept_t: float = -1e9
+    last_reject: tuple[str, float] | None = None  # (reason, t)
+
+
+def progress(job: EnrollJob, t: float, enroll_s: float, crops: int) -> float:
+    """0..1: good crops against the target, never ahead of the capture window."""
+    by_crops = len(job.prints) / max(1, crops)
+    by_time = (t - job.start_t) / max(1e-3, enroll_s)
+    return max(0.0, min(1.0, by_crops, by_time))
+
+
+def hint(job: EnrollJob, t: float) -> str:
+    """A short tip while the latest crops are unusable ("more light"), else ""."""
+    if job.last_reject is None:
+        return ""
+    reason, when = job.last_reject
+    if when <= job.last_accept_t or t - when > 1.0:
+        return ""
+    return REASONS.get(reason, "")
 
 
 def most_varied(prints: np.ndarray, k: int) -> np.ndarray:

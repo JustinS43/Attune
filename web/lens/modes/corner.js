@@ -286,6 +286,7 @@ export function createCornerMode() {
             x += 18 * k;
           }
         }
+        view.save?.drawCorner(ctx, { rect: spec.rect, k, compact, labelY }, env); // P-29 (save.js)
       }
       ctx.restore();
     },

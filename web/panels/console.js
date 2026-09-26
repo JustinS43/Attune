@@ -9,6 +9,7 @@
  */
 
 import { h, section, clockText, dateText } from './ui.js';
+import { createSaveCard } from './save.js';
 
 const PATTERNS = ['T3', 'T4', 'BELL', 'NAME', 'OK', 'NO'];
 const PATTERN_HINT = { T3: 'Smoke (3 pulses)', T4: 'CO (4 pulses)', BELL: 'Doorbell', NAME: 'Your name', OK: 'Confirm', NO: 'Reject' };
@@ -385,7 +386,8 @@ export function createConsole(ctx) {
   const jump = h('nav', { class: 'atp-jump', 'aria-label': 'Console sections' },
     [['Enroll', enrollCard], ['People', peopleCard], ['Session', sessionCard], ['Rig', rigCard], ['Calibrate', calCard], ['Log', logCard]]
       .map(([label, card]) => h('button', { type: 'button', text: label, onclick: () => card.scrollIntoView({ behavior: 'smooth', block: 'start' }) })));
-  const el = h('div', { class: 'atp-view atp-console' }, statusCard, jump, enrollCard, peopleCard, sessionCard, rigCard, calCard, logCard);
+  const saveCard = createSaveCard({ send, thumb: (id) => st.thumbs.get(id) }); // P-29: double tap -> consent
+  const el = h('div', { class: 'atp-view atp-console' }, statusCard, saveCard.el, jump, enrollCard, peopleCard, sessionCard, rigCard, calCard, logCard);
 
   renderThumbs();
   renderEnrollForm();
@@ -403,6 +405,7 @@ export function createConsole(ctx) {
       (st.selected === null ? thumbGrid.querySelector('button') || nameInput : nameInput).focus();
     },
     onMessage(m) {
+      saveCard.onMessage(m);
       switch (m.type) {
         case 'status': renderStatus(m); break;
         case 'thumbnails': {

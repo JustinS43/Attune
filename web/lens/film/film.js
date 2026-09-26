@@ -15,6 +15,7 @@
  */
 
 import { createFilmPlayer } from './player.js';
+import { createQuickStart } from './quickstart.js';
 
 // which face tracks belong to which person (several ids = the same person re-acquired later)
 const PEOPLE_TRACKS = {
@@ -84,6 +85,8 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
 
   const personIds = Object.keys(TL.people).filter((p) => p !== 'you');
   const trackIdOf = (pid) => personIds.indexOf(pid) + 1;
+  // Quick Start (P-29): saving Mom and Grandpa, as the save flow's messages (quickstart.js)
+  const quickStart = createQuickStart(TL, (sc) => Object.keys(PEOPLE_TRACKS[sc.clip] ?? {})[0], trackIdOf);
 
   // ---- segments: film scenes with footage, contiguous shots of one clip merged
   const segs = [];
@@ -349,6 +352,7 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
         const state = ans && !ans.accept ? 'rejected' : st === 'named' ? 'confirmed' : 'proposed';
         send('prop:andre', { type: 'name_proposal', proposal_id: 'p-andre', track_id: andre.track_id, name: 'Andre', state, expires_t: SCRIPT.andre.confirmAt });
       }
+      for (const [key, msg] of quickStart(sceneId, t)) send(key, msg);
     }
 
     // sound alerts (they keep working while recognition is paused: safety first)

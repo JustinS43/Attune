@@ -63,7 +63,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2 — written in #19; compile + bench check on the rig left
 - [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2 — written in #19; compile + bench check on the rig left
 - [x] H-05 Serial link: find by USB ID, no DTR reset, READY wait, HB, auto-reconnect; publishes `sensors.*` and `hw.link` · M0 (#19)
-- [x] H-06 Touch router (alert > name > nothing; double tap = pause); publishes `touch.action` · M2 (#19)
+- [x] H-06 Touch router (alert > name > nothing; double tap = pause); publishes `touch.action` · M2 (#19) — P-29: double tap = save this person, triple tap = pause
 - [x] H-07 ElevenLabs streaming voice (key from .env) · M2 (#19)
 - [x] H-08 Kokoro offline voice, used if no audio within 1.5 s · M2 (#19)
 - [x] H-09 SpeechOutService + player; publishes `speech_out.playing` and `reply.spoken` · M2 (#19)
@@ -103,6 +103,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] P-26 Re-render the launch film in the three glasses looks (Colour, Mono, Corner) from the lens's own renderers · M3 – M4 — pipeline in progress, renders after P-25
 - [x] P-27 Phone enrollment tab: consented face photo preview and guided voice enrollment · M3 (#33)
 - [x] P-28 Calm Colour look: no flashing or pulsing, simple directional arrows (#39)
+- [x] P-29 Save a person with a double tap: consent on the phone, face/voice capture animations in every glasses mode, Quick Start in Film · M3 (#41)
 
 ## Gates and end-to-end checks (whole team)
 

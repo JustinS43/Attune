@@ -1,0 +1,45 @@
+/* "Save this person?" consent sheet (P-29): web/phone/save.js */
+.save-scrim { position: absolute; inset: 0; z-index: 6; background: #06121a66; animation: save-fade .2s ease-out; }
+.save-sheet {
+  position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; max-height: 86%; overflow-y: auto;
+  padding: 10px 22px 34px; border-radius: 28px 28px 0 0; background: var(--bg); color: var(--ink);
+  box-shadow: 0 -18px 46px #0b1d2530; border-top: 1px solid var(--line);
+  animation: save-rise .25s cubic-bezier(.2, .8, .2, 1);
+}
+.save-sheet[hidden], .save-scrim[hidden] { display: none; }
+.save-grip { width: 42px; height: 5px; margin: 0 auto 16px; border-radius: 5px; background: var(--line); }
+.save-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.save-head .grow { flex: 1; min-width: 0; }
+.save-head .eyebrow { margin: 0 0 4px; }
+.save-title { margin: 0; font-size: 26px; line-height: 1.12; letter-spacing: -.8px; font-weight: 770; overflow-wrap: anywhere; }
+.save-avatar { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--teal-wash); color: var(--teal-strong); font-size: 25px; font-weight: 780; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--teal); }
+.save-sheet[data-phase=saving] .save-avatar { animation: save-ring 1.4s ease-in-out infinite; }
+.save-sheet[data-phase=saved] .save-avatar { background: var(--teal); color: var(--button-text); }
+.save-sheet[data-phase=failed] .save-avatar, .save-sheet[data-phase=cancelled] .save-avatar, .save-sheet[data-phase=hint] .save-avatar { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--line); color: var(--muted); background: var(--surface-soft); }
+.save-lead { margin: 4px 0 14px; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.save-consent { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1.5px solid var(--teal); border-radius: 17px; background: var(--surface); font-size: 16px; font-weight: 650; line-height: 1.38; cursor: pointer; }
+.save-consent input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--teal); }
+.save-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 14px; }
+.save-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.save-count { margin: 12px 2px 0; color: var(--muted); font-size: 12px; text-align: center; }
+.save-privacy { margin: 14px 0 0; padding: 12px 14px; border-radius: 14px; background: var(--teal-wash); color: var(--teal-strong); font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+.save-steps { display: grid; gap: 12px; margin: 8px 0 14px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.save-step { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+.save-step .grow { flex: 1; min-width: 0; }
+.save-step b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-soft); color: var(--teal-strong); font-size: 14px; }
+.save-step.run b { box-shadow: inset 0 0 0 2px var(--teal); }
+.save-step.ok { color: var(--teal-strong); }
+.save-step.ok b { background: var(--teal); color: var(--button-text); animation: save-pop .25s ease-out; }
+.save-step.fail { color: #a62635; }
+.save-step.fail b { background: #fbe3da; color: #a62635; }
+.save-step-top { display: flex; align-items: baseline; justify-content: space-between; font-size: 15px; font-weight: 720; }
+.save-step-top small { font-size: 12px; font-weight: 650; }
+.save-bar { height: 6px; margin-top: 7px; border-radius: 6px; background: var(--surface-soft); overflow: hidden; }
+.save-bar i { display: block; height: 100%; width: calc(var(--p, 0) * 100%); border-radius: 6px; background: linear-gradient(90deg, #2cceba, var(--teal)); transition: width .2s ease-out; }
+.save-status { margin: 0 0 14px; font-size: 15px; font-weight: 650; line-height: 1.4; color: var(--teal-strong); }
+.save-status.failed, .save-status.cancelled, .save-status.hint { color: var(--muted); }
+@keyframes save-rise { from { transform: translateY(40%); opacity: 0; } }
+@keyframes save-fade { from { opacity: 0; } }
+@keyframes save-ring { 50% { box-shadow: 0 0 0 3px var(--bg), 0 0 0 8px var(--teal-wash); } }
+@keyframes save-pop { from { transform: scale(.6); } }
+@media (prefers-reduced-motion: reduce) { .save-sheet, .save-scrim, .save-avatar, .save-step b, .save-bar i { animation: none !important; transition: none !important; } }

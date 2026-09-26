@@ -159,7 +159,7 @@ class FakeArduino:
 
     # ------------------------------------------------------ test/demo hooks
     def inject_touch(self, gesture: str) -> None:
-        """Pretend the touch pad saw a gesture: tap, hold or double."""
+        """Pretend the touch pad saw a gesture: tap, hold, double or triple."""
         g = gesture.strip().upper()
         if g not in p.GESTURES:
             raise ValueError(f"unknown gesture {gesture!r}")
