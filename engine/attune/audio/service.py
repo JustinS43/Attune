@@ -23,7 +23,7 @@ from .asr_whisper import WhisperASR
 from .language_id import LanguageID
 from .mic import AudioRing, MicReader
 from .runtime import Worker, engine_clock
-from .vad import Segmenter, SileroVAD
+from .vad import InputGain, Segmenter, SileroVAD
 from .voiceprint import CAMExtractor, VoicePrints
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ class AudioService:
         self.auto_voice_tracks: dict[str, str] = {}
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(cfg)
+        # gain before the VAD only: quiet or distant speech must be detected at all (A-24)
+        self.vad_gain = InputGain(cfg) if cfg.get("vad_gain") else None
         self.ring = AudioRing()
         self.speech_intervals: deque[tuple[float, float]] = deque()
         self.paused = False
@@ -71,11 +73,17 @@ class AudioService:
         self.continued = False  # this utterance carries on the last one's recogniser stream
         self.speech_audio: list[np.ndarray] = []
         self.sent = 0
-        self.level = UtteranceLevel(cfg["target_rms"])
+        self.level = UtteranceLevel(
+            cfg["target_rms"],
+            window_s=cfg.get("level_window_s", 0.5),
+            rise_db_s=cfg.get("level_rise_db_s", 0.0),
+            percentile=cfg.get("level_percentile", 50.0),
+        )
         self.normalized: list[np.ndarray] = []
         self.utt_id = ""
         self.shown: Recognition | None = None  # the last draft published for this utterance
         self.voice_at = 0  # speech samples at this utterance's last voice match
+        self.word_t: float | None = None  # when this utterance's words last changed
         self.languages = list(cfg["languages"])
         self._asr_lock = threading.Lock()  # the recogniser is shared with rescues
         self._rescues = ThreadPoolExecutor(1, thread_name_prefix="audio-rescue")
@@ -166,6 +174,7 @@ class AudioService:
         self.sent = 0
         self.shown = None
         self.voice_at = 0
+        self.word_t = None
         self.normalized.clear()
         self.segmenter.reset()
         self.continued = keep_stream
@@ -437,7 +446,7 @@ class AudioService:
 
     def _frame(self, frame: np.ndarray, t: float, generation: int) -> None:
         cfg = self.config["audio"]
-        prob = self.vad(frame)
+        prob = self.vad(self.vad_gain(frame) if self.vad_gain else frame)
         active, _began, ended = self.segmenter.feed(t, prob)
         if active:
             self.speech_audio.append(frame.copy())
@@ -465,14 +474,19 @@ class AudioService:
         # and at max_utterance_s whatever happens, so finals, translations and history
         # never wait for a whole monologue. A pause is soft_split_gap_s of no speech: the
         # VAD also dips for a frame or two inside words ("trees"), and a split there cuts
-        # the word.
+        # the word. Background talk can keep the VAD on for good; then a pause is also
+        # soft_split_word_gap_s with no new word from the recogniser (A-24).
         soft = cfg.get("soft_split_s")
         quiet = self.segmenter.silence_s
+        word_gap = cfg.get("soft_split_word_gap_s")
+        last_word = self.word_t if self.word_t is not None else self.utt_t0
         split = (
             bool(soft)
-            and not active
-            and quiet >= cfg.get("soft_split_gap_s", 0.1) - 1e-6
             and count >= soft * 16000
+            and (
+                (not active and quiet >= cfg.get("soft_split_gap_s", 0.1) - 1e-6)
+                or bool(word_gap and t + 0.032 - last_word >= word_gap)
+            )
         )
         final = ended or split or count >= cfg["max_utterance_s"] * 16000
         # A split in the middle of talk cuts the recogniser's stream instead of starting a
@@ -544,6 +558,7 @@ class AudioService:
             self._transcript(self.utt_id, result, final, self.utt_t0, t_end, self.lead, generation)
             if not final:
                 self.shown = result
+                self.word_t = t_end
         speech = len(self.speech_audio) * 512
         every = cfg.get("voice_match_every_s", 1.0) * 16000
         if final or speech - self.voice_at >= every:

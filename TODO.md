@@ -69,6 +69,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
 - [x] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it (#62)
 - [x] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions (#62)
+- [ ] A-24 Quiet speech and noisy rooms: gain before the VAD, a recogniser gain that rises after a loud start, a babble-noise bench (synthetic hall babble at 15/10/5/0 dB SNR) and a measured choice on a Whisper second pass for finals — in progress
 - [ ] A-25 Automatic voice association and contextual names: persist harvested voice prints, offer repeated name evidence — code and unit tests done; live two-mic check left
 - [x] A-26 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2 (#77)
 - [x] A-27 A voice print from another voice model (another size, or another model's tag) is ignored at load with one warning, never compared (#80)
