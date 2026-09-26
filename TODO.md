@@ -108,6 +108,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-29 Save a person with a double tap: consent on the phone, face/voice capture animations in every glasses mode, Quick Start in Film · M3 (#41)
 - [x] P-30 Remember Me full-face photo and local contact list with photo uploads · M3 (#42)
 - [x] P-31 Lens review fixes: docks avoid faces, clear Mono speakers, names during save, no mixed-language lines (#46)
+- [x] P-32 System debug: phone enrollment and console fixes, full-suite findings handed to owners (#51)
 
 ## Gates and end-to-end checks (whole team)
 

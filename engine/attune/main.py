@@ -146,7 +146,7 @@ class Engine:
             self.config["hardware"] = {**section(self.config, "hardware"), "simulate": True}
         engine_cfg = section(self.config, "engine")
         self.host = opts.host or engine_cfg.get("host", "127.0.0.1")
-        self.port = int(opts.port or engine_cfg.get("port", 8000))
+        self.port = int(opts.port if opts.port is not None else engine_cfg.get("port", 8000))
         self.data_dir = Path(engine_cfg.get("data_dir", "data"))
         self.bus = Bus()
         self.session_id = new_session_id()
@@ -259,8 +259,9 @@ class Engine:
         try:
             app = create_app(self.hub, history_router=history_router)
             self.hub.start()
-            self.web = WebServer(app, self.host, self.port)
-            self.web.start()
+            web = WebServer(app, self.host, self.port)
+            web.start()
+            self.web = web
             self.running.append(("server", self.web))
         except Exception as exc:
             log.exception("Web server failed")

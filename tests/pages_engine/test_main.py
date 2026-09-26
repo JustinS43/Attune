@@ -24,6 +24,29 @@ def test_parse_args():
     assert o.simulate_hardware and o.no_mic
     engine = M.Engine(o, {"engine": {"data_dir": "data"}, "hardware": {"baud": 115200}})
     assert engine.config["hardware"] == {"baud": 115200, "simulate": True}
+    assert M.Engine(M.Options(port=0), {"engine": {"port": 8000}}).port == 0
+
+
+def test_failed_web_start_does_not_claim_running_server(tmp_path, monkeypatch):
+    from attune.server import app as server_app
+
+    class RefusedServer:
+        def __init__(self, app, host, port):
+            pass
+
+        def start(self):
+            raise RuntimeError("port in use")
+
+    monkeypatch.setattr(server_app, "WebServer", RefusedServer)
+    engine = M.Engine(
+        M.Options(no_browser=True), {"engine": {"data_dir": str(tmp_path)}}
+    )
+    try:
+        engine._start_server()
+        assert engine.web is None
+        assert "port in use" in engine.failed["server"]
+    finally:
+        engine.stop()
 
 
 class Good:
