@@ -15,17 +15,23 @@ export function createLiveSource({ canvas, emit, setConnected, onFrameCount }) {
   let pending = null;
   let frames = 0;
   let lastFrameAt = 0;
+  let generation = 0;
 
-  async function decode(frame) {
+  async function decode(frame, currentGeneration) {
     decoding = true;
     try {
       const bmp = await createImageBitmap(frame.blob);
-      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-      bmp.close();
-      frames++;
-      lastFrameAt = performance.now();
-      if (frames === 1) canvas.classList.add('live-on');
-      onFrameCount?.(frames);
+      try {
+        if (currentGeneration === generation) {
+          ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          frames++;
+          lastFrameAt = performance.now();
+          if (frames === 1) canvas.classList.add('live-on');
+          onFrameCount?.(frames);
+        }
+      } finally {
+        bmp.close();
+      }
     } catch {
       // a corrupt frame: skip it
     }
@@ -33,7 +39,7 @@ export function createLiveSource({ canvas, emit, setConnected, onFrameCount }) {
     if (pending) {
       const next = pending;
       pending = null;
-      decode(next);
+      decode(next.frame, next.generation);
     }
   }
 
@@ -57,20 +63,26 @@ export function createLiveSource({ canvas, emit, setConnected, onFrameCount }) {
     },
     start() {
       if (link) return;
-      if (frames) canvas.classList.add('live-on');
+      const currentGeneration = ++generation;
       link = connect({
         role: 'lens',
         frames: true,
         onMessage: emit,
         onFrame: (f) => {
-          if (decoding) pending = f; // keep only the newest frame while one decodes
-          else decode(f);
+          if (currentGeneration !== generation) return;
+          if (decoding) pending = { frame: f, generation: currentGeneration };
+          else decode(f, currentGeneration);
         },
         onState: setConnected,
       });
     },
     stop() {
+      generation++;
+      pending = null;
+      frames = 0;
+      lastFrameAt = 0;
       canvas.classList.remove('live-on');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       link?.close();
       link = null;
       setConnected(false);
