@@ -83,7 +83,8 @@ asr_chunk_ms = 32                # feed the recogniser every VAD frame: it decod
 pre_roll_ms = 320               # audio kept before speech starts; padded with silence when shorter
 languages = ["en", "es"]        # empty = auto-detect
 mute_after_reply_s = 0.5
-soft_split_s = 10               # a longer utterance ends at its next pause, so finals keep coming
+soft_split_s = 5                # a longer utterance ends at its next pause, so finals (history,
+                                # translation) keep coming during a monologue (10 s: ~12 s late)
 max_utterance_s = 30
 target_rms = 0.1
 rescue_max_s = 2.5              # a short utterance heard as nothing is decoded again on the side
@@ -115,6 +116,13 @@ name_confidence = 0.8
 timeout_s = 1.5
 max_queue = 32
 reply_context_lines = 6
+reply_delay_s = 1.0              # A-23: suggest replies once the talk pauses, not after every final
+description_max_px = 224         # clothing crops are shrunk to this before the model reads them
+[llm.timeouts]                   # per job kind; others use timeout_s. A slow job is skipped and
+translation = 4.0                # never blocks a translation (it is stopped and runs after it)
+names = 3.0
+replies = 4.0
+descriptions = 4.0
 
 # ---------- Section 3 - Hardware & Services ----------
 [hardware]
@@ -139,6 +147,7 @@ presets = [
 [history]
 db_path = "data/history.db"
 retention_hours = 24             # rows older than this are deleted
+orphan_draft_s = 10              # a draft caption whose final never came is saved after this long
 
 # ---------- Section 4 - Pages ----------
 [pages]
