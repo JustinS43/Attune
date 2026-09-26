@@ -217,3 +217,106 @@ def test_audio_final_follows_silence_with_shared_timestamps(config, bus):
         assert len({t["utt_id"] for t in transcripts}) == 1
     finally:
         service.stop()
+
+
+def test_utterance_level_does_not_raise_trailing_noise():
+    from attune.audio.asr import UtteranceLevel
+
+    level = UtteranceLevel(0.1)
+    np.testing.assert_allclose(level.feed(np.full(16000, 0.5, np.float32)), 0.1)
+    np.testing.assert_allclose(level.feed(np.full(8000, 0.0001, np.float32)), 0.00002)
+    assert np.max(np.abs(level.feed(np.ones(100, np.float32)))) <= 0.99
+    level.reset()
+    np.testing.assert_allclose(level.feed(np.full(16000, 0.05, np.float32)), 0.1)
+
+
+def test_runtime_nemotron_failure_replays_whole_utterance_to_whisper(config, bus, monkeypatch):
+    class BrokenNemotron(NemotronASR):
+        def __init__(self):
+            self.calls = 0
+
+        def reset(self):
+            pass
+
+        def feed(self, pcm, final=False):
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("decoder failed")
+            return Recognition("draft", "en", [])
+
+    received = []
+
+    class Fallback:
+        def __init__(self, cfg):
+            assert cfg["languages"] == ["en"]
+
+        def reset(self):
+            pass
+
+        def feed(self, pcm, final=False):
+            received.append((pcm.copy(), final))
+            return Recognition("recovered", "en", [])
+
+    monkeypatch.setattr("attune.audio.service.WhisperASR", Fallback)
+    config["whisper"] = {}
+    service = AudioService(bus, config, asr=BrokenNemotron())
+    assert service._recognize(np.full(1000, 0.5, np.float32), False).text == "draft"
+    assert service._recognize(np.full(500, 0.01, np.float32), True).text == "recovered"
+    assert received[0][1] is True
+    assert len(received[0][0]) == 1500
+    np.testing.assert_allclose(received[0][0][:1000], 0.1)
+    np.testing.assert_allclose(received[0][0][1000:], 0.002)
+    assert isinstance(service.asr, Fallback)
+
+
+def test_failed_fallback_clears_partial_audio(config, bus, monkeypatch):
+    class BrokenNemotron(NemotronASR):
+        def __init__(self):
+            pass
+
+        def reset(self):
+            pass
+
+        def feed(self, pcm, final=False):
+            raise RuntimeError("decoder failed")
+
+    def missing_model(cfg):
+        raise FileNotFoundError("local Whisper model unavailable")
+
+    monkeypatch.setattr("attune.audio.service.WhisperASR", missing_model)
+    config["whisper"] = {}
+    service = AudioService(bus, config, asr=BrokenNemotron())
+    service.utterance.append(np.ones(100))
+    with pytest.raises(FileNotFoundError):
+        service._recognize(np.ones(1000, np.float32), True)
+    assert not service.normalized
+    assert not service.utterance
+    assert service.level.gain is None
+
+
+def test_mic_start_failure_stops_audio_worker_and_unsubscribes(config, bus):
+    class BrokenMic:
+        def health(self):
+            return {"ok": False, "detail": "missing device"}
+
+        def start(self):
+            raise RuntimeError("cannot open capture")
+
+        def stop(self):
+            self.stopped = True
+
+    mic = BrokenMic()
+    service = AudioService(
+        bus,
+        config,
+        vad=lambda pcm: 0.9,
+        asr=FakeASR(),
+        voices=FakeVoices(),
+        language=SimpleNamespace(detect=lambda text, lang: lang),
+        mic=mic,
+    )
+    with pytest.raises(RuntimeError, match="capture"):
+        service.start()
+    assert mic.stopped
+    assert not service.worker.thread.is_alive()
+    assert not any(bus.callbacks.values())

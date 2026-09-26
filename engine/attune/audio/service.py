@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import numpy as np
 
-from .asr import NemotronASR, level_match
+from .asr import NemotronASR, Recognition, UtteranceLevel
 from .asr_whisper import WhisperASR
 from .language_id import LanguageID
 from .mic import AudioRing, MicReader
@@ -37,6 +37,8 @@ class AudioService:
         self.pending_t = None
         self.utterance: list = []
         self.sent = 0
+        self.level = UtteranceLevel(config["audio"]["target_rms"])
+        self.normalized: list[np.ndarray] = []
         self.utt_id = ""
 
     def start(self) -> None:
@@ -109,6 +111,8 @@ class AudioService:
         self.pending_t = None
         self.utterance.clear()
         self.sent = 0
+        self.level.reset()
+        self.normalized.clear()
         self.segmenter.reset()
         if self.asr:
             self.asr.reset()
@@ -244,9 +248,7 @@ class AudioService:
                 final or count - self.sent >= self.config["audio"]["asr_chunk_ms"] * 16
             ):
                 audio = np.concatenate(self.utterance)
-                result = self.asr.feed(
-                    level_match(audio[self.sent :], self.config["audio"]["target_rms"]), final
-                )
+                result = self._recognize(audio[self.sent :], final)
                 self.sent = count
                 if generation != self.worker.generation:
                     return
@@ -274,6 +276,29 @@ class AudioService:
                 )
             if final:
                 self.utterance.clear()
+                self.normalized.clear()
+                self.level.reset()
                 self.sent = 0
                 self.segmenter.reset()
                 self.asr.reset()
+
+    def _recognize(self, samples: np.ndarray, final: bool) -> Recognition:
+        normalized = self.level.feed(samples)
+        self.normalized.append(normalized)
+        try:
+            return self.asr.feed(normalized, final)
+        except RuntimeError:
+            if not isinstance(self.asr, NemotronASR):
+                self._reset()
+                raise
+            logger.warning("Nemotron decoding failed; retrying utterance with local Whisper")
+            try:
+                fallback = WhisperASR(
+                    self.config["whisper"] | {"languages": self.config["audio"]["languages"]}
+                )
+                result = fallback.feed(np.concatenate(self.normalized), final)
+            except Exception:
+                self._reset()
+                raise
+            self.asr = fallback
+            return result

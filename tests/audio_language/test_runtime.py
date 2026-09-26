@@ -58,3 +58,21 @@ def test_stop_cleans_up_once_and_unsubscribes(bus):
     worker.stop()
     assert cleaned == [True]
     assert not bus.callbacks["caption"]
+
+
+def test_worker_health_reports_capture_failure(bus):
+    worker = Worker(bus, "audio", lambda *args: None)
+    worker.health = lambda: {
+        "ok": False,
+        "detail": "microphone unavailable",
+        "metrics": {"capture_dropped": 2},
+    }
+    worker.start()
+    try:
+        wait_for(lambda: any(topic == "status.part" for topic, _ in bus.events))
+    finally:
+        worker.stop()
+    health = next(event for topic, event in bus.events if topic == "status.part")
+    assert health["ok"] is False
+    assert health["detail"] == "microphone unavailable"
+    assert health["metrics"]["capture_dropped"] == 2

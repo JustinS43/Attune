@@ -25,6 +25,30 @@ def level_match(samples: np.ndarray, target: float) -> np.ndarray:
     return np.asarray(samples * gain, dtype=np.float32)
 
 
+class UtteranceLevel:
+    """Choose gain from the first speech chunk; never amplify trailing noise anew."""
+
+    def __init__(self, target: float) -> None:
+        self.target = target
+        self.reset()
+
+    def reset(self) -> None:
+        """Begin a new utterance with no inherited gain or PCM."""
+        self.gain: float | None = None
+
+    def feed(self, samples: np.ndarray) -> np.ndarray:
+        """Apply consistent gain, reducing it only to avoid clipping."""
+        if not len(samples):
+            return samples.copy()
+        peak = float(np.max(np.abs(samples)))
+        if self.gain is None:
+            rms = float(np.sqrt(np.mean(samples * samples)))
+            self.gain = self.target / rms if rms > np.finfo(np.float32).eps else 1.0
+        if peak:
+            self.gain = min(self.gain, 0.99 / peak)
+        return np.asarray(samples * self.gain, dtype=np.float32)
+
+
 def token_words(tokens: list, times: list, duration: float) -> list[tuple[str, float, float]]:
     """Combine sentencepiece tokens; clamp model timestamps to real PCM duration."""
     result: list[tuple[str, float, float]] = []
