@@ -74,9 +74,9 @@ class AudioService:
         self.sent = 0
         self.level = UtteranceLevel(
             cfg["target_rms"],
-            window_s=cfg.get("level_window_s", 1.0),
+            window_s=cfg.get("level_window_s", 0.5),
             rise_db_s=cfg.get("level_rise_db_s", 0.0),
-            percentile=cfg.get("level_percentile", 90.0),
+            percentile=cfg.get("level_percentile", 50.0),
         )
         self.normalized: list[np.ndarray] = []
         self.utt_id = ""
