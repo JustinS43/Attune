@@ -8,8 +8,8 @@
 .enroll-step.current { color: var(--teal-strong); }
 .enroll-step.current b { background: var(--teal-wash); }
 
-.enroll-photo { position: relative; height: 280px; display: grid; place-items: center; overflow: hidden; margin-bottom: 12px; background: var(--surface-soft); }
-.enroll-preview { display: none; width: 100%; height: 100%; object-fit: cover; background: var(--surface-soft); }
+.enroll-photo { position: relative; height: min(400px, 100vw); display: grid; place-items: center; overflow: hidden; margin-bottom: 12px; background: var(--surface-soft); }
+.enroll-preview { display: none; width: 100%; height: 100%; object-fit: contain; background: var(--surface-soft); }
 .enroll-photo.has-image .enroll-preview { display: block; }
 .enroll-photo-placeholder { display: grid; justify-items: center; gap: 10px; max-width: 210px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.35; }
 .enroll-photo-placeholder .icon { width: 38px; height: 38px; color: var(--teal-strong); }

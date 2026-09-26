@@ -32,7 +32,7 @@ export function parseFrame(buffer) {
   return {
     frameNo: Number(view.getBigUint64(0, true)),
     t: view.getFloat64(8, true),
-    blob: new Blob([buffer.slice(16)], { type: 'image/jpeg' }),
+    blob: new Blob([new Uint8Array(buffer, 16)], { type: 'image/jpeg' }),
   };
 }
 
@@ -71,7 +71,9 @@ export function connect({ role, frames = false, onMessage, onFrame, onState, url
         }
         onMessage?.(msg);
       } else if (onFrame) {
-        onFrame(parseFrame(ev.data));
+        if (ev.data instanceof ArrayBuffer && ev.data.byteLength >= 16) {
+          onFrame(parseFrame(ev.data));
+        }
       }
     };
     ws.onclose = () => {

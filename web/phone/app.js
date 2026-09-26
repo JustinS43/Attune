@@ -12,6 +12,7 @@
 import { connect } from '../shared/ws.js';
 import { createSaveSheet } from './save.js';
 import {listContacts, saveContact, deleteContact, photoFromFile} from './contacts.js';
+import {portraitCrop} from './portrait.js';
 
 const app = document.querySelector('#app');
 const content = document.querySelector('#screen-content');
@@ -470,16 +471,12 @@ async function updatePortrait(frame) {
   try {
     const bitmap = await createImageBitmap(frame.blob);
     try {
-      const [x, y, w, h] = box;
-      const height = Math.max(w * 2, h * 2.25);
-      const width = height * .75;
-      const left = x + w / 2 - width / 2;
-      const top = y - h * .55;
-      if (left < 0 || top < 0 || left + width > bitmap.width || top + height > bitmap.height) {
+      const crop = portraitCrop(box, bitmap.width, bitmap.height);
+      if (!crop) {
         portraitReady = false; updateEnrollPreview(); return;
       }
       if (state.screen !== 'enroll' || state.enroll.photo || (state.enroll.trackId ?? state.faces.keys().next().value) !== trackId) return;
-      portraitContext.drawImage(bitmap, left, top, width, height, 0, 0, 360, 480);
+      portraitContext.drawImage(bitmap, crop.left, crop.top, crop.width, crop.height, 0, 0, 360, 480);
       portraitReady = true;
       updateEnrollPreview();
     } finally {
