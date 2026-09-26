@@ -26,20 +26,24 @@ def load_credentials() -> tuple[str | None, str | None]:
 
     Returns (key or None, voice id or None). Never logs the values.
     """
-    key = os.environ.get("ELEVENLABS_API_KEY")
-    voice = os.environ.get("ELEVENLABS_VOICE_ID")
-    if not key:
+
+    def clean(value: str | None) -> str | None:
+        return value.strip() or None if value else None
+
+    key = clean(os.environ.get("ELEVENLABS_API_KEY"))
+    voice = clean(os.environ.get("ELEVENLABS_VOICE_ID"))
+    if not key or not voice:
         try:
             from dotenv import dotenv_values, find_dotenv
 
             path = find_dotenv(usecwd=True)
             if path:
                 values = dotenv_values(path)
-                key = values.get("ELEVENLABS_API_KEY") or None
-                voice = voice or values.get("ELEVENLABS_VOICE_ID") or None
+                key = key or clean(values.get("ELEVENLABS_API_KEY"))
+                voice = voice or clean(values.get("ELEVENLABS_VOICE_ID"))
         except Exception:  # noqa: BLE001 - dotenv missing or unreadable .env
             logger.debug("speech_out: .env not readable")
-    return (key.strip() if key and key.strip() else None), (voice.strip() if voice else None)
+    return key, voice
 
 
 class ElevenLabsTTS:
@@ -81,6 +85,8 @@ class ElevenLabsTTS:
         self, text: str, lang: str | None = None, cancel: threading.Event | None = None
     ) -> Iterator[np.ndarray]:
         """Yield mono float32 chunks as they arrive from the network."""
+        if cancel is not None and cancel.is_set():
+            return
         kwargs = {
             "text": text,
             "model_id": self.model_id,
@@ -88,7 +94,7 @@ class ElevenLabsTTS:
         }
         if lang and lang not in ("en", "und"):
             kwargs["language_code"] = lang
-        response = self._client.text_to_speech.stream(self.voice_id, **kwargs)
+        response = self._client.text_to_speech.stream(voice_id=self.voice_id, **kwargs)
         leftover = b""
         try:
             for chunk in response:
@@ -107,5 +113,5 @@ class ElevenLabsTTS:
             if callable(close):
                 try:
                     close()
-                except Exception:
-                    logger.debug("ignored error", exc_info=True)
+                except Exception:  # noqa: BLE001 - cleanup must not expose request details
+                    logger.debug("speech_out: stream cleanup failed")

@@ -193,6 +193,103 @@ def test_elevenlabs_pcm_conversion(monkeypatch):
     assert np.allclose(out, [0, 0.5, -0.5, 32767 / 32768])
 
 
+@pytest.mark.parametrize("env_key", ["environment-key", "   ", ""])
+def test_credentials_merge_env_and_dotenv(monkeypatch, tmp_path, env_key):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", env_key)
+    monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+    (tmp_path / ".env").write_text(
+        "ELEVENLABS_API_KEY=file-key\nELEVENLABS_VOICE_ID=file-voice\n"
+    )
+    key, voice = elevenlabs_tts.load_credentials()
+    assert key == (env_key.strip() or "file-key")
+    assert voice == "file-voice"
+
+
+def test_environment_credentials_take_precedence(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", " environment-key ")
+    monkeypatch.setenv("ELEVENLABS_VOICE_ID", " environment-voice ")
+    (tmp_path / ".env").write_text(
+        "ELEVENLABS_API_KEY=file-key\nELEVENLABS_VOICE_ID=file-voice"
+    )
+    assert elevenlabs_tts.load_credentials() == ("environment-key", "environment-voice")
+
+
+def test_cancelled_reply_does_not_contact_elevenlabs():
+    tts = elevenlabs_tts.ElevenLabsTTS.__new__(elevenlabs_tts.ElevenLabsTTS)
+    cancel = threading.Event()
+    cancel.set()
+    # No client: any attempt to contact the provider would fail this test.
+    assert list(tts.stream("cancelled reply", cancel=cancel)) == []
+
+
+def test_real_sdk_request_streams_only_reply(monkeypatch):
+    """Exercise the installed SDK and HTTP serialization without contacting ElevenLabs."""
+    import httpx
+    from elevenlabs.client import ElevenLabs
+
+    requests = []
+
+    def respond(request):
+        import json
+
+        requests.append(request)
+        body = json.loads(request.content)
+        assert body["text"] == "Nice to meet you"
+        assert body["model_id"] == "eleven_flash_v2_5"
+        assert body["language_code"] == "es"
+        assert set(body) == {"text", "model_id", "language_code"}
+        assert request.url.params["output_format"] == "pcm_24000"
+        assert request.url.path == "/v1/text-to-speech/test-voice/stream"
+        return httpx.Response(
+            200, content=np.array([0, 16384, -16384], "<i2").tobytes()
+        )
+
+    tts = elevenlabs_tts.ElevenLabsTTS.__new__(elevenlabs_tts.ElevenLabsTTS)
+    tts.voice_id, tts.model_id, tts.sample_rate = (
+        "test-voice",
+        "eleven_flash_v2_5",
+        24000,
+    )
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        tts._client = ElevenLabs(api_key="test-key", httpx_client=client)
+        audio = np.concatenate(list(tts.stream("Nice to meet you", "es")))
+    assert len(requests) == 1
+    assert np.allclose(audio, [0, 0.5, -0.5])
+
+
+@pytest.mark.parametrize("first_audio", [False, True])
+def test_forget_releases_stalled_network_stream(bus, make, first_audio):
+    entered = threading.Event()
+    release = threading.Event()
+
+    class StalledVoice:
+        sample_rate = 24000
+
+        def stream(self, text, lang=None, cancel=None):
+            if first_audio:
+                yield np.zeros(240, np.float32)
+            entered.set()
+            release.wait(5)
+
+    service = make(eleven=StalledVoice(), fallback=4)
+    try:
+        speak(bus)
+        assert entered.wait(1)
+        if first_audio:
+            assert wait_for(lambda: bus.of("reply.spoken"))
+        bus.publish("session.forget", {})
+        assert wait_for(lambda: not service.speaking, timeout=0.5)
+        service.stop()
+        assert not service._thread.is_alive()
+        assert service.kokoro.calls == []
+        states = [e["state"] for e in bus.of("speech_out.playing")]
+        assert states == (["start", "end"] if first_audio else [])
+    finally:
+        release.set()
+
+
 def test_resample_length():
     x = np.zeros(2400, np.float32)
     assert len(resample(x, 24000, 48000)) == 4800
