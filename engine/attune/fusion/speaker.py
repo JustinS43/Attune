@@ -96,6 +96,7 @@ class _Group:
     prev: list[str] = field(default_factory=list)  # ids of the shown segments it holds
     locked: bool = False  # already shown: a known speaker here is not smoothed away
     evidence: list = field(default_factory=list)  # the timeline's speaker per word
+    shown: bool = False  # holds words already shown in another segment
 
 
 def _db(level: float) -> float:
@@ -204,6 +205,7 @@ def _merge_neighbours(groups: list[_Group]) -> list[_Group]:
                 a.prev + g.prev,
                 a.locked or g.locked,
                 a.evidence + g.evidence,
+                a.shown or g.shown,
             )
         else:
             out.append(g)
@@ -548,6 +550,13 @@ class SpeakerFusion:
                 tail.append((w, spk))
             else:
                 per_seg[bisect_right(bounds, m)].append((w, spk))
+        # the last segment's trailing words that only joined it while too short to stand
+        # alone (their evidence points elsewhere) are split again with the new words
+        last, mine = per_seg[-1], _who(segs[-1].speaker)
+        k = len(last)
+        while k > 1 and _who(last[k - 1][1]) != mine:
+            k -= 1
+        reopened, per_seg[-1] = last[k:], last[:k]
         locked = [
             _Group(
                 self._keep_or_relabel(seg.speaker, pairs),
@@ -559,14 +568,12 @@ class SpeakerFusion:
             for seg, pairs in zip(segs, per_seg)
             if pairs  # a segment whose words all vanished from the draft is dropped
         ]
-        if locked and locked[-1].prev == [segs[-1].uid]:
-            last, mine = locked[-1], _who(locked[-1].speaker)
-            k = len(last.words)
-            while k > 1 and _who(last.evidence[k - 1]) != mine:
-                k -= 1
-            tail = list(zip(last.words[k:], last.evidence[k:])) + tail
-            last.words, last.evidence = last.words[:k], last.evidence[:k]
-        return locked + _raw_groups(tail)
+        fresh = _raw_groups(reopened + tail)
+        n = 0
+        for g in fresh:
+            g.shown = n < len(reopened)
+            n += len(g.words)
+        return locked + fresh
 
     def _keep_or_relabel(self, cur: Speaker, pairs: list) -> Speaker:
         """A shown segment's speaker, given the evidence now over its words."""
@@ -613,6 +620,7 @@ class SpeakerFusion:
                     gs[lo].prev + gs[hi].prev,
                     gs[lo].locked or gs[hi].locked,
                     gs[lo].evidence + gs[hi].evidence,
+                    gs[lo].shown or gs[hi].shown,
                 )
             ]
 
@@ -627,6 +635,9 @@ class SpeakerFusion:
             if sandwiched and span(g.words) < short:
                 return 0, i - 1
             if g.speaker.kind == "someone" and known and span(g.words) < 2 * short:
+                return 1, max(known, key=lambda k: span(gs[k].words))
+            if g.shown and known and span(g.words) < self.s.move_segment_s:
+                # words would leave the bubble they were shown in: that needs more evidence
                 return 1, max(known, key=lambda k: span(gs[k].words))
             if span(g.words) < short:
                 return 2, max(nbrs, key=lambda k: span(gs[k].words))

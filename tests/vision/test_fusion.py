@@ -647,3 +647,22 @@ def test_a_stretched_last_word_does_not_make_its_own_segment():
         caps = f._captions_for(draft("u8", words, i == 2), now=2.0 + i, first_seen=0.0)
         assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u8", 1)]
     assert f.take_retractions() == []
+
+
+def test_shown_words_need_a_longer_run_to_move_to_another_speaker():
+    f = SpeakerFusion(FusionSettings())
+    words = [
+        ("Did", 0.0, 0.3),
+        ("you", 0.35, 0.5),
+        ("hear", 0.55, 0.8),
+        ("the", 0.85, 1.0),
+    ]
+    words += [("doorbell", 1.05, 1.4), ("a", 1.45, 1.55), ("minute", 1.6, 1.85)]
+    words += [("ago", 1.9, 2.1)]
+    f.timeline.extend([(0.0, A), (1.1, B)])  # a late flicker to B for the last second
+    caps = f._captions_for(draft("u9", words[:5]), now=1.5, first_seen=0.0)
+    assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u9", 1)]
+    # 1.05 s of B, including "doorbell" already shown with A: not enough to move it
+    caps = f._captions_for(draft("u9", words, True), now=2.5, first_seen=0.0)
+    assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u9", 1)]
+    assert f.take_retractions() == []

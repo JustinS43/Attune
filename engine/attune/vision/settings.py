@@ -72,6 +72,9 @@ class FusionSettings:
     # A word counts at most this long when measuring a caption piece: the streaming
     # recogniser stretches a draft's last word to the end of its audio chunk.
     max_word_s: float = 0.6
+    # Words already shown move to a new segment (a turn change found late) only as part
+    # of a run of another speaker at least this long.
+    move_segment_s: float = 1.2
     utterance_memory_s: float = 60.0  # forget an unfinished utterance's segments after this
     rate_hz: float = 15.0
     sync_min_corr: float = 0.3
