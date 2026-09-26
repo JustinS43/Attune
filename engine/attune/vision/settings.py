@@ -47,6 +47,20 @@ class VisionSettings:
     landmarker_model: str = "models/faces/mediapipe/face_landmarker.task"
     people_dir: str = "data/people"
     use_gpu: bool = True
+    # Light-ASD (V-22): who is talking from lips and sound together (vision/asd.py). With
+    # it off, or its weights missing, tracks carry no asd_score and fusion uses the lip score.
+    asd_enabled: bool = True
+    asd_model: str = "models/light_asd/finetuning_TalkSet.model"
+    asd_device: str = "cuda"  # "cpu" works, but in a busy engine its rounds are slow (~600 ms)
+    asd_rate_hz: float = 5.0  # scoring rounds per second (all faces in one batch)
+    asd_window_s: float = 1.5  # history each round looks at
+    asd_score_s: float = 0.4  # the score is the mean over the newest part of the window
+    asd_faces: int = 4  # largest faces scored
+    asd_min_face_px: int = 40
+    asd_max_gap_s: float = 0.2  # longest hole in a face's frames a window may have
+    asd_min_fps: float = 12.0  # fewer frames a second than this: no score (vision too slow)
+    asd_av_offset_s: float = 0.0  # audio lags video by this much
+    asd_max_age_s: float = 0.6  # a score older than this isn't published
 
 
 @dataclass
@@ -93,6 +107,14 @@ class FusionSettings:
     offscreen_after_s: float = 1.0
     offscreen_exit_memory_s: float = 30.0
     side_db: float = 3.0
+    # Light-ASD (V-22, fusion/asd_gate.py): a face with a fresh asd_score (a logit; > 0 is
+    # talking) is talking from asd_on until it drops below asd_off, instead of by the
+    # lip-score checks above; the voice veto and the hold/switch rules still apply. Faces
+    # without a fresh score keep the lip-score checks; asd_use = false ignores the scores.
+    asd_use: bool = True
+    asd_on: float = 0.5
+    asd_off: float = -0.5
+    asd_fresh_s: float = 0.6  # by frame time
     you_level_db: float | None = None  # set by calibration; None disables the "You" case
     you_balance_db: float = 3.0
     harvest_after_s: float = 1.5

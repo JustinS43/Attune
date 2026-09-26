@@ -37,6 +37,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-19 Recover when a camera opens without frames: report usable video and retry a smaller capture mode — C922 hardware check pending (#56)
 - [x] V-20 Prefer any connected USB webcam on macOS instead of matching a camera model name (#56)
 - [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
+- [x] V-22 Light-ASD active speaker model decides who is talking (#58)
 
 ## Section 2 – Audio & Language
 

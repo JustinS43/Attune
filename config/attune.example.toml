@@ -24,6 +24,14 @@ track_survive_s = 1.0
 lost_list_s = 10.0
 enroll_crops = 8
 enroll_min_crops = 5
+# Light-ASD (V-22): lips + sound decide who is talking. Weights: scripts/download_models.py light_asd
+asd_enabled = true              # false, or weights missing: the lip score decides alone
+asd_device = "cuda"             # ~25-80 ms a round; "cpu" is ~150 ms idle but ~600 ms in a busy engine
+asd_rate_hz = 5                 # scoring rounds per second, all faces in one batch
+asd_window_s = 1.5
+asd_min_face_px = 40
+asd_min_fps = 12                # vision slower than this: no score, the lip score decides
+asd_av_offset_s = 0.0           # audio lags video by this much
 
 [fusion]
 # Lip score = band-passed mouth movement (V-19; the old plain std was about 2.5x larger).
@@ -54,6 +62,9 @@ switch_ratio = 1.5
 voice_match = 0.5
 offscreen_exit_memory_s = 30
 side_db = 3.0
+asd_use = true                  # a face with a fresh Light-ASD score talks only when it says so
+asd_on = 0.5                    # score (logit) that starts a face talking...
+asd_off = -0.5                  # ...and that stops it again
 harvest_after_s = 1.5
 first_words_wait_ms = 300
 rate_hz = 15

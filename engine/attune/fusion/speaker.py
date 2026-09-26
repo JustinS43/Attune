@@ -56,6 +56,10 @@ match to one reads "Someone". A face that talks on its own evidence with an
 off-screen voice for `offscreen_claim_s` claims it (its mouth was covered, say,
 while that voice was learnt).
 
+Light-ASD (V-22, asd_gate.py). For a face with a fresh `asd_score`, Light-ASD's verdict
+(lips and sound together) replaces the talking checks above in `decide`; the voice
+veto, the hold and switch rules and "You" still apply. Other faces keep the checks.
+
 Captions: every word has a time, so a transcript is split where the speaker
 changes. If nobody qualifies yet, the first words wait up to 300 ms for a
 speaker before showing as "Someone". Once a segment is shown, later drafts keep
@@ -88,6 +92,7 @@ from ..vision.types import (
     VoiceHarvest,
     get,
 )
+from .asd_gate import AsdGate
 from .harvest import Harvester, voice_id
 from .sync import Envelope, in_time_score
 
@@ -270,6 +275,7 @@ def _merge_neighbours(groups: list[_Group]) -> list[_Group]:
 class SpeakerFusion:
     def __init__(self, settings: FusionSettings | None = None):
         self.s = settings or FusionSettings()
+        self.asd_gate = AsdGate(self.s)  # V-22: Light-ASD decides for the faces it scores
         self.tracks: dict[int, _TrackInfo] = {}
         self.frame_no = 0
         self.frame_t = 0.0
@@ -304,6 +310,7 @@ class SpeakerFusion:
 
     # ---------------- inputs ----------------
     def on_tracks(self, ev) -> None:
+        self.asd_gate.on_tracks(ev)
         t = float(get(ev, "t"))
         self.frame_no = int(get(ev, "frame_no", 0))
         self.frame_t = t
@@ -941,7 +948,7 @@ class SpeakerFusion:
         self._assess(now)
         self._claim(now)
         self._decided_by = None
-        spk, r = self.decide(now)
+        spk, r = self.asd_gate.decide(self, now)  # V-22: decide(), Light-ASD for faces it scores
         if not _same(spk, self.current):
             self._current_since = now
         self.current = spk

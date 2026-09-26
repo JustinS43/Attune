@@ -67,6 +67,9 @@ class Track:
     match_score: float
     status: str  # unknown, proposed, named, enrolled
     mouth_open: float | None = None  # latest mouth-open ratio, for the in-time check
+    # Light-ASD speaking logit (V-22): > 0 means talking in time with the sound. None when
+    # the face isn't scored (model off, face too small, too little history) or it's stale.
+    asd_score: float | None = None
 
 
 @dataclass

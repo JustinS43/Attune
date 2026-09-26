@@ -12,6 +12,10 @@ Threads:
 Face prints are rate-limited to `max_rec_per_s` (10/s): new faces and
 unknown faces first, then the 2-second rechecks of named faces. An
 enrollment in progress gets its own budget.
+
+Light-ASD (V-22, asd.py) runs on its own thread: the vision thread only adds each
+face's mouth crop, the 16 kHz `audio.block` stream feeds it from the bus, and each
+`Track` carries the face's latest `asd_score`.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ import numpy as np
 
 from . import types as T
 from .appearance import dominant_color, upper_body_box
+from .asd import ActiveSpeakerDetector, LightASD, asd_crop
 from .camera import Camera
 from .detector import FaceDetector
 from .embedder import FaceEmbedder, align, crop_quality
@@ -74,6 +79,7 @@ class VisionService:
         self.detector: FaceDetector | None = None
         self.embedder: FaceEmbedder | None = None
         self.mouth: MouthMeter | None = None
+        self.asd: ActiveSpeakerDetector | None = None
         self.gallery = Gallery(self._path(self.s.people_dir))
         self.rules = IdentityRules(
             self.gallery,
@@ -120,7 +126,36 @@ class VisionService:
         except Exception as exc:  # noqa: BLE001 - lips are needed for who's talking, but faces still work without
             log.error("Lip motion disabled: %s", exc)
             self.mouth = None
+        self.asd = self._load_asd()
         log.info("Vision models loaded on %s", self.detector.providers[0])
+
+    def _load_asd(self) -> ActiveSpeakerDetector | None:
+        """Light-ASD, or None (fusion then uses the lip score alone)."""
+        s = self.s
+        if not s.asd_enabled:
+            return None
+        path = self._path(s.asd_model)
+        if not os.path.exists(path):
+            log.info(
+                "Light-ASD off: %s is missing (scripts/download_models.py light_asd)", s.asd_model
+            )
+            return None
+        try:
+            model = LightASD(path, s.asd_device)
+        except Exception as exc:  # noqa: BLE001 - who's talking still works on the lip score
+            log.error("Light-ASD disabled: %s", exc)
+            return None
+        log.info("Light-ASD loaded on %s", model.device)
+        return ActiveSpeakerDetector(
+            model,
+            rate_hz=s.asd_rate_hz,
+            window_s=s.asd_window_s,
+            score_s=s.asd_score_s,
+            max_gap_s=s.asd_max_gap_s,
+            min_fps=s.asd_min_fps,
+            av_offset_s=s.asd_av_offset_s,
+            max_age_s=s.asd_max_age_s,
+        )
 
     def connect(self) -> None:
         """Subscribe to the bus. Commands are queued and handled on the vision thread."""
@@ -131,10 +166,19 @@ class VisionService:
             T.PAUSED, lambda ev: put({"name": "_paused", "args": {"paused": T.get(ev, "paused")}})
         )
         self.bus.subscribe(T.NAME_PROPOSAL, lambda ev: put({"name": "_proposal", "args": ev}))
+        self.bus.subscribe(T.AUDIO_BLOCK, self._on_audio_block)
+
+    def _on_audio_block(self, ev: Any) -> None:
+        """16 kHz PCM for Light-ASD; just copied into its ring, so the bus isn't held up."""
+        asd = self.asd
+        if asd is not None and int(T.get(ev, "sample_rate", 0)) == 16000:
+            asd.add_audio(float(T.get(ev, "t")), T.get(ev, "samples"))
 
     def start(self) -> None:
         self.load_models()
         self.connect()
+        if self.asd is not None:
+            self.asd.start()
         s = self.s
         self.camera = Camera(
             s.camera_name,
@@ -158,6 +202,8 @@ class VisionService:
             self.camera.stop()
         if self._thread:
             self._thread.join(timeout=2.0)
+        if self.asd is not None:
+            self.asd.stop()
         if self.mouth:
             self.mouth.close()
 
@@ -320,6 +366,7 @@ class VisionService:
         self._lips(image, upd.active, t)
         self._timings["lips"].append(time.perf_counter() - t0)
 
+        self._asd_crops(image, upd.active, t)
         self._colors(image, upd.active, t)
 
         out = T.Tracks(frame_no, t, [self._track_msg(tr, t) for tr in upd.active])
@@ -456,6 +503,19 @@ class VisionService:
                 tr.data["lips"].add(t, ratio)
                 tr.data["mouth"] = ratio
 
+    def _asd_crops(self, image: np.ndarray, active: list[FaceTrack], t: float) -> None:
+        """Hand the largest detected faces' mouth crops to Light-ASD (about 0.5 ms a face)."""
+        if self.asd is None:
+            return
+        seen = sorted((tr for tr in active if tr.seen), key=lambda tr: -tr.det.width)
+        for tr in seen[: self.s.asd_faces]:
+            if tr.det.width < self.s.asd_min_face_px:
+                continue
+            crop = asd_crop(image, tr.kf.box)  # the filtered box: steadier crops
+            if crop is not None:
+                self.asd.add_face(tr.track_id, t, crop)
+        self.asd.keep_only({tr.track_id for tr in active})
+
     def _colors(self, image: np.ndarray, active: list[FaceTrack], t: float) -> None:
         for tr in active:
             if not tr.seen or "color" in tr.data or tr.data["ident"].person_id is not None:
@@ -494,7 +554,12 @@ class VisionService:
             match_score=ident.match_score,
             status=status,
             mouth_open=tr.data.get("mouth"),
+            asd_score=self._asd_score(tr.track_id, t),
         )
+
+    def _asd_score(self, track_id: int, t: float) -> float | None:
+        score = None if self.asd is None else self.asd.score(track_id, t)
+        return None if score is None else round(score, 2)
 
     def _publish_status(self, t: float, out: T.Tracks | None) -> None:
         if t - self._last_status < 1.0:
@@ -535,6 +600,8 @@ class VisionService:
                     "gpu": bool(
                         self.detector and "CUDAExecutionProvider" in self.detector.providers
                     ),
+                    "asd": self.asd is not None and not self.asd.failed,
+                    **(self.asd.metrics() if self.asd is not None else {}),
                 },
             ),
         )
