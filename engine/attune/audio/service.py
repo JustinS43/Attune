@@ -39,6 +39,12 @@ class AudioService:
         self.pending = np.empty(0, np.float32)
         self.pending_t = None
         self.utterance: list = []
+        # Soft word onsets ("h" in "Hi") score under vad_start, so the frames just
+        # before speech is detected are kept and prepended to the utterance.
+        self.pre_roll: deque[np.ndarray] = deque(
+            maxlen=max(0, round(config["audio"].get("pre_roll_ms", 320) / 32))
+        )
+        self.utt_t0 = 0.0
         self.speech_audio: list[np.ndarray] = []
         self.sent = 0
         self.level = UtteranceLevel(config["audio"]["target_rms"])
@@ -109,6 +115,7 @@ class AudioService:
         self.pending = np.empty(0, np.float32)
         self.pending_t = None
         self.utterance.clear()
+        self.pre_roll.clear()
         self.speech_audio.clear()
         self.sent = 0
         self.level.reset()
@@ -286,7 +293,12 @@ class AudioService:
             if self.segmenter.start is not None:
                 if not self.utterance:
                     self.utt_id = str(uuid4())
+                    self.utterance.extend(self.pre_roll)
+                    self.utt_t0 = self.segmenter.start - 0.032 * len(self.pre_roll)
+                    self.pre_roll.clear()
                 self.utterance.append(frame.copy())
+            else:
+                self.pre_roll.append(frame.copy())
             count = len(self.utterance) * 512
             final = ended or count >= self.config["audio"]["max_utterance_s"] * 16000
             if self.segmenter.confirmed and (
@@ -297,7 +309,7 @@ class AudioService:
                 self.sent = count
                 if generation != self.worker.generation:
                     return
-                start = self.segmenter.start
+                start = self.utt_t0
                 if result.text:
                     lang = self.language.detect(result.text, result.lang) if final else result.lang
                     self.worker.publish(
