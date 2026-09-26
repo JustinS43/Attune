@@ -9,6 +9,8 @@ Section 1 - Vision. TODO: V-01. Plan: section 05 "Capture".
   newest one.
 - If the camera disappears, reports "camera lost" and keeps retrying every
   second; it's back within about 5 s of being replugged.
+- If the named camera is missing it falls back to another one, and every few
+  seconds looks for the named camera again; once it's back it switches to it.
 - A video file can stand in for the camera (tests and demos), played back at
   its own frame rate.
 """
@@ -63,8 +65,14 @@ def pick_camera(name: str, fallback_any: bool = True) -> CameraInfo | None:
     return None
 
 
+def _matches(name: str, cam_name: str) -> bool:
+    return bool(name) and name.lower() in cam_name.lower()
+
+
 class Camera:
     """Reads frames on its own thread and hands each one to `on_frame`."""
+
+    PREFERRED_RECHECK_S = 3.0  # while on a fallback camera, look for the named one this often
 
     def __init__(
         self,
@@ -88,7 +96,9 @@ class Camera:
         self.on_frame = on_frame
         self.on_status = on_status
         self.device_name = ""
+        self.on_fallback = False
         self.connected = False
+        self._detail = ""
         self.frame_no = 0
         self.measured_fps = 0.0
         self._latest: tuple[int, float, np.ndarray] | None = None
@@ -127,6 +137,7 @@ class Camera:
 
     # ---- internals ----
     def _open(self) -> cv2.VideoCapture | None:
+        self.on_fallback = False
         if self.is_file:
             cap = cv2.VideoCapture(self.source)
             self.device_name = os.path.basename(str(self.source))
@@ -142,6 +153,7 @@ class Camera:
                 return None
             cap = cv2.VideoCapture(info.index, info.backend)
             self.device_name = info.name
+            self.on_fallback = bool(self.name) and not _matches(self.name, info.name)
         if not cap.isOpened():
             return None
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
@@ -152,11 +164,15 @@ class Camera:
         return cap
 
     def _set_status(self, ok: bool, detail: str) -> None:
-        if ok != self.connected:
-            self.connected = ok
+        # A switch between cameras keeps ok=True but changes the device in the detail.
+        if ok != self.connected or (ok and detail != self._detail):
+            self.connected, self._detail = ok, detail
             log.info("Camera %s: %s", "connected" if ok else "lost", detail)
             if self.on_status:
                 self.on_status(ok, detail)
+
+    def _preferred_is_back(self) -> bool:
+        return any(_matches(self.name, cam.name) for cam in list_cameras())
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -176,7 +192,13 @@ class Camera:
         next_due = time.perf_counter()
         fails_since = None
         window_start, window_count = time.perf_counter(), 0
+        next_check = time.perf_counter() + self.PREFERRED_RECHECK_S
         while not self._stop.is_set():
+            if self.on_fallback and time.perf_counter() >= next_check:
+                next_check = time.perf_counter() + self.PREFERRED_RECHECK_S
+                if self._preferred_is_back():
+                    log.info("Camera %r is back; switching from %s", self.name, self.device_name)
+                    return  # _run releases the fallback and reopens by name
             ok, frame = cap.read()
             if not ok or frame is None:
                 if self.is_file and self.loop_file:

@@ -55,6 +55,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3 — wizard, profiles and guide implemented; CalibrationService runs in `python -m attune` and the console has the step buttons (#20, #18); manual clap annotations and a venue run pending
 - [x] A-17 Test tone generator (T3, T4) · M2 — generator implemented and both frequency bands tested; PR number pending GitHub access
 - [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
+- [x] A-19 Hot-plug recovery: re-initialise PortAudio after a mic loss, fall back, return to `[audio] device_name` between utterances; camera returns to `[vision] camera_name` after replug (Vision file) · M2 — unit-tested with fake devices; a real unplug/replug is still to check on the rig (#52)
 
 ## Section 3 – Hardware & Services
 
