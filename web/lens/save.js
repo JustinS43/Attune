@@ -283,6 +283,35 @@ export function createSaveFlow(store, { send, source } = {}) {
   }, '', { priority: 20 });
 
   // ------------------------------------------------------------------ per frame
+  /**
+   * Once a save starts for someone, their tag and captions use the name being saved straight
+   * away (not "Person in black top · New" beside a card that already says "Mom"): the faces with
+   * their track and every caption anchored to them are relabelled for this frame. A save that
+   * ended without saving (cancelled, failed, a hint) leaves the labels alone.
+   */
+  function nameThem(view, f) {
+    if (f.track == null || !f.name || !['waiting', 'face', 'voice', 'saved'].includes(f.phase)) return;
+    const relabel = (face) => {
+      if (!face || face.track_id !== f.track || face.proposal?.state === 'proposed') return;
+      if (face.known && face.label === f.name) return;
+      face.label = f.name;
+      face.known = true;
+      face.status = face.status === 'enrolled' ? face.status : 'named';
+      if (f.color) face.color = f.color;
+      face.relation = f.relation ?? face.relation ?? null;
+    };
+    for (const face of view.faces) relabel(face);
+    for (const b of view.feed) {
+      if (!b.face || b.face.track_id !== f.track) continue;
+      relabel(b.face);
+      if (b.face.proposal?.state === 'proposed') continue;
+      b.name = f.name;
+      b.known = true;
+      b.color = b.face.color;
+      b.relation = b.face.relation;
+    }
+  }
+
   /** Advance the flow and hang view.save on the view model (null when nothing to show). */
   function decorate(view, dt) {
     lastView = view;
@@ -319,6 +348,7 @@ export function createSaveFlow(store, { send, source } = {}) {
     }
     f.color = f.person?.color ?? (face?.known ? face.color : f.color);
     f.relation = f.person?.relation ?? face?.relation ?? f.relation;
+    nameThem(view, f);
     // the store's own "X saved" toast would say it twice: this card says it
     if (f.name && store.state.toasts.length) {
       store.state.toasts = store.state.toasts.filter((t) => !(t.kind === 'learned' && t.text === f.name));

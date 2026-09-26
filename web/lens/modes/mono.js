@@ -7,12 +7,15 @@
  * Physically honest (docs/glasses-realism.md): the display is a 640x200 band that covers about
  * 530x165 px of the 1920x1080 frame, centred horizontally and at or slightly above eye level
  * (display height levels 0-8, keys [ and ]; level 4 puts its centre about 5 degrees up). It is
- * head-locked, so there are no face-anchored bubbles: the current speaker's name, 4 caption lines,
- * and < > chevrons at the band's edges toward the speaker or a sound.
+ * head-locked, so there are no face-anchored bubbles: a speaker's name, 4 caption lines,
+ * and < > chevrons at the band's edges toward the current speaker or a sound.
  * Captions are a running log with fixed line positions (modes/common.js): each speaker turn
  * starts on a new line, earlier turns dim, drafts are dimmer and firm up without reflowing,
- * and the text rolls up one line at a time. The name in the header only changes when the
- * speaker does; a proposal or "saved" line takes the fourth line and the text rolls up to make room. Pure green light only: no
+ * and the text rolls up one line at a time. The header names the speaker of the line directly
+ * under it, and a line whose speaker differs from the line before it starts with "NAME:", so
+ * every line's speaker is clear. A proposal, "saved" line or a line waiting for its
+ * translation (the original, small and dimmed, "TRANSLATING…") takes the fourth line and the
+ * text rolls up to make room; untranslated words never join the caption lines. Pure green light only: no
  * fills, nothing dark (a waveguide cannot draw black), a 3-4 px glow, nothing outside the band.
  * Alerts become an icon and a word; name proposals read "SAM?  ✓ Y  ✕ N".
  */
@@ -35,6 +38,7 @@ const F = {
   small: font(560, 16, FT),
   big: font(680, 34, FT),
   mid: font(520, 21, FT),
+  orig: font(500, 20, FT), // a line waiting for its translation: smaller and dimmed
   // alerts must read over a bright scene: heavier and larger, drawn with an outline (strong())
   alertBig: font(800, 38, FT),
   alertMid: font(700, 24, FT),
@@ -117,6 +121,15 @@ function edgeChevrons(ctx, side, anim, strong) {
   ctx.restore();
 }
 
+/** `str` cut with an ellipsis to fit maxW in font f. */
+function fitEnd(ctx, str, f, maxW) {
+  ctx.font = f;
+  if (ctx.measureText(str).width <= maxW) return str;
+  let out = str;
+  while (out.length > 1 && ctx.measureText(`${out}…`).width > maxW) out = out.slice(0, -1);
+  return `${out.trimEnd()}…`;
+}
+
 function monoIcon(ctx, name, x, y, size, lw = 2.2, a = 1) {
   ctx.globalAlpha = a;
   icon(ctx, name, x, y, size, G, lw);
@@ -191,14 +204,19 @@ export function createMonoMode() {
         const prop = view.pendingProposal;
         const toast = view.toasts.find((t) => t.kind === 'learned' && t.age < 3);
         const saving = !!view.save; // P-29: the save line (save.js) takes the fourth line
-        const footer = !!prop || !!toast || saving;
+        const waiting = !prop && !toast && !saving ? view.translating : null; // a line awaiting its translation
+        const footer = !!prop || !!toast || saving || !!waiting;
         const footY = BODY_Y + 3 * LH;
         const rows = footer ? 3 : 4;
-        const st = log.update(ctx, view, LINE_W, F.body, rows, anim, view.dt);
-        const cap = st?.current ?? null;
-        const capA = st?.currentAlpha ?? 0;
-        last = { key: chip ? `alert:${chip.id}` : st?.currentKey ?? null, name: chip ? chip.label : cap?.name ?? null, lines: log.shown(st, rows), side: !chip && cap?.dir && cap.dir.side !== 'ahead' ? cap.dir.side : null };
-        // header: a sound, else the current speaker (changes only when the speaker does), else who is in view
+        const st = log.update(ctx, view, LINE_W, F.body, rows, anim, view.dt, false, true);
+        const cur = st?.current ?? null; // the newest speaker: the chevrons point to them
+        // the header names the speaker of the line directly under it (lines from someone else
+        // start with their own "NAME:"), so a name never sits above another person's words
+        const topLine = st?.lines.length ? st.lines[clamp(Math.round(st.top), 0, st.lines.length - 1)] : null;
+        const cap = topLine?.entry.b ?? cur;
+        const capA = topLine ? topLine.entry.alpha : st?.currentAlpha ?? 0;
+        last = { key: chip ? `alert:${chip.id}` : st?.currentKey ?? null, name: chip ? chip.label : cap?.name ?? null, lines: log.shown(st, rows), side: !chip && cur?.dir && cur.dir.side !== 'ahead' ? cur.dir.side : null, translating: waiting?.text ?? null };
+        // header: a sound, else the speaker of the top line, else who is in view
         if (chip) {
           const w = `${chip.label.toUpperCase()}${chip.count > 1 ? ` ×${chip.count}` : ''}`;
           strongIcon(ctx, chip.acked ? 'check' : chip.icon, LINE_X - 4, 8, 28);
@@ -245,7 +263,7 @@ export function createMonoMode() {
             text(ctx, t.text, LINE_X + x, BODY_Y + row * LH, F.body, e.alpha * lineA * p * lerp(0.62, 1, firm) * earlier);
           });
           ctx.restore();
-          if (!chip && cap?.dir && cap.dir.side !== 'ahead') edgeChevrons(ctx, cap.dir.side, anim, !!cap.dir.off);
+          if (!chip && cur?.dir && cur.dir.side !== 'ahead') edgeChevrons(ctx, cur.dir.side, anim, !!cur.dir.off);
         } else if (chip) {
           // nobody talking: the band has room to spell the sound out, large and heavy
           const more = view.alerts.filter((x) => x !== chip && !x.watch && x.level !== 'urgent');
@@ -264,6 +282,19 @@ export function createMonoMode() {
         } else if (toast) {
           monoIcon(ctx, 'check', VW / 2 - 134, footY - 18, 18, 2.4, 0.9);
           text(ctx, `${toast.text.toUpperCase()} SAVED`, VW / 2 - 108, footY, F.head, 0.9 * clamp((3 - toast.age) / 0.4), 'left', 2);
+        } else if (waiting) {
+          // the original, small and dimmed, until its translation takes a caption line
+          const a = clamp(waiting.alpha);
+          const hint = 'TRANSLATING…';
+          ctx.font = F.small;
+          ctx.letterSpacing = '2px';
+          const hw = ctx.measureText(hint).width;
+          ctx.letterSpacing = '0px';
+          const lang = `${String(waiting.lang || '').toUpperCase().slice(0, 2)}`;
+          const lw = lang ? ctx.measureText(lang).width + 12 : 0;
+          if (lang) text(ctx, lang, LINE_X, footY, F.small, 0.7 * a, 'left', 1);
+          text(ctx, fitEnd(ctx, waiting.text, F.orig, LINE_W - hw - lw - 18), LINE_X + lw, footY, F.orig, 0.5 * a);
+          text(ctx, hint, VW - LINE_X, footY, F.small, 0.75 * a, 'right', 2);
         }
       }
       ctx.restore();

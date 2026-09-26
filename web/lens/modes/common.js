@@ -39,6 +39,13 @@ export function primaryCaption(view) {
   return view.feed.find((b) => b.alpha > 0.02) ?? null;
 }
 
+/** A line label's short name: "Mark" -> "MARK", a description "Person in red sweater" -> "RED SWEATER". */
+export function shortName(name) {
+  const n = String(name || 'Someone').trim();
+  const short = n.replace(/^(person|someone) (in|with) /i, '');
+  return (short || n).toUpperCase();
+}
+
 /**
  * A running caption log for a head-locked display with fixed line positions, like live
  * roll-up captions:
@@ -48,7 +55,11 @@ export function primaryCaption(view) {
  * - lines never reflow once laid out (hud.js createLineWrap); the window rolls up one line at
  *   a time with a short ease;
  * - an utterance that has faded leaves the log from the top, with the same roll;
- * - the current speaker is the newest utterance's, so the name only changes when the speaker does.
+ * - the current speaker is the newest utterance's, so the name only changes when the speaker does;
+ * - with `names`, an utterance whose speaker differs from the one before it in the log starts
+ *   with a short "NAME:" label (and keeps it once it has one, so its line never reflows when the
+ *   one before it leaves), so every line's speaker is clear under a one-name header;
+ * - an utterance with no words yet (its line is still waiting for a translation) takes no line.
  */
 export function createCaptionLog() {
   const wrap = createLineWrap();
@@ -71,7 +82,7 @@ export function createCaptionLog() {
      * Update from the view; returns { lines, top, current } or null when there is nothing to show.
      * lines[i] = { entry, index } for every laid-out line; top is the (fractional) first row.
      */
-    update(ctx, view, w, f, rows, anim, dt, rollUp = false) {
+    update(ctx, view, w, f, rows, anim, dt, rollUp = false, names = false) {
       if (w !== width || f !== fontStr) {
         width = w;
         fontStr = f;
@@ -97,16 +108,24 @@ export function createCaptionLog() {
         entries.shift();
         dropped = true;
       }
-      const k = dropped ? entries[0].lineStart ?? 0 : 0;
+      // (the first entry that has a line: one still waiting for its translation has none)
+      const k = dropped ? entries.find((e) => e.lineStart >= 0)?.lineStart ?? 0 : 0;
       if (k > 0) {
         wrap.dropLines(k);
         if (scroll.top != null) scroll.top -= k;
       }
       const tokens = [];
+      let prev = null;
       for (const e of entries) {
         e.start = tokens.length;
-        e.tokens.forEach((t, i) => tokens.push(i === 0 ? { ...t, br: true } : t));
+        const has = e.tokens.length > 0;
+        if (names && has) {
+          e.named = e.named || (!!prev && prev.key !== e.key);
+          if (e.named) tokens.push({ text: `${shortName(e.b?.name)}:`, final: true, br: true, label: true });
+        }
+        e.tokens.forEach((t, i) => tokens.push(i === 0 && !(names && e.named) ? { ...t, br: true } : t));
         e.end = tokens.length;
+        if (has) prev = e;
       }
       const n = wrap.update(ctx, tokens, w, f, anim);
       const top = scrollTo(scroll, n, rows, dt, rollUp);
