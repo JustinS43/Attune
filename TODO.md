@@ -33,7 +33,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 
 ## Section 2 – Audio & Language
 
-- [ ] A-01 Mic reader: WASAPI 48 kHz, 10 ms blocks, 16 kHz + 32 kHz streams, ring buffer, laptop-mic fallback · M0 — capture timestamps, WASAPI fallback/reconnect, overflow handling, resampling, health and bounded ring retention/restart tested; real Windows device acceptance pending; PR number pending
+- [ ] A-01 Mic reader: WASAPI 48 kHz, 10 ms blocks, 16 kHz + 32 kHz streams, ring buffer, laptop-mic fallback · M0 — capture timestamps, WASAPI fallback/reconnect, overflow handling, resampling, health and bounded ring retention/restart tested; real Windows device acceptance pending; (#6)
 - [ ] A-02 Silero VAD with the plan's thresholds; publishes `audio.vad` · M1 — implemented and deterministic tests pass; local Silero acceptance and PR pending
 - [ ] A-03 Captions: Nemotron via sherpa-onnx, drafts/finals, language, word times; publishes `audio.transcript` · M1 — English Nemotron adapter, stable utterance gain and runtime Whisper recovery tested; real-model acceptance and PR pending
 - [ ] A-04 Whisper fallback (faster-whisper large-v3-turbo) · M2 — local-agreement fallback and whole-utterance retry after Nemotron failure tested; real-model acceptance and PR pending
@@ -50,7 +50,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] A-15 Suggested replies for keys 7–9 · M2 — reply jobs implemented and validated; model acceptance and PR pending
 - [ ] A-16 Calibration wizard and venue profile (+ docs/calibration.md) · M3 — wizard, profiles and guide implemented; manual clap annotations and Section 4 integration/venue run pending
 - [x] A-17 Test tone generator (T3, T4) · M2 — generator implemented and both frequency bands tested; PR number pending GitHub access
-- [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; PR number pending
+- [x] A-18 Tests in tests/audio_language · M2 — 54 tests pass, including real soxr resampling, simulated capture recovery and ring retention/restart regressions; live-model acceptance remains in relevant items; (#6)
 
 ## Section 3 – Hardware & Services
 
