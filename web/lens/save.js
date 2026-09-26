@@ -384,6 +384,8 @@ export function createSaveFlow(store, { send, source } = {}) {
   const overall = (f) => (f.phase === 'saved' ? 1 : 0.5 * f.face.shown + 0.5 * f.voice.shown);
   /** A tick's pop: 0..1 over 0.22 s after `t0` (a little overshoot), 1 with reduced motion. */
   const pop = (t0) => (t0 == null ? 0 : RM ? 1 : clamp(easeBack(clamp((nowS() - t0) / 0.22)), 0, 1.15));
+  /** Colour's calm version (P-28 Calm Colour look): a one-off grow, no overshoot. */
+  const calmPop = (t0) => (t0 == null ? 0 : RM ? 1 : lerp(0.7, 1, easeOut(clamp((nowS() - t0) / 0.2))));
 
   // ================================================================== Colour (Orion class)
   const card = { slot: null, badSince: null, pos: null, vel: { x: 0, y: 0 } };
@@ -481,8 +483,7 @@ export function createSaveFlow(store, { send, source } = {}) {
     ctx.lineWidth = 2.6;
     ctx.lineCap = 'round';
     if (f.phase === 'waiting') {
-      ctx.setLineDash([7, 7]);
-      ctx.lineDashOffset = RM ? 0 : -anim * 14;
+      ctx.setLineDash([7, 7]); // still dashes: Colour never marches them
     }
     for (const [cx, cy, dx, dy] of [[x, y, 1, 1], [x + bw, y, -1, 1], [x, y + bh, 1, -1], [x + bw, y + bh, -1, -1]]) {
       ctx.beginPath();
@@ -493,27 +494,7 @@ export function createSaveFlow(store, { send, source } = {}) {
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    // scan sweep: a soft band gliding down the face while crops arrive
-    if (f.phase === 'face' || (f.phase === 'voice' && !f.face.done)) {
-      ctx.save();
-      rrect(ctx, x, y, bw, bh, 18);
-      ctx.clip();
-      if (RM) {
-        ctx.fillStyle = hexA(MINT, 0.07);
-        ctx.fillRect(x, y, bw, bh);
-      } else {
-        const p = (anim / 1.6) % 1;
-        const sy = y - 30 + p * (bh + 60);
-        const g = ctx.createLinearGradient(0, sy - 40, 0, sy);
-        g.addColorStop(0, hexA(MINT, 0));
-        g.addColorStop(1, hexA(MINT, 0.16));
-        ctx.fillStyle = g;
-        ctx.fillRect(x, sy - 40, bw, 40);
-        ctx.fillStyle = hexA(MINT, 0.5);
-        ctx.fillRect(x + 10, sy - 1, bw - 20, 1.6);
-      }
-      ctx.restore();
-    }
+    // (no scan sweep: Colour stays calm; the ring below carries the face progress)
     // thin progress ring: face crops, then a circular voice meter
     ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(255,255,255,0.16)';
@@ -553,7 +534,7 @@ export function createSaveFlow(store, { send, source } = {}) {
         ctx.stroke();
         ctx.restore();
       }
-      const k = pop(f.face.tDone);
+      const k = calmPop(f.face.tDone);
       // on the upper side away from the display's centre, where bubbles rarely sit
       const bang = face.cx > REGION.x + REGION.w / 2 ? -Math.PI / 4 : (-3 * Math.PI) / 4;
       const bx = face.cx + Math.cos(bang) * rx;
@@ -568,16 +549,15 @@ export function createSaveFlow(store, { send, source } = {}) {
       icon(ctx, 'check', -9, -9, 18, '#0B1A17', 2.8);
       ctx.restore();
     }
-    // voice: short radial bars around the lower half of the ring, lit clockwise as seconds of
-    // their voice arrive, dancing while they talk
+    // voice: short radial ticks around the lower half of the ring, lit one by one as seconds of
+    // their voice arrive (still ticks: they fill with progress, they never dance)
     if (f.phase === 'voice' && f.face.done) {
       const n = 26;
-      const talking = clamp(1 - (now - f.voice.tPulse) / 1.2) * 0.7 + (face.isSpeaker ? 0.3 : 0);
       for (let i = 0; i < n; i++) {
         const u = i / (n - 1);
         const ang = Math.PI * 0.12 + u * Math.PI * 0.76; // bottom arc, left to right under the chin
         const lit = u <= f.voice.shown;
-        const len = 5 + 16 * energy(anim, i, lit ? 0.35 + 0.65 * talking : 0.2);
+        const len = lit ? 12 : 6;
         const c = Math.cos(ang);
         const s = Math.sin(ang);
         ctx.strokeStyle = lit ? MINT : 'rgba(255,255,255,0.28)';
@@ -610,7 +590,7 @@ export function createSaveFlow(store, { send, source } = {}) {
       const ix = cx + 11;
       const iy = y + 17;
       if (s === 'done') {
-        const k = pop(key === 'face' ? f.face.tDone : key === 'voice' ? f.voice.tDone : f.since);
+        const k = calmPop(key === 'face' ? f.face.tDone : key === 'voice' ? f.voice.tDone : f.since);
         ctx.save();
         ctx.translate(ix + 7, iy);
         ctx.scale(k, k);
@@ -635,11 +615,10 @@ export function createSaveFlow(store, { send, source } = {}) {
       ctx.fillStyle = col;
       ctx.fillText(label, cx + 32, iy + 1);
       if (key === 'voice' && s === 'now') {
-        // a live equaliser while they talk; the lit bars are the seconds collected
-        const talking = clamp(1 - (nowS() - f.voice.tPulse) / 1.2);
+        // a still level glyph: the lit bars are the seconds collected
         for (let i = 0; i < 7; i++) {
           const litBar = i / 7 < f.voice.shown + 0.02;
-          const bh = 4 + 16 * energy(anim, i + 3, litBar ? 0.4 + 0.6 * talking : 0.18);
+          const bh = [8, 13, 17, 12, 16, 10, 14][i];
           ctx.fillStyle = litBar ? MINT : 'rgba(255,255,255,0.35)';
           rrect(ctx, cx + 80 + i * 7, iy - bh / 2, 3.6, bh, 1.8);
           ctx.fill();
@@ -676,17 +655,6 @@ export function createSaveFlow(store, { send, source } = {}) {
     ctx.fillStyle = '#0B1A17';
     ctx.fillText(initial(f.name), cx, cy + 1.5);
     ctx.restore();
-    // waiting: the phone is asking them (a slow breathing dot on the ring)
-    if (f.phase === 'waiting' && !RM) {
-      const ang = -Math.PI / 2 + anim * 2.2;
-      ctx.save();
-      ctx.fillStyle = WHITE;
-      ctx.globalAlpha *= 0.85;
-      ctx.beginPath();
-      ctx.arc(cx + Math.cos(ang) * (r + 6), cy + Math.sin(ang) * (r + 6), 3.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
   }
 
   function drawCardBody(ctx, f, r, blur, color, anim) {
@@ -815,8 +783,6 @@ export function createSaveFlow(store, { send, source } = {}) {
         alpha *= 1 - clamp((s - 0.35) / 0.65);
         lastObstacles = [];
       }
-      // a brief brightening of the border as it saves
-      if (!RM && now - f.since < 0.5) k *= 1 + 0.025 * Math.sin((Math.PI * (now - f.since)) / 0.5);
     }
     if (alpha <= 0.005) return;
     ctx.save();
