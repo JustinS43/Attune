@@ -33,6 +33,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-15 Live dev runner: `devview --all` runs vision, fusion, audio, alerts and LLM together on one bus and clock, with `--audio-file` replay (#15)
 - [x] V-16 Keep a sentence in one caption when the speaker decision flickers (short and "Someone" pieces join their neighbour) (#22, #23)
 - [x] V-17 Camera on/off from a page: `camera.set` stops or restarts the webcam (#30)
+- [x] V-18 Stable caption attribution: one speaker per segment across drafts, retract dropped segments, no re-labelling when a face leaves (#40)
 
 ## Section 2 – Audio & Language
 
@@ -101,6 +102,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-25 Caption layout polish: one steady slot per person, no jumping bubbles, calm Mono and Corner lines · M3 (#36)
 - [ ] P-26 Re-render the launch film in the three glasses looks (Colour, Mono, Corner) from the lens's own renderers · M3 – M4 — pipeline in progress, renders after P-25
 - [x] P-27 Phone enrollment tab: consented face photo preview and guided voice enrollment · M3 (#33)
+- [x] P-28 Calm Colour look: no flashing or pulsing, simple directional arrows (#39)
 - [x] P-29 Save a person with a double tap: consent on the phone, face/voice capture animations in every glasses mode, Quick Start in Film · M3 (#PR)
 
 ## Gates and end-to-end checks (whole team)

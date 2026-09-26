@@ -7,13 +7,13 @@
  *   /demo/                       glasses + phone
  *   /demo/?view=lens|phone       start with one of them full size
  *   /demo/?view=guide            the glasses guide (the frames stay loaded, just hidden)
- *   /demo/?view=pov              Glasses POV: what the wearer sees, at about true size (pov.js)
+ *   /demo/?view=pov              Glasses POV: as if you wore the glasses, full window (pov.js)
  *   /demo/?source=film&mode=mono passed on to the glasses view (source, mode, engine)
  *   /demo/?palette=apricot       passed on to the phone app
  *
  * Keys work wherever the focus is (the two pages are same-origin frames):
  *   `  next view      Alt+1 both · Alt+2 glasses · Alt+3 phone · Alt+4 glasses guide · Alt+5 POV
- *   Z  (Glasses POV) true size / whole view
+ *   Z  (Glasses POV) closer / everything     Esc (Glasses POV) back to the previous view
  */
 
 import { mountGuide } from './guide.js';
@@ -52,10 +52,13 @@ function readStored() {
 
 let view = VIEWS.includes(params.get('view')) ? params.get('view') : readStored();
 if (!VIEWS.includes(view)) view = 'split';
+let beforePov = 'lens'; // where Esc goes from the Glasses POV
 
 function setView(next) {
   if (!VIEWS.includes(next)) return;
+  if (next === 'pov' && view !== 'pov') beforePov = view;
   view = next;
+  document.body.classList.remove('bar-peek');
   document.body.dataset.view = view;
   for (const b of buttons) b.setAttribute('aria-checked', String(b.dataset.view === view));
   try {
@@ -108,7 +111,9 @@ function onKeydown(e) {
   if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1-5]$/.test(e.code)) {
     e.preventDefault();
     e.stopImmediatePropagation();
-    setView(VIEWS[Number(e.code.slice(-1)) - 1]);
+    const next = VIEWS[Number(e.code.slice(-1)) - 1];
+    if (next === view && view === 'pov') peekBar(); // already there: show the bar for a moment
+    setView(next);
     return;
   }
   if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyC') {
@@ -118,6 +123,13 @@ function onKeydown(e) {
     return;
   }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (view === 'pov' && e.key === 'Escape') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    setView(beforePov === 'pov' ? 'lens' : beforePov);
+    setTimeout(focusFor, 50);
+    return;
+  }
   if (view === 'pov' && e.code === 'KeyZ') {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -193,7 +205,35 @@ mountGuide(guide, { onTry: tryLook });
 // ------------------------------------------------------------------ glasses POV
 // Its own lens (?chrome=0), loaded on first open, kept in step with the main one, unloaded 30 s
 // after leaving the view.
-const pov = mountPov(povRoot, { mainLens: lens, params, onFrameLoad: wireKeys });
+const pov = mountPov(povRoot, {
+  mainLens: lens,
+  params,
+  onFrameLoad: wireKeys,
+  // the mouse has gone well below the bar: let it slide away again
+  onPointer: (y) => {
+    if (document.body.classList.contains('bar-peek') && y > bar.offsetHeight + 24) hideBarSoon();
+  },
+});
+
+// The bar is hidden in the POV (pov.css). It comes back when the mouse reaches the top edge and
+// goes again once the mouse has left it for a moment.
+const bar = document.querySelector('.bar');
+let peekTimer = 0;
+function peekBar() {
+  clearTimeout(peekTimer);
+  document.body.classList.add('bar-peek');
+  peekTimer = setTimeout(hideBarSoon, 2500);
+}
+function hideBarSoon() {
+  if (bar.matches(':hover')) return; // mouseleave hides it later
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => document.body.classList.remove('bar-peek'), 500);
+}
+povRoot.querySelector('.pov-peek').addEventListener('mouseenter', peekBar);
+bar.addEventListener('mouseenter', () => clearTimeout(peekTimer));
+bar.addEventListener('mouseleave', () => {
+  if (view === 'pov') hideBarSoon();
+});
 
 // scripted demos and tests: attuneDemo.setView('pov'), attuneDemo.pov.check()
 window.attuneDemo = { setView: (v) => setView(v), pov };

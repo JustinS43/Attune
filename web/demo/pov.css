@@ -1,5 +1,5 @@
 /*
- * Demo page, "Glasses POV" view: the wearer's own view through the glasses (pov.js).
+ * Demo page, "Glasses POV" view: as if you were wearing the glasses, full window (pov.js).
  *
  * Section 4 - Pages, Engine & Demo. TODO: P-20.
  */
@@ -13,9 +13,18 @@ body[data-view="pov"] .stage {
   transition: opacity var(--dur) var(--ease), visibility 0s linear var(--dur);
 }
 
+/* the top bar steps out of the way; it comes back near the top edge, on focus, or on Esc */
+.bar { transition: transform 260ms var(--ease), opacity 260ms var(--ease); }
+body[data-view="pov"]:not(.bar-peek) .bar:not(:focus-within) {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+/* edge to edge: no borders, no rounding, no letterbox */
 .pov {
   position: fixed;
-  inset: var(--bar-h) 0 0 0;
+  inset: 0;
+  z-index: 1;
   overflow: hidden;
   background: #000;
   opacity: 0;
@@ -29,7 +38,7 @@ body[data-view="pov"] .pov {
   transition: opacity var(--dur) var(--ease), visibility 0s;
 }
 
-/* the lens, enlarged and cropped (pov.js sets the size and the transform) */
+/* the lens, cover-fitted and brought closer (pov.js sets the size and the transform) */
 .pov-world {
   position: absolute;
   left: 0;
@@ -40,101 +49,103 @@ body[data-view="pov"] .pov {
 }
 .pov-lens { display: block; border: 0; width: 1920px; height: 1080px; background: #000; }
 
-/* the glasses frame in front: soft, dark, out of focus */
-.pov-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  will-change: opacity;
-}
+/* a thin strip along the top: moving the mouse into it brings the bar back (demo.js) */
+.pov-peek { position: absolute; inset: 0 0 auto 0; height: 10px; z-index: 2; }
 
-/* ------------------------------------------------------------------ controls */
+/* ------------------------------------------------------------------ the pill */
 .pov-tools {
   position: absolute;
-  top: 14px;
   right: 16px;
+  bottom: 16px;
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px;
+  gap: 6px;
+  padding: 4px;
   border-radius: 999px;
-  background: rgba(10, 12, 16, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(10, 12, 16, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   backdrop-filter: blur(12px);
-  opacity: 0.72;
-  transition: opacity 200ms;
+  opacity: 0.85;
+  transition: opacity 400ms var(--ease);
 }
 .pov-tools:hover, .pov-tools:focus-within { opacity: 1; }
+.pov-tools.idle:not(:hover):not(:focus-within) { opacity: 0; }
 
 .pov-seg { display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); }
-.pov-seg button, .pov-info-btn {
-  height: 26px;
-  padding: 0 11px;
+.pov-seg button, .pov-info-btn, .pov-zoom {
+  height: 24px;
+  padding: 0 10px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--attune-text-2, rgba(255, 255, 255, 0.68));
-  font: 600 12px/1 var(--attune-font-text, inherit);
+  font: 600 11.5px/1 var(--attune-font-text, inherit);
   cursor: pointer;
   transition: background 160ms, color 160ms;
 }
-.pov-seg button:hover, .pov-info-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.pov-seg button:hover, .pov-info-btn:hover, .pov-zoom:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .pov-seg button[aria-pressed="true"] { color: #06201b; background: var(--attune-brand, linear-gradient(135deg, #7cf5d6, #6ab8ff)); }
-.pov-seg button:focus-visible, .pov-info-btn:focus-visible { outline: 2px solid var(--attune-mint, #7cf5d6); outline-offset: 1px; }
+.pov-seg button:focus-visible, .pov-info-btn:focus-visible, .pov-zoom:focus-visible { outline: 2px solid var(--attune-mint, #7cf5d6); outline-offset: 1px; }
+
+/* one quiet toggle: the current scale is bright, the other dim */
+.pov-zoom { display: inline-flex; align-items: center; gap: 5px; color: var(--attune-text-3, rgba(255, 255, 255, 0.42)); }
+.pov-zoom i { font-style: normal; opacity: 0.5; }
+.pov-zoom[data-zoom="closer"] [data-z="closer"],
+.pov-zoom[data-zoom="everything"] [data-z="everything"] { color: #fff; }
 
 .pov-info-btn {
-  width: 26px;
+  width: 24px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  font: italic 700 13px/1 Georgia, "Times New Roman", serif;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font: italic 700 12.5px/1 Georgia, "Times New Roman", serif;
 }
 .pov-info-btn[aria-expanded="true"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
 
+.pov-exit {
+  padding: 0 8px 0 2px;
+  font-size: 11px;
+  color: var(--attune-text-3, rgba(255, 255, 255, 0.46));
+  white-space: nowrap;
+}
+.pov-exit kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-right: 3px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 10px/1.3 var(--attune-font-mono, monospace);
+  color: #fff;
+}
+
 .pov-info {
   position: absolute;
-  top: calc(100% + 8px);
+  bottom: calc(100% + 8px);
   right: 0;
-  width: min(380px, calc(100vw - 32px));
-  padding: 12px 14px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 11px 13px;
   border-radius: 12px;
   background: rgba(12, 14, 19, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
-  color: var(--attune-text-2, rgba(255, 255, 255, 0.72));
+  color: var(--attune-text-2, rgba(255, 255, 255, 0.74));
   font-size: 12.5px;
   line-height: 1.5;
 }
 .pov-info[hidden] { display: none; }
-.pov-info p { margin: 0 0 7px; }
-.pov-info p:last-child { margin: 0; color: var(--attune-text-3, rgba(255, 255, 255, 0.5)); }
+.pov-info p { margin: 0 0 6px; }
+.pov-info p:last-child { margin: 0; }
 .pov-info b { color: #fff; font-weight: 650; }
-.pov-info code { font: 11.5px var(--attune-font-mono, monospace); color: #fff; }
-
-.pov-tag {
-  position: absolute;
-  left: 18px;
-  bottom: 14px;
-  z-index: 3;
-  margin: 0;
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: rgba(8, 10, 14, 0.55);
-  color: rgba(255, 255, 255, 0.72);
-  font: 600 11.5px/1 var(--attune-font-text, inherit);
-  letter-spacing: 0.04em;
-  pointer-events: none;
-}
 
 .pov .cam-off-card { z-index: 5; }
 
 @media (max-width: 700px) {
-  .pov-tools { top: 10px; right: 10px; left: 10px; justify-content: center; flex-wrap: wrap; border-radius: 18px; }
-  .pov-seg button { padding: 0 8px; }
+  .pov-tools { right: 10px; left: 10px; bottom: 10px; justify-content: center; flex-wrap: wrap; border-radius: 18px; }
+  .pov-seg button, .pov-zoom { padding: 0 8px; }
+  .pov-exit { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pov, .pov-world { transition: none; }
+  .pov, .pov-world, .bar, .pov-tools { transition: none; }
 }

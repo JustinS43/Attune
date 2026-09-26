@@ -207,6 +207,32 @@ def test_caption_and_translation_merge(hub_env):
         assert later["utt_id"] == "u10" and later["translation"] == "Later"
 
 
+def test_caption_retract_is_relayed_to_every_page(hub_env):
+    with (
+        page(hub_env.client, "lens") as (lens, _),
+        page(hub_env.client, "phone") as (phone, _),
+    ):
+        bus = hub_env.bus
+        bus.publish(C.CAPTION, caption_event("u5", "So what"))
+        bus.publish(C.CAPTION, caption_event("u5.1", "Robots again"))
+        for ws in (lens, phone):
+            recv_type(ws, "caption")
+            recv_type(ws, "caption")
+        bus.publish(C.CAPTION_RETRACT, C.CaptionRetract("u5.1"))
+        for ws in (lens, phone):
+            gone = recv_type(ws, "caption_retract")
+            assert gone["utt_id"] == "u5.1" and gone["seq"] > 0
+        assert wait_for(lambda: "u5.1" not in hub_env.hub.captions)
+        assert "u5" in hub_env.hub.captions
+        # the utterance's translation still merges into what is left of it
+        bus.publish(C.CAPTION_TRANSLATION, C.CaptionTranslation("u5", "en", "So what"))
+        again = recv_type(lens, "caption")
+        assert again["utt_id"] == "u5" and again["translation"] == "So what"
+        # a retraction for something never sent is still passed on (pages ignore it)
+        bus.publish(C.CAPTION_RETRACT, {"utt_id": "u6.2"})
+        assert recv_type(lens, "caption_retract")["utt_id"] == "u6.2"
+
+
 def test_relays_and_audiences(hub_env):
     with (
         page(hub_env.client, "lens") as (lens, _),

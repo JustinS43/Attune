@@ -127,6 +127,12 @@ export function createStore() {
         });
         break;
       }
+      case 'caption_retract': {
+        // a segment the engine folded back into its utterance: the view builder drops it
+        const prev = s.captions.get(msg.utt_id);
+        if (prev) s.captions.set(msg.utt_id, { ...prev, retracted: true });
+        break;
+      }
       case 'reply_spoken': {
         const id = `reply-${++s.replySeq}`;
         s.captions.set(id, {
@@ -427,7 +433,7 @@ export function createViewBuilder(store) {
     const staleNow = [];
     for (const c of caps) {
       // a draft segment the engine has since folded back into its utterance is stale: drop it
-      const stale = !c.final && SEG_RE.test(String(c.utt_id)) && famSeen.get(baseOf(c.utt_id)) - (c.tSeen ?? c.tUpdate) > 0.3;
+      const stale = c.retracted || (!c.final && SEG_RE.test(String(c.utt_id)) && famSeen.get(baseOf(c.utt_id)) - (c.tSeen ?? c.tUpdate) > 0.3);
       if (stale) {
         dropUtt(c.utt_id);
         staleNow.push(c.utt_id);

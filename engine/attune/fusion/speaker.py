@@ -15,7 +15,10 @@ While speech is detected, each tick (15 per second) checks, in order:
 
 Captions: every word has a time, so a transcript is split where the speaker
 changes. If nobody qualifies yet, the first words wait up to 300 ms for a
-speaker before showing as "Someone".
+speaker before showing as "Someone". Once a segment is shown, later drafts keep
+its words and speaker unless the evidence over most of it changes (see
+`_redraft`); a face leaving never re-labels what it already said, and segment
+ids that drop out are retracted (`caption.retract`).
 
 This class is pure logic with an explicit `now`, so tests can drive it with
 simulated events; FusionService (service.py) runs it on the bus.
@@ -24,13 +27,24 @@ simulated events; FusionService (service.py) runs it on the bus.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 import numpy as np
 
 from ..vision.settings import FusionSettings
-from ..vision.types import Caption, FaceState, Offscreen, Scene, Speaker, VoiceHarvest, get
+from ..vision.types import (
+    Caption,
+    CaptionRetract,
+    FaceState,
+    Offscreen,
+    Scene,
+    Speaker,
+    VoiceHarvest,
+    get,
+)
 from .harvest import Harvester, voice_id
 from .sync import Envelope, in_time_score
 
@@ -53,6 +67,38 @@ class _Pending:
     first_seen: float
 
 
+@dataclass
+class _Seg:
+    """A caption segment already sent: its id, speaker and word span."""
+
+    uid: str
+    speaker: Speaker
+    t_lo: float
+    t_hi: float
+
+
+@dataclass
+class _UttMemory:
+    """What has been shown of an unfinished utterance."""
+
+    segs: list[_Seg] = field(default_factory=list)
+    sent: set[str] = field(default_factory=set)
+    next_index: int = 1  # the next ".n" for a new segment; retracted numbers are not reused
+    t: float = 0.0
+
+
+@dataclass
+class _Group:
+    """A run of words with one speaker while a caption is being split."""
+
+    speaker: Speaker
+    words: list
+    prev: list[str] = field(default_factory=list)  # ids of the shown segments it holds
+    locked: bool = False  # already shown: a known speaker here is not smoothed away
+    evidence: list = field(default_factory=list)  # the timeline's speaker per word
+    shown: bool = False  # holds words already shown in another segment
+
+
 def _db(level: float) -> float:
     return 20.0 * math.log10(max(float(level), 1.0))
 
@@ -67,6 +113,103 @@ def _same(a: Speaker | None, b: Speaker | None) -> bool:
         b.label,
         b.side,
     )
+
+
+def _who(s: Speaker | None) -> tuple:
+    """Who a speaker is, ignoring label wording and a Someone's side (as the pages group them)."""
+    if s is None or s.kind == "someone":
+        return ("someone",)
+    if s.kind in ("face", "probable_face"):
+        return ("face", s.track_id)
+    if s.kind == "offscreen":
+        return ("offscreen", s.person_id or s.label)
+    return (s.kind,)
+
+
+def _someone() -> Speaker:
+    return Speaker("someone", label="Someone", side="none")
+
+
+def _mid(w) -> float:
+    return (float(w[1]) + float(w[2])) / 2
+
+
+def _end(w, cap: float) -> float:
+    """A word's end, counting at most `cap` seconds of it.
+
+    The streaming recogniser stretches a draft's last word to the end of its audio
+    chunk (a 0.2 s word can read 0.9 s until the next draft), so word lengths are
+    capped wherever they decide how long a piece of speech is.
+    """
+    return min(float(w[2]), float(w[1]) + cap)
+
+
+def _dur(w, cap: float = 1e9) -> float:
+    return max(_end(w, cap) - float(w[1]), 0.05)
+
+
+_RANK = {"face": 1}
+
+
+def _better(a: Speaker | None, b: Speaker) -> Speaker:
+    """Of two speakers for the same person, the more certain one (the later on a tie)."""
+    if a is None or _RANK.get(b.kind, 0) >= _RANK.get(a.kind, 0):
+        return b
+    return a
+
+
+def _refresh(cur: Speaker, new: Speaker) -> Speaker:
+    """`cur` with the newer label of the same person; never downgraded, a Someone's side kept."""
+    if _who(cur) != _who(new):
+        return new
+    kind = "face" if "face" in (cur.kind, new.kind) else cur.kind
+    side = cur.side if cur.kind in ("someone", "offscreen") else new.side
+    return Speaker(
+        kind,
+        cur.track_id if cur.track_id is not None else new.track_id,
+        new.person_id or cur.person_id,
+        new.label or cur.label,
+        side,
+    )
+
+
+def _raw_groups(pairs: list) -> list[_Group]:
+    """Split (word, speaker) pairs where the speaker changes."""
+    groups: list[_Group] = []
+    for w, spk in pairs:
+        if groups and _who(groups[-1].speaker) == _who(spk):
+            g = groups[-1]
+            g.speaker = _better(g.speaker, spk)
+            g.words.append(w)
+            g.evidence.append(spk)
+        else:
+            groups.append(_Group(spk, [w], [], False, [spk]))
+    for g in groups:
+        if g.speaker.kind == "someone":  # the side most of its words came from
+            sides: dict[str, float] = {}
+            for w, spk in zip(g.words, g.evidence):
+                sides[spk.side] = sides.get(spk.side, 0.0) + _dur(w)
+            g.speaker = Speaker("someone", label="Someone", side=max(sides, key=sides.get))
+    return groups
+
+
+def _merge_neighbours(groups: list[_Group]) -> list[_Group]:
+    """Join neighbouring groups of the same person."""
+    out: list[_Group] = []
+    for g in groups:
+        if out and _who(out[-1].speaker) == _who(g.speaker):
+            a = out[-1]
+            out[-1] = _Group(
+                _refresh(a.speaker, g.speaker) if g.speaker.kind != "someone" else a.speaker,
+                a.words + g.words,
+                a.prev + g.prev,
+                a.locked or g.locked,
+                a.evidence + g.evidence,
+                a.shown or g.shown,
+            )
+        else:
+            out.append(g)
+    return out
 
 
 class SpeakerFusion:
@@ -93,6 +236,8 @@ class SpeakerFusion:
         self._current_in_time: float | None = None
         self.timeline: deque[tuple[float, Speaker | None]] = deque()
         self.pending: dict[str, _Pending] = {}
+        self.utts: dict[str, _UttMemory] = {}  # unfinished utterances already shown
+        self.retractions: list[CaptionRetract] = []
         self.harvester = Harvester(self.s.harvest_after_s)
 
     # ---------------- inputs ----------------
@@ -203,6 +348,7 @@ class SpeakerFusion:
         self.exits.clear()
         self.voice_labels.clear()
         self.voice_matches.clear()
+        self.utts.clear()
         self.harvester.reset()
 
     # ---------------- labels ----------------
@@ -323,96 +469,194 @@ class SpeakerFusion:
         return after or before
 
     def _captions_for(self, ev, now: float, first_seen: float) -> list[Caption] | None:
+        """The captions for one transcript draft, or None to wait a little for a speaker.
+
+        The first draft shown is split where the speaker changes (then smoothed). Later
+        drafts of the same utterance keep the segments already shown: each keeps its words
+        (by time) and its speaker unless the evidence over it changes decisively, and only
+        the new words at the end are split again. Segment ids that are no longer part of
+        the utterance are queued in `retractions`.
+        """
         words = [tuple(w) for w in (get(ev, "words") or [])]
         t_start = float(get(ev, "t_start", now))
         t_end = float(get(ev, "t_end", now))
         if not words:
             words = [(str(get(ev, "text", "")), t_start, t_end)]
-        first = self.speaker_at((words[0][1] + words[0][2]) / 2)
-        if (
-            first is None or first.kind == "someone"
-        ) and now - first_seen < self.s.first_words_wait_ms / 1000:
-            return None  # wait a little for a speaker
-        groups: list[tuple[Speaker, list]] = []
-        for w in words:
-            spk = self.speaker_at((w[1] + w[2]) / 2) or Speaker(
-                "someone", label="Someone", side="none"
-            )
-            if groups and _same(groups[-1][0], spk):
-                groups[-1][1].append(w)
-            else:
-                groups.append((spk, [w]))
-        groups = self._smooth(groups)
         utt = str(get(ev, "utt_id"))
+        mem = self.utts.get(utt)
+        first = self.speaker_at(_mid(words[0]))
+        if (
+            mem is None
+            and (first is None or first.kind == "someone")
+            and now - first_seen < self.s.first_words_wait_ms / 1000
+        ):
+            return None  # wait a little for a speaker (only before anything is shown)
+        evidence = [self.speaker_at(_mid(w)) or _someone() for w in words]
+        if mem is None:
+            mem = _UttMemory()
+            groups = self._smooth(_raw_groups(list(zip(words, evidence))))
+        else:
+            groups = self._smooth(self._redraft(mem.segs, words, evidence))
+
+        ids: list[str] = []
+        for i, g in enumerate(groups):
+            if i == 0:
+                uid = utt  # the utterance's own id always holds its first segment
+            else:
+                uid = next((p for p in g.prev if p != utt and p not in ids), None)
+                if uid is None:
+                    uid = f"{utt}.{mem.next_index}"
+                    mem.next_index += 1
+            ids.append(uid)
+        for gone in sorted(mem.sent - set(ids)):
+            self.retractions.append(CaptionRetract(gone))
+        mem.sent = set(ids)
+        mem.segs = [
+            _Seg(uid, g.speaker, float(g.words[0][1]), _end(g.words[-1], self.s.max_word_s))
+            for uid, g in zip(ids, groups)
+        ]
+        mem.t = now
         final = bool(get(ev, "final", False))
+        if final:
+            self.utts.pop(utt, None)
+        else:
+            self.utts[utt] = mem
         lang = get(ev, "lang")
         if len(groups) == 1:
-            return [Caption(utt, groups[0][0], str(get(ev, "text", "")), final, lang, words)]
+            return [Caption(utt, groups[0].speaker, str(get(ev, "text", "")), final, lang, words)]
         return [
-            Caption(
-                utt if i == 0 else f"{utt}.{i}",
-                spk,
-                " ".join(w[0] for w in ws).strip(),
-                final,
-                lang,
-                ws,
-            )
-            for i, (spk, ws) in enumerate(groups)
+            Caption(uid, g.speaker, " ".join(w[0] for w in g.words).strip(), final, lang, g.words)
+            for uid, g in zip(ids, groups)
         ]
 
-    def _smooth(self, groups: list[tuple[Speaker, list]]) -> list[tuple[Speaker, list]]:
+    def _redraft(self, segs: list[_Seg], words: list, evidence: list[Speaker]) -> list[_Group]:
+        """Fit a new draft onto the segments already shown.
+
+        Words fall into the old segments by time. Each old segment keeps its speaker
+        unless another known speaker now covers `relabel_share` of its speech
+        (`claim_share` if it showed "Someone"); "Someone" never replaces a known
+        speaker, so a face leaving the frame re-labels nothing said before. Words after
+        the old end are split afresh, together with the last segment's trailing words
+        that only joined it while too short to stand alone: once such a run is long
+        enough it becomes its own segment (a real turn change, or words said after the
+        speaker left the frame), otherwise it simply joins the last segment again.
+        """
+        bounds = [(a.t_hi + b.t_lo) / 2 for a, b in pairwise(segs)]
+        per_seg: list[list] = [[] for _ in segs]
+        tail: list = []
+        for w, spk in zip(words, evidence):
+            m = _mid(w)
+            if m > segs[-1].t_hi:
+                tail.append((w, spk))
+            else:
+                per_seg[bisect_right(bounds, m)].append((w, spk))
+        # the last segment's trailing words that only joined it while too short to stand
+        # alone (their evidence points elsewhere) are split again with the new words
+        last, mine = per_seg[-1], _who(segs[-1].speaker)
+        k = len(last)
+        while k > 1 and _who(last[k - 1][1]) != mine:
+            k -= 1
+        reopened, per_seg[-1] = last[k:], last[:k]
+        locked = [
+            _Group(
+                self._keep_or_relabel(seg.speaker, pairs),
+                [w for w, _ in pairs],
+                [seg.uid],
+                True,
+                [spk for _, spk in pairs],
+            )
+            for seg, pairs in zip(segs, per_seg)
+            if pairs  # a segment whose words all vanished from the draft is dropped
+        ]
+        fresh = _raw_groups(reopened + tail)
+        n = 0
+        for g in fresh:
+            g.shown = n < len(reopened)
+            n += len(g.words)
+        return locked + fresh
+
+    def _keep_or_relabel(self, cur: Speaker, pairs: list) -> Speaker:
+        """A shown segment's speaker, given the evidence now over its words."""
+        share: dict[tuple, float] = {}
+        best_of: dict[tuple, Speaker] = {}
+        for w, spk in pairs:
+            key = _who(spk)
+            share[key] = share.get(key, 0.0) + _dur(w, self.s.max_word_s)
+            best_of[key] = _better(best_of.get(key), spk)
+        total = sum(share.values()) or 1.0
+        mine = _who(cur)
+        others = [k for k in share if k != mine and k[0] != "someone"]
+        if others:
+            top = max(others, key=lambda k: share[k])
+            need = self.s.claim_share if cur.kind == "someone" else self.s.relabel_share
+            if share[top] / total >= need:
+                return best_of[top]
+        if mine in best_of:
+            return _refresh(cur, best_of[mine])
+        return cur
+
+    def _smooth(self, groups: list[_Group]) -> list[_Group]:
         """Stop a flickering speaker decision from chopping a sentence into pieces.
 
         A short "Someone" piece (under 2x `min_segment_s`) joins the known
         speaker next to it, and any other piece under `min_segment_s` joins its
-        longer neighbour. Real turn changes (each side longer) stay split.
+        longer neighbour. Real turn changes (each side longer) stay split. A piece
+        already shown with a known speaker (locked) and at least `min_segment_s`
+        long never takes another's speaker.
         """
 
         def span(ws: list) -> float:
-            return float(ws[-1][2]) - float(ws[0][1])
+            return _end(ws[-1], self.s.max_word_s) - float(ws[0][1])
 
         short = self.s.min_segment_s
 
-        def fold(gs: list, i: int, j: int) -> None:
+        def fold(gs: list[_Group], i: int, j: int) -> None:
             # piece i joins its neighbour j and takes j's speaker
             lo, hi = min(i, j), max(i, j)
-            gs[lo : hi + 1] = [(gs[j][0], gs[lo][1] + gs[hi][1])]
+            gs[lo : hi + 1] = [
+                _Group(
+                    gs[j].speaker,
+                    gs[lo].words + gs[hi].words,
+                    gs[lo].prev + gs[hi].prev,
+                    gs[lo].locked or gs[hi].locked,
+                    gs[lo].evidence + gs[hi].evidence,
+                    gs[lo].shown or gs[hi].shown,
+                )
+            ]
 
-        def rule(gs: list, i: int) -> tuple[int, int | None]:
+        def rule(gs: list[_Group], i: int) -> tuple[int, int | None]:
             """(priority, neighbour to join) for piece i; lower priority acts first."""
-            spk, ws = gs[i]
+            g = gs[i]
+            if g.locked and g.speaker.kind != "someone":
+                return 9, None  # shown with a known speaker: it keeps it
             nbrs = [k for k in (i - 1, i + 1) if 0 <= k < len(gs)]
-            known = [k for k in nbrs if gs[k][0].kind != "someone"]
-            if len(nbrs) == 2 and _same(gs[i - 1][0], gs[i + 1][0]) and span(ws) < short:
+            known = [k for k in nbrs if gs[k].speaker.kind != "someone"]
+            sandwiched = len(nbrs) == 2 and _who(gs[i - 1].speaker) == _who(gs[i + 1].speaker)
+            if sandwiched and span(g.words) < short:
                 return 0, i - 1
-            if spk.kind == "someone" and known and span(ws) < 2 * short:
-                return 1, max(known, key=lambda k: span(gs[k][1]))
-            if span(ws) < short:
-                return 2, max(nbrs, key=lambda k: span(gs[k][1]))
+            if g.speaker.kind == "someone" and known and span(g.words) < 2 * short:
+                return 1, max(known, key=lambda k: span(gs[k].words))
+            if g.shown and known and span(g.words) < self.s.move_segment_s:
+                # words would leave the bubble they were shown in: that needs more evidence
+                return 1, max(known, key=lambda k: span(gs[k].words))
+            if span(g.words) < short:
+                return 2, max(nbrs, key=lambda k: span(gs[k].words))
             return 9, None
 
-        gs = list(groups)
+        gs = _merge_neighbours(groups)
         while len(gs) > 1:
             # sandwiched flickers, then unknown words, then the shortest other piece
-            best = min(range(len(gs)), key=lambda k: (rule(gs, k)[0], span(gs[k][1])))
+            best = min(range(len(gs)), key=lambda k: (rule(gs, k)[0], span(gs[k].words)))
             _, j = rule(gs, best)
             if j is None:
                 break
             fold(gs, best, j)
-            # neighbours that now share a speaker become one piece
-            merged: list = []
-            for spk, ws in gs:
-                if merged and _same(merged[-1][0], spk):
-                    merged[-1] = (spk, merged[-1][1] + ws)
-                else:
-                    merged.append((spk, ws))
-            gs = merged
-        out: list[tuple[Speaker, list]] = []
-        for spk, ws in gs:
-            if out and _same(out[-1][0], spk):
-                out[-1] = (spk, out[-1][1] + ws)
-            else:
-                out.append((spk, ws))
+            gs = _merge_neighbours(gs)  # neighbours that now share a speaker become one piece
+        return gs
+
+    def take_retractions(self) -> list[CaptionRetract]:
+        """Segment ids to retract since the last call (the service publishes them)."""
+        out, self.retractions = self.retractions, []
         return out
 
     # ---------------- tick ----------------
@@ -434,6 +678,8 @@ class SpeakerFusion:
             if out is not None:
                 captions += out
                 del self.pending[utt]
+        for utt in [u for u, m in self.utts.items() if now - m.t > self.s.utterance_memory_s]:
+            del self.utts[utt]  # its final never came (audio restarted): stop tracking it
 
         confident = None
         if spk is not None and spk.kind == "face" and r is not None and r >= self.s.sync_min_corr:

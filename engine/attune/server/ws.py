@@ -218,6 +218,7 @@ class Hub:
             C.VISION_FRAME: self._on_frame_bus,
             C.SCENE: self._on_scene_bus,
             C.CAPTION: lambda ev: post(self._on_caption, ev),
+            C.CAPTION_RETRACT: lambda ev: post(self._on_caption_retract, ev),
             C.CAPTION_TRANSLATION: lambda ev: post(self._on_translation, ev),
             C.NAME_PROPOSAL: lambda ev: post(self._on_relay, C.WS_NAME_PROPOSAL, ev),
             C.ALERT: lambda ev: post(self._on_alert, ev),
@@ -364,6 +365,15 @@ class Hub:
         while len(self.captions) > CAPTION_MEMORY:
             self.captions.popitem(last=False)
         self.broadcast(C.WS_CAPTION, msg)
+
+    def _on_caption_retract(self, ev: Any) -> None:
+        """A caption segment left its utterance: forget it and tell the pages to drop it."""
+        utt = get(ev, "utt_id")
+        if utt is None:
+            return
+        self.captions.pop(str(utt), None)
+        self.translations.pop(str(utt), None)
+        self.broadcast(C.WS_CAPTION_RETRACT, {"utt_id": utt})
 
     def _on_translation(self, ev: Any) -> None:
         utt, text = str(get(ev, "utt_id")), get(ev, "text_en")
