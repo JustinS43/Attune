@@ -34,7 +34,9 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-16 Keep a sentence in one caption when the speaker decision flickers (short and "Someone" pieces join their neighbour) (#22, #23)
 - [x] V-17 Camera on/off from a page: `camera.set` stops or restarts the webcam (#30)
 - [x] V-18 Stable caption attribution: one speaker per segment across drafts, retract dropped segments, no re-labelling when a face leaves (#40)
-- [x] V-19 Live talker detection: per-face noise floor, no captions to a silent face (#57)
+- [x] V-19 Recover when a camera opens without frames: report usable video and retry a smaller capture mode — C922 hardware check pending (#56)
+- [x] V-20 Prefer any connected USB webcam on macOS instead of matching a camera model name (#56)
+- [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
 
 ## Section 2 – Audio & Language
 
