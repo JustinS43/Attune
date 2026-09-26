@@ -425,7 +425,7 @@ class StationEnroller:
                     f"The laptop camera ({label}) didn't start. It may be busy in another app.",
                 )
             s = self.s
-            opened = self.clock()
+            opened = frame[1]  # media time: frames may come faster than real time in tests
             step = FaceStep(
                 s,
                 self.v,
@@ -437,14 +437,14 @@ class StationEnroller:
                 opened,
             )
             self._state(session, FACE, camera=getattr(camera, "label", ""), shared=shared)
-            last_no, last_progress, last_preview = frame[0] - 1, -1.0, -1.0
+            last_no, last_progress, last_preview = frame[0] - 1, -1e9, -1e9
             period = 1.0 / max(s.preview_fps, 1.0)
             stale_since = None
             while True:
                 self._control(session)  # a cancel raises
                 item = camera.wait_frame(last_no, timeout=0.3)
-                now = self.clock()
                 if item is None:
+                    now = self.clock()
                     stale_since = stale_since or now
                     if now - stale_since > s.open_timeout_s:
                         raise _Fallback(
@@ -453,13 +453,13 @@ class StationEnroller:
                     continue
                 stale_since = None
                 last_no, t, image = item
-                if now - last_preview < period:
+                if t - last_preview < period * 0.9:
                     continue
-                last_preview = now
+                last_preview = t
                 view = step.process(image, t)
                 self._preview(session, image, view)
-                if now - last_progress >= 0.2:
-                    last_progress = now
+                if t - last_progress >= 0.2:
+                    last_progress = t
                     self._progress(session, "face", step.progress(t), view.hint)
                 if step.done(t) or step.timed_out(t):
                     break
@@ -565,22 +565,26 @@ class StationEnroller:
         mic.start()
         try:
             opened = self.clock()
-            step = VoiceStep(s, self.need_s, vad, opened)
+            step: VoiceStep | None = None  # made on the first block: paced by audio time
             self._state(session, VOICE, mic=getattr(mic, "label", s.mic_name))
-            heard = False
-            last_level = last_progress = -1.0
+            last_level = last_progress = -1e9
             level_period = 1.0 / max(s.level_hz, 1.0)
             while True:
                 self._control(session)
                 block = mic.read(timeout=0.1)
-                now = self.clock()
-                if block is not None:
-                    heard = True
+                if block is None:
+                    if step is None and self.clock() - opened > s.open_timeout_s:
+                        label = getattr(mic, "label", s.mic_name)
+                        detail = getattr(mic, "detail", "")
+                        why = f"the laptop microphone ({label}) didn't start {detail}"
+                        return False, why.strip()
+                    if step is None:
+                        continue
+                else:
+                    if step is None:
+                        step = VoiceStep(s, self.need_s, vad, float(block[0]))
                     step.feed(*block)
-                elif not heard and now - opened > s.open_timeout_s:
-                    label = getattr(mic, "label", s.mic_name)
-                    detail = getattr(mic, "detail", "")
-                    return False, f"the laptop microphone ({label}) didn't start {detail}".strip()
+                now = step.now
                 if now - last_level >= level_period:
                     last_level = now
                     self.bus.publish(

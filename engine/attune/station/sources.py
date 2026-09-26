@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import logging
 import queue
-import re
 import sys
 import threading
 import time
@@ -33,14 +32,11 @@ from typing import Any
 
 import numpy as np
 
+from ..vision.camera import Camera, is_infrared  # IR (Windows Hello) cameras: never
+
 log = logging.getLogger(__name__)
 
-_IR = re.compile(r"(\bIR\b|infrared)", re.IGNORECASE)
-
-
-def is_infrared(name: str) -> bool:
-    """Windows Hello IR cameras are never used for enrollment (no colour, not the person)."""
-    return bool(_IR.search(name or ""))
+__all__ = ["DeviceCamera", "DeviceMic", "FileMic", "SharedCamera", "is_infrared"]
 
 
 def _avoided(name: str, avoid: tuple[str, ...]) -> bool:
@@ -63,8 +59,6 @@ class DeviceCamera:
         source: str | None = None,
         avoid: tuple[str, ...] = (),
     ) -> None:
-        from ..vision.camera import Camera
-
         self.camera = Camera(
             name,
             width,

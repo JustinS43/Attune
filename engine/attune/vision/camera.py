@@ -16,12 +16,15 @@ Section 1 - Vision. TODO: V-01. Plan: section 05 "Capture".
 - A camera opened with `exclusive=True` (the enrollment station, V-23) reserves its
   device while it holds it; other readers skip a reserved device when they fall back,
   so two readers never fight over one camera.
+- Infrared cameras (Windows Hello) are never a fallback: they see no colour and no one's
+  face as the other cameras do. Only a camera named for them opens one.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -35,6 +38,13 @@ import cv2
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+_IR = re.compile(r"(\bIR\b|infrared)", re.IGNORECASE)
+
+
+def is_infrared(name: str) -> bool:
+    """A Windows Hello IR camera (by its device name)."""
+    return bool(_IR.search(name or ""))
 
 
 @dataclass
@@ -223,8 +233,11 @@ class Camera:
         return cap
 
     def _skip(self, cam: CameraInfo) -> bool:
-        """Never open an excluded device, or one another reader has reserved."""
+        """Never open an excluded device, one another reader has reserved, or an IR camera
+        this reader didn't ask for by name."""
         if self.exclude is not None and self.exclude(cam):
+            return True
+        if is_infrared(cam.name) and not _matches(self.name, cam.name):
             return True
         return cam.name in reserved() and cam.name != self._holding
 
