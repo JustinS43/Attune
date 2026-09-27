@@ -78,6 +78,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-27 A voice print from another voice model (another size, or another model's tag) is ignored at load with one warning, never compared (#80)
 - [x] A-28 A sounding alarm stays on while the glasses tap: tapped windows can't show that it stopped, so they no longer run down the 15 s quiet-clear (it cycled 14 s on, 10 s off); it ends with "Got it" or 15 s of heard quiet (#89)
 - [x] A-29 Caption words in a script the configured languages don't use are dropped (Arabic words inside English podcast captions) (#87)
+- [x] A-30 Door knock alert: a knock on the door (EfficientAT "Knock" at `knock_score` or more, blocked by music but not by speech) raises a `knock` alert with the BELL pattern, on the side the sensors hear it; threshold set on synthetic knocks, real knocks on the rig still to check (#92)
 
 ## Section 3 – Hardware & Services
 
@@ -146,6 +147,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
 - [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
 - [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
+- [x] P-44 Daylight lens: bright paper tags and a soft grey bubble for people not named yet (no dashed brackets), solid focus marks only while identifying, gliding alert stack, door-knock chip, light demo chrome; the hub replays alerts still sounding to a page that reconnects
 - [x] P-45 Podcast evaluation (scripts/eval_podcast.py): real multi-person YouTube clips with human captions, seat-anchored truth, word/bubble/speaker/right-face scores, recorded fusion inputs replayed offline; scripts/replay_podcast.py shows a recorded run on the real pages (#91)
 
 ## Gates and end-to-end checks (whole team)

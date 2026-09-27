@@ -47,7 +47,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `caption.translation` | 2 Audio & Lang | `utt_id, source_lang, text_en` | 0.5–1.2 s after a final |
 | `scene` | 1 Vision (fusion) | `frame_no, t, faces: [FaceState], offscreen: [Offscreen], you_speaking` | 15/s and on every change |
 | `name.proposal` | 2 Audio & Lang | `proposal_id, track_id, name, state, expires_t` | `state`: proposed, confirmed, rejected, expired |
-| `alert` | 2 Audio & Lang | `alert_id, kind, side, confidence, state` | `kind`: smoke, co, doorbell; `state`: start, update, watch, acknowledged, clear |
+| `alert` | 2 Audio & Lang | `alert_id, kind, side, confidence, state` | `kind`: smoke, co, doorbell, knock; `state`: start, update, watch, acknowledged, clear |
 | `reply.suggestions` | 2 Audio & Lang | `options: [str, str, str]` | For keys 7–9 |
 | `sensors.levels` | 3 Hardware | `t, left, right, motor_on` | Every 50 ms, 0–1023 |
 | `sensors.touch` | 3 Hardware | `t, gesture` (`tap`, `hold`, `double`, `triple`) | Raw gesture |

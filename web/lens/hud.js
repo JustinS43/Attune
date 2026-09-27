@@ -22,6 +22,21 @@ export const ORANGE = '#FF9F43';
 export const INFO = '#7CC8FF';
 export const PHOSPHOR = '#6BFF8F';
 
+// ---------------------------------------------------------------- Daylight palette (P-44)
+// The full-colour look is bright and hopeful: luminous paper panels, deep ink text and a few
+// clear, friendly accents. People nobody has named yet get a soft mist-grey bubble (no dashes).
+export const INK = '#16202E'; // names and captions
+export const INK_2 = '#4A586B'; // secondary text
+export const INK_3 = '#7B8798'; // hints and keys
+export const PAPER = 'rgba(255,255,255,0.93)';
+export const MIST = 'rgba(226,231,238,0.95)'; // someone Attune doesn't know yet
+export const MIST_INK = '#3B4758';
+export const TEAL = '#0EA897'; // the brand, deep enough for paper
+export const BLUE = '#2F80ED';
+export const SUN = '#F6A623'; // attention: doorbell, knock
+export const CORAL = '#F0453A'; // urgent: smoke, CO
+export const LEAF = '#1AAE68'; // listening, confirmed, saved
+
 export const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const easeOut = (t) => 1 - Math.pow(1 - clamp(t), 3);
@@ -54,12 +69,44 @@ export function regionOutline(ctx, r, radius, color = 'rgba(255,255,255,0.10)') 
  * light frost, and no dark drop shadow.
  */
 let GLASS = { tintScale: 1, frost: 0, shadow: true };
+/**
+ * 'bright' (full-colour AR, P-44): luminous paper panels over a frosted copy of the world, with a
+ * soft cool shadow so a white panel still separates from a bright room.
+ */
 export function setGlassStyle(look) {
-  GLASS = look === 'additive' ? { tintScale: 0.56, frost: 0.07, shadow: false } : { tintScale: 1, frost: 0, shadow: true };
+  if (look === 'bright') GLASS = { bright: true, tintScale: 1, frost: 0, shadow: true };
+  else GLASS = look === 'additive' ? { tintScale: 0.56, frost: 0.07, shadow: false } : { tintScale: 1, frost: 0, shadow: true };
 }
+export const isBright = () => !!GLASS.bright;
 
 /** Fill for a solid bubble tail, matching the current glass look. */
-export const tailFill = () => (GLASS.frost ? 'rgba(205,215,230,0.34)' : 'rgba(30,33,41,0.80)');
+export const tailFill = () => (GLASS.bright ? PAPER : GLASS.frost ? 'rgba(205,215,230,0.34)' : 'rgba(30,33,41,0.80)');
+
+/** A colour pulled toward the ink, for small marks and text in a person's colour on paper. */
+const deepCache = new Map();
+export function deepen(hex, k = 0.38) {
+  if (typeof hex !== 'string' || hex[0] !== '#' || hex.length !== 7) return hex;
+  const key = hex + k;
+  let out = deepCache.get(key);
+  if (!out) {
+    const n = parseInt(hex.slice(1), 16);
+    const mix = (c, ink) => Math.round(c + (ink - c) * k);
+    const r = mix((n >> 16) & 255, 0x16);
+    const g = mix((n >> 8) & 255, 0x20);
+    const b = mix(n & 255, 0x2e);
+    out = `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+    deepCache.set(key, out);
+  }
+  return out;
+}
+
+/** 'rgba(r,g,b,a)' between two 'rgba(...)' strings (for a panel that changes colour). */
+export function mixRgba(a, b, t) {
+  const pa = a.match(/[\d.]+/g).map(Number);
+  const pb = b.match(/[\d.]+/g).map(Number);
+  const m = (i) => pa[i] + (pb[i] - pa[i]) * clamp(t);
+  return `rgba(${Math.round(m(0))},${Math.round(m(1))},${Math.round(m(2))},${m(3).toFixed(3)})`;
+}
 
 /** Canvas pixels per design unit; shadow blur is in canvas pixels, so it is scaled by this. */
 export let PX = 1;
@@ -157,6 +204,10 @@ export function wrapChars(text, maxChars) {
 export function glass(ctx, blur, x, y, w, h, r, o = {}) {
   const a = o.alpha ?? 1;
   if (a <= 0.002 || w <= 0 || h <= 0) return;
+  if (GLASS.bright) {
+    brightGlass(ctx, blur, x, y, w, h, r, a, o);
+    return;
+  }
   ctx.save();
   ctx.globalAlpha *= a;
   if (o.shadow !== 0 && GLASS.shadow) {
@@ -205,6 +256,79 @@ export function glass(ctx, blur, x, y, w, h, r, o = {}) {
   ctx.restore();
 }
 
+/**
+ * The Daylight panel's outline: a rounded rect, plus an optional pointer `notch` [base, tip,
+ * base] joined to it as one shape (wound the same way, so the union fills with no seam).
+ */
+function panelPath(ctx, x, y, w, h, r, notch) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, Math.max(0, Math.min(r, h / 2, w / 2)));
+  if (notch) {
+    let [p, t, q] = notch;
+    if ((t[0] - p[0]) * (q[1] - p[1]) - (t[1] - p[1]) * (q[0] - p[0]) < 0) [p, q] = [q, p];
+    ctx.moveTo(p[0], p[1]);
+    ctx.arcTo(t[0], t[1], q[0], q[1], 3.5);
+    ctx.lineTo(q[0], q[1]);
+    ctx.closePath();
+  }
+}
+
+/**
+ * The Daylight panel: a soft shadow, the frosted world, a paper wash (o.fill, default PAPER), a
+ * sheen along the top, an optional wash of colour from the left (o.glow) and a crisp edge
+ * (o.border; null for none). o.shadow scales the shadow (0 for none); o.notch adds a pointer.
+ */
+function brightGlass(ctx, blur, x, y, w, h, r, a, o) {
+  ctx.save();
+  ctx.globalAlpha *= a;
+  const fill = o.fill ?? PAPER;
+  const sh = o.shadow ?? 1;
+  const notch = o.notch ?? null;
+  if (sh > 0) {
+    ctx.save();
+    ctx.shadowColor = `rgba(20,34,58,${0.2 * sh})`;
+    ctx.shadowBlur = 30 * PX;
+    ctx.shadowOffsetY = 10 * PX;
+    panelPath(ctx, x, y, w, h, r, notch);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  panelPath(ctx, x, y, w, h, r, notch);
+  ctx.clip();
+  if (blur) ctx.drawImage(blur, 0, 0, blur.width, blur.height, 0, 0, W, H);
+  ctx.fillStyle = fill;
+  ctx.fillRect(x - 24, y - 24, w + 48, h + 48); // the clip keeps it to the panel (and its notch)
+  const g = ctx.createLinearGradient(0, y, 0, y + Math.min(h, 90));
+  g.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, Math.min(h, 90));
+  if (o.glow) {
+    const gg = ctx.createLinearGradient(x, 0, x + Math.min(w, 300), 0);
+    gg.addColorStop(0, hexA(o.glow, 0.2));
+    gg.addColorStop(1, hexA(o.glow, 0));
+    ctx.fillStyle = gg;
+    ctx.fillRect(x, y, w, h);
+  }
+  ctx.restore();
+  if (o.border !== null) {
+    rrect(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, Math.max(0, r - 0.75));
+    ctx.strokeStyle = o.border ?? 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (!notch) {
+      // a hairline edge so a white panel still reads against a white wall
+      rrect(ctx, x - 0.5, y - 0.5, w + 1, h + 1, r + 0.5);
+      ctx.strokeStyle = 'rgba(20,34,58,0.10)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- icons (24-unit grid, stroked)
 const P = (d) => new Path2D(d);
 const ICONS = {
@@ -224,6 +348,9 @@ const ICONS = {
   warn: [P('M12 3.2l9.4 16.4H2.6z'), P('M12 9.5v4.8M12 17.2v.2')],
   sound: [P('M4 9.5h3.5L12 5.5v13l-4.5-4H4z'), P('M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.4a8 8 0 0 1 0 11.2')],
   trash: [P('M4.5 7h15M9.5 7V4.8h5V7M6.5 7l1 12.5h9l1-12.5')],
+  // a door with its handle and two knock arcs beside it
+  door: [P('M4.5 20.5V4.8a1.3 1.3 0 0 1 1.3-1.3h7.4a1.3 1.3 0 0 1 1.3 1.3v15.7M2.8 20.5h13.4'), P('M11.2 12.2v.3'), P('M18 9.2a4 4 0 0 1 0 5.6M20.6 7a7.2 7.2 0 0 1 0 10')],
+  user: [P('M12 8.2m-3.6 0a3.6 3.6 0 1 0 7.2 0a3.6 3.6 0 1 0-7.2 0'), P('M5.2 20c0-3.8 3-6.6 6.8-6.6s6.8 2.8 6.8 6.6')],
 };
 export function icon(ctx, name, x, y, size, color, lw = 2) {
   const paths = ICONS[name] ?? ICONS.sound;
@@ -244,8 +371,8 @@ export function logoMark(ctx, cx, cy, R, p = 1, a = 1) {
   ctx.save();
   ctx.globalAlpha *= a;
   const g = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-  g.addColorStop(0, MINT);
-  g.addColorStop(1, SKY);
+  g.addColorStop(0, GLASS.bright ? TEAL : MINT);
+  g.addColorStop(1, GLASS.bright ? BLUE : SKY);
   ctx.strokeStyle = g;
   ctx.fillStyle = g;
   ctx.lineWidth = R * 0.14;
@@ -289,9 +416,28 @@ export function eqBars(ctx, x, y, color, t, active = 1, h = 16) {
   ctx.restore();
 }
 
-/** Coloured person dot with a soft glow. */
+/** Coloured person dot with a soft glow (on paper: a white rim and a gentle shadow instead). */
 export function dot(ctx, x, y, r, color, glowPx = 12) {
   ctx.save();
+  if (GLASS.bright) {
+    ctx.shadowColor = 'rgba(20,34,58,0.28)';
+    ctx.shadowBlur = 4 * PX;
+    ctx.shadowOffsetY = 1 * PX;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(x, y, r + 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = hexA(deepen(color, 0.5), 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
   ctx.shadowColor = color;
   ctx.shadowBlur = glowPx * PX;
   ctx.fillStyle = color;
@@ -314,15 +460,15 @@ export function keycap(ctx, x, y, label, o = {}) {
   ctx.save();
   ctx.globalAlpha *= o.alpha ?? 1;
   rrect(ctx, x, y - h / 2, w, h, size * 0.38);
-  ctx.fillStyle = o.fill ?? 'rgba(255,255,255,0.12)';
+  ctx.fillStyle = o.fill ?? (GLASS.bright ? 'rgba(22,32,46,0.06)' : 'rgba(255,255,255,0.12)');
   ctx.fill();
-  ctx.strokeStyle = o.stroke ?? 'rgba(255,255,255,0.32)';
+  ctx.strokeStyle = o.stroke ?? (GLASS.bright ? 'rgba(22,32,46,0.22)' : 'rgba(255,255,255,0.32)');
   ctx.lineWidth = 1.2;
   ctx.stroke();
   ctx.font = f;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = o.color ?? '#FFFFFF';
+  ctx.fillStyle = o.color ?? (GLASS.bright ? INK_2 : '#FFFFFF');
   ctx.fillText(label, x + w / 2, y + 1);
   ctx.restore();
   return w;
@@ -439,6 +585,46 @@ export function faceBrackets(ctx, f, o) {
   ctx.restore();
 }
 
+/**
+ * Daylight focus marks: four solid, rounded corners around a face with a soft white halo, used
+ * only while Attune is identifying someone (a name to confirm, a save in progress). They settle
+ * in from a little wider as `a` rises; nothing dashes, marches or pulses.
+ * o: { a, color, scale (box size vs the face, default 1.28), lw }
+ */
+export function focusMarks(ctx, f, o) {
+  const a = o.a ?? 1;
+  if (a <= 0.002) return;
+  const s = lerp(1.12, 1, easeOut(a)) * (o.scale ?? 1.28);
+  const bw = f.w * s;
+  const bh = f.h * s * 1.12;
+  const x = f.cx - bw / 2;
+  const y = f.cy - bh / 2;
+  const L = Math.min(bw, bh) * 0.2;
+  const rad = Math.min(14, L * 0.6);
+  const corners = [[x, y, 1, 1], [x + bw, y, -1, 1], [x, y + bh, 1, -1], [x + bw, y + bh, -1, -1]];
+  const trace = () => {
+    for (const [cx, cy, dx, dy] of corners) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + dy * L);
+      ctx.lineTo(cx, cy + dy * rad);
+      ctx.quadraticCurveTo(cx, cy, cx + dx * rad, cy);
+      ctx.lineTo(cx + dx * L, cy);
+      ctx.stroke();
+    }
+  };
+  ctx.save();
+  ctx.globalAlpha *= a;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = (o.lw ?? 4) + 4;
+  trace();
+  ctx.strokeStyle = o.color ?? TEAL;
+  ctx.lineWidth = o.lw ?? 4;
+  trace();
+  ctx.restore();
+}
+
 /** Pill made of parts: [{icon, color, bg} | {text, font, color, gap} | {key}] . Returns its rect. */
 export function pill(ctx, blur, x, y, h, parts, o = {}) {
   const pad = h * 0.38;
@@ -450,7 +636,7 @@ export function pill(ctx, blur, x, y, h, parts, o = {}) {
   }
   w += pad - 12;
   const x0 = o.align === 'center' ? x - w / 2 : o.align === 'right' ? x - w : x;
-  glass(ctx, blur, x0, y, w, h, h / 2, { alpha: o.a ?? 1, glow: o.glow, tint: o.tint, border: o.border });
+  glass(ctx, blur, x0, y, w, h, h / 2, { alpha: o.a ?? 1, glow: o.glow, tint: o.tint, fill: o.fill, border: o.border });
   ctx.save();
   ctx.globalAlpha *= o.a ?? 1;
   let cx = x0 + pad;

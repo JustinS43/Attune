@@ -24,6 +24,8 @@ buffer like frames, so a slow phone skips them instead of queueing.
 A page that says hello (first time or after a reconnect) gets the recent captions again
 (A-22), so nothing said while it was away is lost: the phone and console get every caption
 the hub remembers, the lens only those still on screen (`bubble_fade_s` + 3 s).
+It also gets every alert still sounding (P-44): a lens that reloads mid-alarm shows the alarm
+again instead of going quiet until the next update.
 """
 
 from __future__ import annotations
@@ -269,6 +271,7 @@ class Hub:
         self._hw_connected: bool | None = None
         self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
         self.save_pending: dict | None = None  # the save request waiting for consent (P-29)
+        self.active_alerts: OrderedDict[str, dict] = OrderedDict()  # alert_id -> latest message
         self.station_session: str | None = None  # the station save in progress (V-23)
         self.station_client: int | None = None  # the page following it
         self.station_state: dict | None = None  # its latest enroll_state
@@ -542,6 +545,12 @@ class Hub:
 
     def _on_alert(self, ev: Any) -> None:
         body = to_jsonable(ev)
+        alert_id = body.get("alert_id")
+        if alert_id:
+            if body.get("state") in ("acknowledged", "clear"):
+                self.active_alerts.pop(alert_id, None)
+            else:
+                self.active_alerts[alert_id] = body
         self.broadcast(C.WS_ALERT, body)
         if body.get("state") != "update":
             self._log_event(f"Alert {body.get('kind')} ({body.get('side')}): {body.get('state')}")
@@ -711,6 +720,9 @@ class Hub:
             },
         )
         self._replay_captions(client, role)
+        if role in C.WS_AUDIENCE[C.WS_ALERT]:
+            for body in list(self.active_alerts.values()):
+                client.push(C.WS_ALERT, body)  # still sounding: a page that reloads shows it again
         if role in C.WS_AUDIENCE[C.WS_PEOPLE]:
             client.push(C.WS_PEOPLE, {"people": self.people})
         if role in C.WS_AUDIENCE[C.WS_HW_LINK] and self._hw_link is not None:

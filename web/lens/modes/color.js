@@ -7,13 +7,14 @@
  * Section 4 - Pages, Engine & Demo. TODO: P-06, P-07, P-08.
  *
  * Physically honest (docs/glasses-realism.md): everything stays inside the display region, about
- * 1330x960 of the 1920x1080 frame, centred; panels use the lighter additive glass look, since a
- * waveguide adds light and cannot darken the world.
+ * 1330x960 of the 1920x1080 frame, centred. The Daylight look (P-44) is bright and hopeful:
+ * luminous paper panels with deep ink text (a waveguide adds light, so bright panels are what it
+ * shows best), clear friendly accents, and a soft mist-grey bubble for people not named yet.
  */
 
 import { W, H, setRegion, setGlassStyle, regionOutline } from '../hud.js';
 import { createBubbleLayer } from '../bubbles.js';
-import { drawAlerts, drawStatus, drawToasts, drawPaused } from '../alerts.js';
+import { drawAlerts, drawStatus, drawToasts, drawPaused, createStack } from '../alerts.js';
 
 export const ORION_REGION = { x: (W - 1330) / 2, y: (H - 960) / 2, w: 1330, h: 960 };
 
@@ -40,6 +41,7 @@ function getEdgeMask() {
 
 export function createColorMode() {
   const bubbles = createBubbleLayer();
+  const stack = createStack(); // toasts, alerts and proposals glide when one arrives or leaves
   let obstacles = [];
   return {
     id: 'color',
@@ -51,7 +53,7 @@ export function createColorMode() {
     render(ctx, view, env) {
       const R = ORION_REGION;
       setRegion(R);
-      setGlassStyle('additive');
+      setGlassStyle('bright');
       ctx.save();
       ctx.beginPath();
       ctx.rect(R.x, R.y, R.w, R.h);
@@ -59,9 +61,10 @@ export function createColorMode() {
       bubbles.render(ctx, view, { ...env, obstacles: view.save ? [...obstacles, ...view.save.obstacles] : obstacles });
       view.save?.drawColor(ctx, env, bubbles); // P-29: save this person (save.js)
       // status top-left, then toasts, then alerts stacked below them (top centre)
-      const toastRects = drawToasts(ctx, env.blur, view, env.anim, R.y + 88);
-      const alertTop = toastRects.length ? Math.max(...toastRects.map((r) => r.y + r.h)) + 12 : R.y + 88;
-      const rects = [...toastRects, ...drawAlerts(ctx, env.blur, view, env.anim, alertTop)];
+      const toastRects = drawToasts(ctx, env.blur, view, env.anim, R.y + 88, stack);
+      // the alerts' target place follows the toasts' targets (not their glide), so it never wobbles
+      const alertTop = R.y + 88 + toastRects.length * 66;
+      const rects = [...toastRects, ...drawAlerts(ctx, env.blur, view, env.anim, alertTop, stack)];
       obstacles = rects.map((r) => ({ x: r.x - 10, y: r.y, w: r.w + 20, h: r.h }));
       drawPaused(ctx, env.blur, view, env.anim);
       drawStatus(ctx, env.blur, view, env.anim);
