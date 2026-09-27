@@ -30,7 +30,7 @@
 
 import { onKey } from '../shared/keys.js';
 import {
-  W, H, FD, FT, MINT, AMBER, PX, REGION, REDUCED_MOTION,
+  W, H, FD, FT, MINT, AMBER, PX, REGION, REDUCED_MOTION, INK, INK_2, INK_3, TEAL, LEAF, SUN, focusMarks, deepen,
   clamp, lerp, easeOut, easeBack, font, hexA, rrect, textW, glass, icon, follow, springStep, nowS, chevrons, arrow,
 } from './hud.js';
 
@@ -502,53 +502,36 @@ export function createSaveFlow(store, { send, source } = {}) {
     if (fa <= 0.01) return;
     ctx.save();
     ctx.globalAlpha *= fa;
-    // brackets: soft rounded corners around the face (where bubbles.js draws a stranger's)
-    const bw = face.w * 1.3;
-    const bh = face.h * 1.3 * 1.12;
-    const x = face.cx - bw / 2;
-    const y = face.cy - bh / 2;
-    const L = Math.min(bw, bh) * 0.2;
-    const col = f.phase === 'waiting' ? WHITE : MINT;
-    ctx.strokeStyle = hexA(col, f.phase === 'waiting' ? 0.75 : 0.95);
-    ctx.lineWidth = 2.6;
-    ctx.lineCap = 'round';
-    if (f.phase === 'waiting') {
-      ctx.setLineDash([7, 7]); // still dashes: Colour never marches them
-    }
-    for (const [cx, cy, dx, dy] of [[x, y, 1, 1], [x + bw, y, -1, 1], [x, y + bh, 1, -1], [x + bw, y + bh, -1, -1]]) {
-      ctx.beginPath();
-      ctx.moveTo(cx, cy + dy * L);
-      ctx.lineTo(cx, cy + dy * 12);
-      ctx.quadraticCurveTo(cx, cy, cx + dx * 12, cy);
-      ctx.lineTo(cx + dx * L, cy);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    // (no scan sweep: Colour stays calm; the ring below carries the face progress)
+    // solid focus corners (the same marks bubbles.js uses for a name to confirm): quiet grey
+    // while we wait for their yes, teal once capturing
+    focusMarks(ctx, face, { a: 1, color: f.phase === 'waiting' ? INK_3 : TEAL, scale: 1.3, lw: 3.4 });
     // thin progress ring: face crops, then a circular voice meter
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.ellipse(face.cx, face.cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.stroke();
     const facePart = f.face.done ? 1 : f.face.shown;
     if (facePart > 0.002) {
       ctx.save();
-      ctx.shadowColor = hexA(MINT, 0.8);
-      ctx.shadowBlur = 10 * PX;
-      ctx.strokeStyle = MINT;
-      ctx.lineWidth = 3.4;
+      ctx.shadowColor = 'rgba(255,255,255,0.9)';
+      ctx.shadowBlur = 6 * PX;
+      ctx.strokeStyle = TEAL;
+      ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.ellipse(face.cx, face.cy, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * facePart);
       ctx.stroke();
-      // the arc's leading dot
+      // the arc's leading dot: white with a teal rim
       if (!f.face.done) {
         const ang = -Math.PI / 2 + Math.PI * 2 * facePart;
+        ctx.shadowBlur = 0;
         ctx.fillStyle = WHITE;
+        ctx.lineWidth = 2.4;
         ctx.beginPath();
-        ctx.arc(face.cx + Math.cos(ang) * rx, face.cy + Math.sin(ang) * ry, 4.2, 0, Math.PI * 2);
+        ctx.arc(face.cx + Math.cos(ang) * rx, face.cy + Math.sin(ang) * ry, 5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -557,7 +540,7 @@ export function createSaveFlow(store, { send, source } = {}) {
       if (!RM && faceDoneAge < 0.6) {
         const p = faceDoneAge / 0.6;
         ctx.save();
-        ctx.strokeStyle = hexA(MINT, 0.55 * (1 - p));
+        ctx.strokeStyle = hexA(LEAF, 0.5 * (1 - p));
         ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.ellipse(face.cx, face.cy, rx + 4 + p * 26, ry + 4 + p * 26, 0, 0, Math.PI * 2);
@@ -572,17 +555,25 @@ export function createSaveFlow(store, { send, source } = {}) {
       ctx.save();
       ctx.translate(bx, by);
       ctx.scale(k, k);
-      ctx.fillStyle = MINT;
+      ctx.shadowColor = 'rgba(22,32,46,0.25)';
+      ctx.shadowBlur = 8 * PX;
+      ctx.fillStyle = WHITE;
       ctx.beginPath();
-      ctx.arc(0, 0, 15, 0, Math.PI * 2);
+      ctx.arc(0, 0, 17, 0, Math.PI * 2);
       ctx.fill();
-      icon(ctx, 'check', -9, -9, 18, '#0B1A17', 2.8);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = LEAF;
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.fill();
+      icon(ctx, 'check', -9, -9, 18, WHITE, 2.8);
       ctx.restore();
     }
     // voice: short radial ticks around the lower half of the ring, lit one by one as seconds of
     // their voice arrive (still ticks: they fill with progress, they never dance)
     if (f.phase === 'voice' && f.face.done) {
       const n = 26;
+      ctx.lineCap = 'round';
       for (let i = 0; i < n; i++) {
         const u = i / (n - 1);
         const ang = Math.PI * 0.12 + u * Math.PI * 0.76; // bottom arc, left to right under the chin
@@ -590,8 +581,8 @@ export function createSaveFlow(store, { send, source } = {}) {
         const len = lit ? 12 : 6;
         const c = Math.cos(ang);
         const s = Math.sin(ang);
-        ctx.strokeStyle = lit ? MINT : 'rgba(255,255,255,0.28)';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = lit ? TEAL : 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 3.4;
         ctx.beginPath();
         ctx.moveTo(face.cx + c * (rx + 7), face.cy + s * (ry + 7));
         ctx.lineTo(face.cx + c * (rx + 7 + len), face.cy + s * (ry + 7 + len));
@@ -608,13 +599,13 @@ export function createSaveFlow(store, { send, source } = {}) {
     for (const [key, label, ic] of items) {
       const s = st[key];
       const on = s !== 'todo';
-      const col = s === 'fail' ? AMBER : s === 'done' ? MINT : on ? WHITE : 'rgba(255,255,255,0.45)';
+      const col = s === 'fail' ? deepen(SUN, 0.3) : s === 'done' ? LEAF : on ? INK : INK_3;
       const w = key === 'voice' && s === 'now' ? 136 : 98;
       ctx.save();
       rrect(ctx, cx, y, w, 34, 17);
-      ctx.fillStyle = s === 'done' ? hexA(MINT, 0.16) : s === 'fail' ? hexA(AMBER, 0.16) : on ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)';
+      ctx.fillStyle = s === 'done' ? hexA(LEAF, 0.12) : s === 'fail' ? hexA(SUN, 0.16) : on ? 'rgba(14,168,151,0.10)' : 'rgba(22,32,46,0.04)';
       ctx.fill();
-      ctx.strokeStyle = hexA(s === 'fail' ? AMBER : s === 'done' ? MINT : WHITE, on ? 0.45 : 0.16);
+      ctx.strokeStyle = s === 'fail' ? hexA(SUN, 0.55) : s === 'done' ? hexA(LEAF, 0.4) : on ? hexA(TEAL, 0.45) : 'rgba(22,32,46,0.10)';
       ctx.lineWidth = 1.3;
       ctx.stroke();
       const ix = cx + 11;
@@ -624,16 +615,17 @@ export function createSaveFlow(store, { send, source } = {}) {
         ctx.save();
         ctx.translate(ix + 7, iy);
         ctx.scale(k, k);
-        icon(ctx, 'check', -8, -8, 16, MINT, 2.6);
+        icon(ctx, 'check', -8, -8, 16, LEAF, 2.6);
         ctx.restore();
-      } else if (s === 'fail') icon(ctx, 'cross', ix - 1, iy - 8, 16, AMBER, 2.4);
+      } else if (s === 'fail') icon(ctx, 'cross', ix - 1, iy - 8, 16, col, 2.4);
       else if (s === 'now' && key === 'face') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(22,32,46,0.12)';
         ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.arc(ix + 7, iy, 7, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.strokeStyle = MINT;
+        ctx.strokeStyle = TEAL;
         ctx.beginPath();
         ctx.arc(ix + 7, iy, 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.04, f.face.shown));
         ctx.stroke();
@@ -649,7 +641,7 @@ export function createSaveFlow(store, { send, source } = {}) {
         for (let i = 0; i < 7; i++) {
           const litBar = i / 7 < f.voice.shown + 0.02;
           const bh = [8, 13, 17, 12, 16, 10, 14][i];
-          ctx.fillStyle = litBar ? MINT : 'rgba(255,255,255,0.35)';
+          ctx.fillStyle = litBar ? TEAL : 'rgba(22,32,46,0.14)';
           rrect(ctx, cx + 80 + i * 7, iy - bh / 2, 3.6, bh, 1.8);
           ctx.fill();
         }
@@ -663,26 +655,26 @@ export function createSaveFlow(store, { send, source } = {}) {
     // progress ring around the initial
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.strokeStyle = 'rgba(22,32,46,0.08)';
     ctx.lineWidth = 3.2;
     ctx.beginPath();
     ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
     ctx.stroke();
     const p = overall(f);
     if (p > 0.005) {
-      ctx.strokeStyle = f.phase === 'failed' ? AMBER : MINT;
+      ctx.strokeStyle = f.phase === 'failed' ? SUN : f.phase === 'saved' ? LEAF : TEAL;
       ctx.beginPath();
       ctx.arc(cx, cy, r + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
       ctx.stroke();
     }
-    ctx.fillStyle = hexA(color, 0.9);
+    ctx.fillStyle = deepen(color, 0.3); // their colour, deep enough for a white initial
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.font = font(700, r * 1.05, FD);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#0B1A17';
+    ctx.fillStyle = WHITE;
     ctx.fillText(initial(f.name), cx, cy + 1.5);
     ctx.restore();
   }
@@ -690,51 +682,49 @@ export function createSaveFlow(store, { send, source } = {}) {
   function drawCardBody(ctx, f, r, blur, color, anim) {
     const saved = f.phase === 'saved';
     const warn = f.phase === 'failed' || f.phase === 'cancelled';
-    glass(ctx, blur, r.x, r.y, r.w, r.h, 26, { glow: warn ? AMBER : color, border: hexA(warn ? AMBER : saved ? MINT : WHITE, saved ? 0.45 : 0.22) });
+    glass(ctx, blur, r.x, r.y, r.w, r.h, 26, { glow: warn ? SUN : saved ? LEAF : TEAL });
     const ax = r.x + 50;
     const ay = r.y + 46;
     drawAvatar(ctx, f, ax, ay, 25, color, anim);
     ctx.save();
     ctx.textBaseline = 'middle';
     ctx.font = font(680, 29, FD);
-    ctx.fillStyle = WHITE;
+    ctx.fillStyle = INK;
     const name = f.name || 'This person';
     ctx.fillText(name, r.x + 94, r.y + 32);
     let nx = r.x + 94 + textW(ctx, name, font(680, 29, FD)) + 10;
     if (saved && f.relation) {
       ctx.font = font(500, 19, FT);
-      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.fillStyle = INK_2;
       ctx.fillText(`· ${f.relation}`, nx, r.y + 34);
       nx += textW(ctx, `· ${f.relation}`, font(500, 19, FT)) + 8;
     }
     const sub = statusText(f);
-    ctx.font = font(480, 19, FT);
-    ctx.fillStyle = warn ? AMBER : f.face.hint && f.phase === 'face' ? AMBER : saved ? MINT : 'rgba(255,255,255,0.72)';
+    ctx.font = font(500, 19, FT);
+    const amber = deepen(SUN, 0.3);
+    ctx.fillStyle = warn ? amber : f.face.hint && f.phase === 'face' ? amber : saved ? LEAF : INK_2;
     let subX = r.x + 94;
     if (f.phase === 'waiting' && nowS() - f.since >= WAIT_TEXT_AFTER) {
-      ownIcon(ctx, PHONE_ICON, subX - 2, r.y + 53, 18, 'rgba(255,255,255,0.72)', 1.8);
+      ownIcon(ctx, PHONE_ICON, subX - 2, r.y + 53, 18, INK_2, 1.8);
       subX += 20;
     } else if (saved) {
-      icon(ctx, 'lock', subX - 2, r.y + 53, 17, MINT, 2);
+      icon(ctx, 'lock', subX - 2, r.y + 53, 17, LEAF, 2);
       subX += 21;
     }
     ctx.fillText(fitText(ctx, sub, ctx.font, r.x + r.w - 18 - subX), subX, r.y + 63);
     ctx.restore();
-    if (f.phase === 'waiting') {
+    if (f.phase === 'waiting' || f.phase === 'cancelled') {
       // their consent is the only way on: say so, calmly
       ctx.save();
       ctx.font = font(450, 17, FT);
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      const line = f.name ? `Nothing is saved until ${f.name} agrees` : 'Nothing is saved until they agree';
-      ctx.fillText(ctx.measureText(line).width <= r.w - 48 ? line : 'Nothing is saved until they agree', r.x + 24, r.y + 110);
-      ctx.restore();
-    } else if (f.phase === 'cancelled') {
-      ctx.save();
-      ctx.font = font(450, 17, FT);
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.fillText('Nothing was stored', r.x + 24, r.y + 110);
+      ctx.fillStyle = INK_3;
+      let line = 'Nothing was stored';
+      if (f.phase === 'waiting') {
+        line = f.name ? `Nothing is saved until ${f.name} agrees` : 'Nothing is saved until they agree';
+        if (ctx.measureText(line).width > r.w - 48) line = 'Nothing is saved until they agree';
+      }
+      ctx.fillText(line, r.x + 24, r.y + 110);
       ctx.restore();
     } else {
       drawStepChips(ctx, f, r.x + 22, r.y + 92, anim);
@@ -753,18 +743,18 @@ export function createSaveFlow(store, { send, source } = {}) {
     ctx.save();
     ctx.globalAlpha *= a;
     ctx.translate(0, RM ? 0 : (1 - clamp((nowS() - f.born) / APPEAR_S)) * -14);
-    glass(ctx, blur, x, y, w, h, 26, { glow: AMBER });
-    ctx.fillStyle = hexA(AMBER, 0.95);
+    glass(ctx, blur, x, y, w, h, 26, { glow: SUN });
+    ctx.fillStyle = SUN;
     ctx.beginPath();
     ctx.arc(x + 44, y + h / 2, 22, 0, Math.PI * 2);
     ctx.fill();
-    icon(ctx, 'userplus', x + 32, y + h / 2 - 12, 24, '#1A1406', 2.2);
+    icon(ctx, 'userplus', x + 32, y + h / 2 - 12, 24, INK, 2.2);
     ctx.textBaseline = 'middle';
     ctx.font = f1;
-    ctx.fillStyle = WHITE;
+    ctx.fillStyle = INK;
     ctx.fillText(l1, x + 80, y + 30);
     ctx.font = f2;
-    ctx.fillStyle = 'rgba(255,255,255,0.66)';
+    ctx.fillStyle = INK_2;
     ctx.fillText(l2, x + 80, y + 58);
     ctx.restore();
     return { x, y, w, h };
@@ -785,7 +775,7 @@ export function createSaveFlow(store, { send, source } = {}) {
       return;
     }
     const where = face ?? (f.lastFace && nowS() - f.lastFace.seen < 1.2 ? f.lastFace : null);
-    const color = f.color || MINT;
+    const color = f.color || TEAL;
     if (face && f.phase !== 'cancelled' && f.phase !== 'failed') drawFaceRing(ctx, f, face, a, anim);
     if (!where) {
       lastObstacles = [];

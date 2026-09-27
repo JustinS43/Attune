@@ -22,7 +22,7 @@ class SoundModel:
             if not Path(config[key]).is_file():
                 raise FileNotFoundError(config[key])
         self.labels = json.loads(Path(config["labels_path"]).read_text())
-        required = {"Fire alarm", "Doorbell", "Ding-dong", "Speech", "Music"}
+        required = {"Fire alarm", "Doorbell", "Ding-dong", "Knock", "Speech", "Music"}
         if not required.issubset(self.labels) or not (
             {"Smoke detector", "Smoke detector, smoke alarm"} & set(self.labels)
         ):

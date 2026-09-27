@@ -1,6 +1,6 @@
 """Podcast evaluation: run the whole engine on real multi-person podcast clips and score it.
 
-Section 4 - Pages, Engine & Demo. TODO: P-42.
+Section 4 - Pages, Engine & Demo. TODO: P-45.
 
 Real conversations are harder than the TTS reels: people talk over each other, answer
 in one word, laugh, and the camera shows two or three faces. This script scores the
@@ -490,6 +490,47 @@ def show_turns(ref: dict, limit: int = 60) -> None:
 
 
 # ============================================================================ engine run
+FUSION_TOPICS = (
+    "vision.tracks", "vision.track_lost", "vision.appearance", "vision.description",
+    "audio.vad", "audio.level", "sensors.levels", "audio.voice_match", "name.proposal",
+    "audio.transcript",
+)  # fmt: skip
+
+
+class FusionInputs:
+    """Everything the speaker fusion hears on the bus, stamped with the engine clock.
+
+    `refuse` replays it into any version of SpeakerFusion: the same inputs, whatever the
+    laptop's load, so a fusion change can be judged on its own. The 16 kHz audio blocks
+    become the 20 ms levels fusion makes of them (fusion.on_audio_block), no audio kept.
+    """
+
+    def __init__(self, engine):
+        from attune.core import clock
+        from attune.server.ws import to_jsonable
+
+        self.events: list = []
+        self._clock, self._json = clock.now, to_jsonable
+        for topic in FUSION_TOPICS:
+            engine.bus.subscribe(topic, lambda ev, topic=topic: self._add(topic, ev))
+        engine.bus.subscribe("audio.block", self._block)
+
+    def _add(self, topic: str, ev) -> None:
+        self.events.append((self._clock(), topic, self._json(ev)))
+
+    def _block(self, ev) -> None:
+        from attune.vision.types import get
+
+        if int(get(ev, "sample_rate", 0)) != 16000:
+            return
+        x = np.asarray(get(ev, "samples"), np.float32)
+        t0, now = float(get(ev, "t")), self._clock()
+        for i in range(0, len(x) - 80, 320):
+            chunk = x[i : i + 320]
+            db = 20 * np.log10(float(np.sqrt(np.mean(chunk * chunk))) + 1e-9)
+            self.events.append((now, "audio.level", {"t": t0 + i / 16000, "db": round(db, 2)}))
+
+
 def run(args) -> int:
     from eval_talker import Truth, engine_run
 
@@ -510,7 +551,9 @@ def run(args) -> int:
         k32 = ctypes.windll.kernel32
         k32.SetPriorityClass(k32.GetCurrentProcess(), 0x8000)
     truth = Truth(people={}, intervals=[])
-    got = engine_run(args, truth)
+    rec: list[FusionInputs] = []
+    got = engine_run(args, truth, on_engine=lambda engine: rec.append(FusionInputs(engine)))
+    got["fusion_inputs"] = rec[0].events if rec else []
     got["name"] = args.name
     got["settings"] = args.set or []
     got["ref"] = ref
@@ -519,6 +562,65 @@ def run(args) -> int:
     log.info("recorded %d messages -> %s", len(got["messages"]), out)
     report(score(got), out.with_suffix(".report.txt"))
     return 0
+
+
+def refuse(run_json: dict, overrides: list[str] | None = None) -> dict:
+    """The run again with this code's SpeakerFusion on the recorded inputs (no engine).
+
+    Returns a run dict whose messages are this fusion's `caption`, `caption_retract` and
+    `scene` (boxes scaled to the pages' 1280x720 like the hub does), ready for score().
+    """
+    from attune.fusion.speaker import SpeakerFusion
+    from attune.server.ws import scale_box, to_jsonable
+    from attune.vision.settings import load_settings
+
+    config: dict = {}
+    for kv in overrides or []:
+        key, value = kv.split("=", 1)
+        table, name = key.split(".", 1)
+        config.setdefault(table, {})[name] = json.loads(value)
+    _, settings = load_settings(config)
+    f = SpeakerFusion(settings)
+    cw, ch = run_json.get("camera_size") or [1280, 720]
+    fw, fh = run_json.get("frame_size") or [1280, 720]
+    handlers = {
+        "vision.tracks": f.on_tracks, "vision.track_lost": f.on_track_lost,
+        "vision.appearance": f.on_appearance, "vision.description": f.on_description,
+        "audio.vad": f.on_vad, "audio.level": f.on_audio_level,
+        "sensors.levels": f.on_sensor_levels, "audio.voice_match": f.on_voice_match,
+        "name.proposal": f.on_name_proposal,
+    }  # fmt: skip
+    msgs: list = []
+    period = 1.0 / settings.rate_hz
+    events = sorted(run_json["fusion_inputs"], key=lambda e: e[0])
+    next_tick = events[0][0] if events else 0.0
+
+    def tick(now: float) -> None:
+        scene, captions, _ = f.tick(now)
+        for gone in f.take_retractions():
+            msgs.append((now, {"type": "caption_retract", "utt_id": gone.utt_id}))
+        for cap in captions:
+            msgs.append((now, {"type": "caption", **to_jsonable(cap)}))
+        body = to_jsonable(scene)
+        for face in body.get("faces") or []:
+            face["box"] = scale_box(face["box"], fw / cw, fh / ch)
+        msgs.append((now, {"type": "scene", "t": now, **body}))
+
+    for t, topic, ev in events:
+        while next_tick <= t:
+            tick(next_tick)
+            next_tick += period
+        if topic == "audio.transcript":
+            f.on_transcript(ev, t)
+        elif topic in handlers:
+            handlers[topic](ev)
+    for _ in range(int(3 / period)):  # the last drafts settle
+        tick(next_tick)
+        next_tick += period
+    out = {k: v for k, v in run_json.items() if k not in ("messages", "fusion_inputs")}
+    out["messages"] = msgs
+    out["settings"] = list(overrides or []) + ["(fusion replayed)"]
+    return out
 
 
 # ============================================================================ scoring
@@ -827,6 +929,9 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("score", help="score a recorded run")
     s.add_argument("runs", nargs="+")
     s.add_argument("--json", action="store_true", help="print the metrics as JSON")
+    f = sub.add_parser("refuse", help="replay a run's recorded fusion inputs into this code")
+    f.add_argument("runs", nargs="+")
+    f.add_argument("--set", action="append", help="fusion setting, e.g. fusion.snap_max_s=0")
     t = sub.add_parser("turns", help="print a clip's reference turns and speakers")
     t.add_argument("name")
     a = sub.add_parser("truth", help="who talks when, from Light-ASD + voices (static shots)")
@@ -843,6 +948,14 @@ def main(argv: list[str] | None = None) -> int:
         return prepare(args)
     if args.cmd == "run":
         return run(args)
+    if args.cmd == "refuse":
+        for path in args.runs:
+            got = json.loads(Path(path).read_text(encoding="utf-8"))
+            current = PODCASTS / str(got.get("name")) / "ref.json"
+            if current.is_file():
+                got["ref"] = json.loads(current.read_text(encoding="utf-8"))
+            report(score(refuse(got, args.set)))
+        return 0
     if args.cmd == "truth":
         return asd_truth(args)
     if args.cmd == "turns":

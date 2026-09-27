@@ -4,9 +4,15 @@
  * Section 4 - Pages, Engine & Demo. TODO: P-07 (and the face tags of P-06).
  *
  * Built to be read all day, so nothing moves unless it has to:
+ * - The Daylight look (P-44): white paper cards with ink text for people you know, and a soft
+ *   mist-grey card for someone not named yet (no dashed outlines, no brackets). A quiet person's
+ *   tag has a small pointer to their face; a bubble's tail reaches the face, fainter when the
+ *   speaker is only probable. When someone is identified the card turns from mist to paper and
+ *   the new name cross-fades in; a name must hold for IDENTITY_HOLD_S first, so a recogniser that
+ *   wavers never makes the tag flicker.
  * - One card per person. While they are quiet it is a small name tag above the head; when they
  *   talk it grows into a speech bubble whose header is that same name (no second pill), with a
- *   tail to the face: solid for the detected speaker, dashed for a probable one.
+ *   tail to the face.
  * - One slot per bubble, chosen once: centred above the head, or beside the face when there is
  *   no room above. Slots never cover a face (anyone's, with a margin), the status pill or an
  *   alert. A slot that stops fitting is kept for SLOT_HOLD_S before the bubble glides (about
@@ -31,15 +37,16 @@
  */
 
 import {
-  FD, FT, MINT, ACCENT, font, clamp, lerp, easeOut, hexA, rrect, textW, glass, icon,
-  eqBars, dot, keycap, chevrons, arrow, faceBrackets, edgeGlow, REGION, tailFill,
+  FD, FT, font, clamp, lerp, easeOut, hexA, rrect, textW, glass, icon,
+  eqBars, dot, keycap, chevrons, arrow, focusMarks, edgeGlow, REGION,
   springStep, createLineWrap, scrollTo, REDUCED_MOTION,
+  INK, INK_2, INK_3, PAPER, MIST, MIST_INK, TEAL, LEAF, deepen, mixRgba,
 } from './hud.js';
 
 const F = {
-  name: font(620, 25, FD),
-  nameIt: font('italic 560', 25, FD),
-  sub: font(450, 20, FT),
+  name: font(640, 25, FD),
+  newTag: font(650, 15, FT),
+  sub: font(480, 20, FT),
   body: font(430, 31, FT),
   orig: font('italic 400', 22, FT),
   lang: font(620, 16, FT),
@@ -66,6 +73,9 @@ const MOVE_W = 16; // spring stiffness (rad/s): a move settles in about 0.25 s
 const WIDTHS = [1, 0.82, 0.68]; // share of the full reserved width tried when space is tight
 const SAMPLE = 'Did you hear the doorbell a minute ago? The meeting starts at three.';
 const SPEAK_HOLD_S = 0.6; // a speaking glyph stays up through pauses this short
+const IDENTITY_HOLD_S = 0.5; // a new name (or "not known") must hold this long before a tag shows it
+const XFADE_S = 0.32; // an identity change cross-fades the name over this long
+const POINTER = { half: 11, depth: 11 }; // a quiet person's tag points at their face
 const STILL = 0.6; // fixed phase for eqBars: a still level glyph, never a moving meter
 const R = () => REGION;
 /** The status pill (alerts.js drawStatus) is always there: slots slide around it. */
@@ -98,24 +108,24 @@ export function createBubbleLayer() {
     const known = face ? face.known : b?.color !== '#E6EAF0';
     const h = {
       name: b?.name ?? face.label,
-      italic: false,
       lead: 'dot',
       color: face?.color ?? b?.color ?? '#FFFFFF',
       sub: null,
-      subColor: 'rgba(255,255,255,0.62)',
+      subColor: INK_2,
       keys: false,
       unknown: false,
+      now: false, // a name to confirm, or one just confirmed, shows at once (no identity hold)
     };
     if (face) {
       if (proposing) {
         h.name = `${proposal.name}?`;
         h.lead = 'ring';
         h.keys = true;
-        h.color = ACCENT;
+        h.color = TEAL;
+        h.now = true;
       } else if (!known) {
         h.name = face.label;
-        h.italic = true;
-        h.lead = 'userplus';
+        h.lead = 'user';
         h.unknown = true;
         h.sub = 'New';
       } else {
@@ -123,17 +133,53 @@ export function createBubbleLayer() {
         h.sub = face.relation || null;
         if (confirmedAt && confirmedAt.age < 2.2) {
           h.sub = 'Added';
-          h.subColor = MINT;
+          h.subColor = LEAF;
+          h.now = true;
         }
       }
     }
     return h;
   }
 
+  /** Who a header says someone is (a change here is an identity change: held, then cross-faded). */
+  const identityOf = (h) => `${h.name}\u0000${h.unknown}\u0000${h.lead}`;
+  /**
+   * Take a new header for a card. Details (relation, "Added", keys) apply at once; a different
+   * name or known-ness must hold for IDENTITY_HOLD_S (a proposal, or leaving one, is at once),
+   * then cross-fades in while the card eases from mist to paper (or back).
+   */
+  function settleHeader(card, want, anim) {
+    if (!card.hd) {
+      card.hd = want;
+      card.mistT = card.mist = want.unknown ? 1 : 0;
+      return;
+    }
+    const idWant = identityOf(want);
+    if (identityOf(card.hd) === idWant) {
+      card.hd = want;
+      card.cand = null;
+      return;
+    }
+    if (!want.now && card.hd.lead !== 'ring') {
+      if (card.cand !== idWant) {
+        card.cand = idWant;
+        card.candSince = anim;
+        return;
+      }
+      if (anim - card.candSince < IDENTITY_HOLD_S) return;
+    }
+    card.prevHd = card.hd;
+    card.hdAt = anim;
+    card.hd = want;
+    card.cand = null;
+    card.mistT = want.unknown ? 1 : 0;
+  }
+
+  const newTagW = (ctx, s) => textW(ctx, s, F.newTag) + 18;
   function headerWidth(ctx, h, withEq, withLang) {
-    let w = h.lead === 'userplus' ? 30 : 26;
-    w += textW(ctx, h.name, h.italic ? F.nameIt : F.name);
-    if (h.sub) w += 12 + textW(ctx, h.sub, F.sub);
+    let w = h.lead === 'user' ? 36 : 26;
+    w += textW(ctx, h.name, F.name);
+    if (h.sub) w += 12 + (h.unknown ? newTagW(ctx, h.sub) : textW(ctx, h.sub, F.sub));
     if (h.keys) w += 14 + 76;
     if (withLang) w += 104;
     if (withEq) w += 42;
@@ -230,7 +276,7 @@ export function createBubbleLayer() {
   }
 
   // ------------------------------------------------------------ drawing helpers
-  function drawTail(ctx, rect, slot, face, dashed, a) {
+  function drawTail(ctx, rect, slot, face, faint, a, fill) {
     let base;
     let tip;
     let nx;
@@ -265,62 +311,85 @@ export function createBubbleLayer() {
     // control point: leave the bubble perpendicular to its edge, then bend toward the face
     const cx = base[0] + (ny ? dx * 0.55 : dx * 0.1);
     const cy = base[1] + (ny ? dy * 0.1 : dy * 0.55);
+    // one solid tail in the card's own paper; a probable speaker's is simply fainter (no dashes)
     ctx.save();
-    ctx.globalAlpha *= a;
-    if (dashed) {
-      ctx.setLineDash([7, 6]);
-      ctx.strokeStyle = 'rgba(255,255,255,0.82)';
-      ctx.lineWidth = 2.4;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(base[0], base[1]);
-      ctx.quadraticCurveTo(cx, cy, tip[0], tip[1]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(tip[0], tip[1], 4.5, 0, Math.PI * 2);
-      ctx.stroke();
-    } else {
-      const hw = Math.min(14, 6 + len * 0.12);
-      ctx.beginPath();
-      ctx.moveTo(base[0] - nx * hw, base[1] - ny * hw);
-      ctx.quadraticCurveTo(cx - nx * hw * 0.35, cy - ny * hw * 0.35, tip[0], tip[1]);
-      ctx.quadraticCurveTo(cx + nx * hw * 0.35, cy + ny * hw * 0.35, base[0] + nx * hw, base[1] + ny * hw);
-      ctx.closePath();
-      ctx.fillStyle = tailFill();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-    }
+    ctx.globalAlpha *= a * (faint ? 0.55 : 1);
+    const hw = Math.min(14, 6 + len * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(base[0] - nx * hw, base[1] - ny * hw);
+    ctx.quadraticCurveTo(cx - nx * hw * 0.35, cy - ny * hw * 0.35, tip[0], tip[1]);
+    ctx.quadraticCurveTo(cx + nx * hw * 0.35, cy + ny * hw * 0.35, base[0] + nx * hw, base[1] + ny * hw);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20,34,58,0.08)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.restore();
+  }
+
+  /** A quiet person's tag points at their face: a small notch (k 0..1 grows it) toward the face. */
+  function pointerFor(r, slot, face, k) {
+    const half = POINTER.half;
+    const d = POINTER.depth * k;
+    if (d < 1) return null;
+    if (slot === 'above' || slot === 'below') {
+      const px = clamp(face.cx, r.x + RAD + 4, r.x + r.w - RAD - 4);
+      if (slot === 'above') return [[px - half, r.y + r.h - 1], [px, r.y + r.h + d], [px + half, r.y + r.h - 1]];
+      return [[px - half, r.y + 1], [px, r.y - d], [px + half, r.y + 1]];
+    }
+    const eye = face.cy - face.h * 0.15;
+    const edge = Math.min(RAD, r.h / 2);
+    const py = clamp(eye, r.y + edge, r.y + r.h - edge);
+    if (slot === 'left') return [[r.x + r.w - 6, py - half], [r.x + r.w + d, py], [r.x + r.w - 6, py + half]];
+    return [[r.x + 6, py - half], [r.x - d, py], [r.x + 6, py + half]];
   }
 
   function drawHeader(ctx, hd, x, cy) {
     let hx = x;
-    if (hd.lead === 'userplus') {
-      icon(ctx, 'userplus', hx - 2, cy - 11, 22, 'rgba(255,255,255,0.85)', 2);
-      hx += 30;
+    if (hd.lead === 'user') {
+      // someone not named yet: a soft grey avatar disc
+      ctx.save();
+      ctx.fillStyle = 'rgba(59,71,88,0.12)';
+      ctx.beginPath();
+      ctx.arc(hx + 12, cy, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      icon(ctx, 'user', hx + 3, cy - 9, 18, MIST_INK, 2);
+      hx += 36;
     } else if (hd.lead === 'ring') {
       ctx.save();
-      ctx.strokeStyle = hd.color;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = TEAL;
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
       ctx.arc(hx + 7, cy, 8, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.fillStyle = TEAL;
+      ctx.beginPath();
+      ctx.arc(hx + 7, cy, 3, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       hx += 26;
     } else {
       dot(ctx, hx + 7, cy, 7, hd.color);
       hx += 26;
     }
-    const nf = hd.italic ? F.nameIt : F.name;
-    ctx.font = nf;
+    ctx.font = F.name;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = hd.unknown ? 'rgba(255,255,255,0.92)' : '#FFFFFF';
+    ctx.fillStyle = hd.unknown ? MIST_INK : INK;
     ctx.fillText(hd.name, hx, cy);
-    hx += textW(ctx, hd.name, nf) + 12;
-    if (hd.sub) {
+    hx += textW(ctx, hd.name, F.name) + 12;
+    if (hd.sub && hd.unknown) {
+      // "New": a small pill, not a dashed outline
+      const w = newTagW(ctx, hd.sub);
+      rrect(ctx, hx, cy - 12, w, 24, 12);
+      ctx.fillStyle = 'rgba(59,71,88,0.11)';
+      ctx.fill();
+      ctx.font = F.newTag;
+      ctx.fillStyle = MIST_INK;
+      ctx.fillText(hd.sub, hx + 9, cy + 1);
+      hx += w + 12;
+    } else if (hd.sub) {
       ctx.font = F.sub;
       ctx.fillStyle = hd.subColor;
       ctx.fillText(hd.sub, hx, cy + 1);
@@ -328,7 +397,7 @@ export function createBubbleLayer() {
     }
     if (hd.keys) {
       hx += 2;
-      hx += keycap(ctx, hx, cy, 'Y', { size: 16, color: MINT, stroke: hexA(MINT, 0.6), fill: hexA(MINT, 0.14) }) + 8;
+      hx += keycap(ctx, hx, cy, 'Y', { size: 16, color: '#FFFFFF', stroke: TEAL, fill: TEAL }) + 8;
       keycap(ctx, hx, cy, 'N', { size: 16 });
     }
     return hx;
@@ -337,12 +406,12 @@ export function createBubbleLayer() {
   function drawLangTag(ctx, b, x, cy) {
     const w = 94;
     rrect(ctx, x, cy - 14, w, 28, 14);
-    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillStyle = hexA(TEAL, 0.12);
     ctx.fill();
-    icon(ctx, 'globe', x + 8, cy - 9, 18, ACCENT, 2);
+    icon(ctx, 'globe', x + 8, cy - 9, 18, TEAL, 2);
     ctx.font = F.lang;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = ACCENT;
+    ctx.fillStyle = TEAL;
     const code = (b.lang || '').toUpperCase().slice(0, 2);
     if (b.translated) ctx.fillText(`${code} → EN`, x + 31, cy + 1);
     else {
@@ -379,9 +448,9 @@ export function createBubbleLayer() {
     ctx.font = F.orig;
     ctx.textBaseline = 'alphabetic';
     const text = fitTail(ctx, orig, Math.max(40, maxW - hw - 18), F.orig);
-    ctx.fillStyle = 'rgba(255,255,255,0.46)';
+    ctx.fillStyle = INK_3;
     ctx.fillText(text, x, y);
-    ctx.fillStyle = hexA(ACCENT, 0.75);
+    ctx.fillStyle = hexA(TEAL, 0.85);
     ctx.fillText(hint, x + textW(ctx, text, F.orig) + 14, y);
     ctx.restore();
   }
@@ -408,7 +477,7 @@ export function createBubbleLayer() {
     ctx.clip();
     ctx.font = o.font ?? F.body;
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = o.color ?? '#FFFFFF';
+    ctx.fillStyle = o.color ?? INK;
     const alpha0 = ctx.globalAlpha;
     for (let i = Math.max(0, Math.floor(top)); i < lines.length; i++) {
       const row = i - top;
@@ -453,35 +522,43 @@ export function createBubbleLayer() {
     ctx.translate(ox, oy);
     ctx.scale(s, s);
     ctx.translate(-ox, -oy);
-    if (card.tailA > 0.01 && card.face) drawTail(ctx, card, card.slot, card.face, item.b?.dashed, a * card.tailA);
+    // mist for someone not named yet, paper once they are (eased, so identifying them is calm)
+    const fill = mixRgba(PAPER, MIST, card.mist ?? (hd.unknown ? 1 : 0));
+    if (card.tailA > 0.01 && card.face) drawTail(ctx, card, card.slot, card.face, item.b?.dashed, a * card.tailA, fill);
     const r = Math.min(RAD, h / 2);
     glass(ctx, card.blur, x, y, w, h, r, {
       alpha: a,
-      glow: hd.unknown ? null : hd.color,
-      border: hd.unknown ? null : hd.lead === 'ring' ? hexA(ACCENT, 0.55) : 'rgba(255,255,255,0.20)',
+      fill,
+      glow: hd.unknown ? null : hd.lead === 'ring' ? TEAL : hd.color,
+      border: hd.lead === 'ring' ? hexA(TEAL, 0.6) : undefined,
+      notch: card.face && !card.face.tiny ? pointerFor(card, card.slot, card.face, 1 - clamp(card.tailA * 1.6)) : null,
     });
     ctx.save();
     ctx.globalAlpha *= a;
-    if (hd.unknown) {
-      rrect(ctx, x + 1, y + 1, w - 2, h - 2, r - 1);
-      ctx.setLineDash([7, 6]);
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
     // the header row sits at the same place in a tag and in a bubble, so the name never jumps
     const cy = y + lerp(TAG_H / 2, PADT + HEADH / 2, clamp((h - TAG_H) / 40));
     ctx.save();
     rrect(ctx, x, y, w, h, r);
     ctx.clip();
-    drawHeader(ctx, hd, x + PADX - (card.kind === 'tag' ? 2 : 0), cy);
+    const hx = x + PADX - (card.kind === 'tag' ? 2 : 0);
+    const xf = card.prevHd && !REDUCED_MOTION ? easeOut(clamp((anim - card.hdAt) / XFADE_S)) : 1;
+    if (xf < 1) {
+      // an identity change: the old name lifts away as the new one settles in
+      ctx.save();
+      ctx.globalAlpha *= 1 - xf;
+      drawHeader(ctx, card.prevHd, hx, cy - xf * 8);
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha *= xf;
+      drawHeader(ctx, hd, hx, cy + (1 - xf) * 8);
+      ctx.restore();
+    } else drawHeader(ctx, hd, hx, cy);
     if (card.textA > 0.01 && (card.b || card.lastB)) {
       const b = card.b ?? card.lastB;
       ctx.save();
       ctx.globalAlpha *= card.textA;
       const rx = x + w - PADX - 26;
-      eqBars(ctx, rx, cy, hd.unknown ? '#FFFFFF' : hd.color, STILL, speakLevel(card, b.speaking, anim), 18);
+      eqBars(ctx, rx, cy, hd.unknown ? MIST_INK : hd.lead === 'ring' ? TEAL : deepen(hd.color, 0.3), STILL, speakLevel(card, b.speaking, anim), 18);
       if (b.lang && b.lang !== 'en') drawLangTag(ctx, b, rx - 104, cy);
       let by = y + PADT + HEADH + BODY_GAP;
       if (card.orig) {
@@ -489,7 +566,7 @@ export function createBubbleLayer() {
         else if (b.orig) {
           ctx.font = F.orig;
           ctx.textBaseline = 'alphabetic';
-          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.fillStyle = INK_3;
           ctx.fillText(fitTail(ctx, b.orig, card.bw - PADX * 2, F.orig), x + PADX, by + 21);
         }
         by += ORIG_H;
@@ -572,7 +649,8 @@ export function createBubbleLayer() {
         A.h += dead(f.h - A.h, A.h * 0.12);
         A.top = A.cy - A.h * 0.72;
       }
-      const hd = header(f, b);
+      settleHeader(card, header(f, b), anim);
+      const hd = card.hd;
       card.item = { hd, b };
       if (b) {
         if (card.threadId !== b.id) {
@@ -691,6 +769,7 @@ export function createBubbleLayer() {
       }
       c.a = REDUCED_MOTION ? aT * dim : ease(c.a, aT * dim, dt, 10);
       c.appear = ease(c.appear, 1, dt, 9);
+      c.mist = REDUCED_MOTION ? c.mistT : ease(c.mist ?? c.mistT, c.mistT, dt, 9);
       c.tailA = ease(c.tailA, c.kind === 'bubble' ? (ghost ? 0.4 : 1) : 0, dt, 10);
       c.textA = REDUCED_MOTION && c.kind !== 'bubble' ? 0 : ease(c.textA, c.kind === 'bubble' && b ? b.alpha : 0, dt, 14);
       if (c.kind === 'bubble' && b) {
@@ -871,7 +950,7 @@ export function createBubbleLayer() {
       ctx.globalAlpha *= a;
       const dir = side === 'left' ? -1 : 1;
       // one static chevron toward the speaker; its side only changes after the SLOT_HOLD_S hold above
-      chevrons(ctx, (side === 'left' ? x - 24 : x + DW + 24), y + Math.min(d.h, TAG_H) / 2, dir, o.color, 15, 4, 1, a);
+      chevrons(ctx, (side === 'left' ? x - 24 : x + DW + 24), y + Math.min(d.h, TAG_H) / 2, dir, deepen(o.color, 0.25), 15, 4, 1, a);
       const hy = y + (d.h > TAG_H + 4 ? PADT + HEADH / 2 : d.h / 2);
       ctx.save();
       rrect(ctx, x, y, DW, d.h, RAD);
@@ -879,14 +958,14 @@ export function createBubbleLayer() {
       dot(ctx, x + PADX + 7, hy, 7, o.color);
       ctx.font = F.name;
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = INK;
       ctx.fillText(o.name, x + PADX + 26, hy);
       const nameW = textW(ctx, o.name, F.name);
       ctx.font = F.sub;
-      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.fillStyle = INK_2;
       ctx.fillText(`·  ${side === 'left' ? 'on your left' : 'on your right'}`, x + PADX + 26 + nameW + 12, hy + 1);
       if (bb) {
-        eqBars(ctx, x + DW - PADX - 26, hy, o.color, STILL, speakLevel(d, bb.speaking && on, anim), 18);
+        eqBars(ctx, x + DW - PADX - 26, hy, deepen(o.color, 0.3), STILL, speakLevel(d, bb.speaking && on, anim), 18);
         d.wrap.update(ctx, bb.tokens, DW - PADX * 2, F.body, anim);
         scrollTo(d.scroll, d.wrap.lines.length, rows, dt);
         drawText(ctx, d.wrap, d.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: DW - PADX * 2 });
@@ -910,14 +989,14 @@ export function createBubbleLayer() {
       ctx.save();
       ctx.globalAlpha *= a;
       // a static arrow pointing down: behind you
-      arrow(ctx, midX() - w / 2 + 28, by - 28, 20, Math.PI / 2, o.color, 3);
+      arrow(ctx, midX() - w / 2 + 28, by - 28, 20, Math.PI / 2, deepen(o.color, 0.25), 3);
       dot(ctx, midX() - w / 2 + 52, by - 28, 6, o.color);
       ctx.font = F.sub;
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = INK;
       ctx.fillText(head, midX() - w / 2 + 70, by - 27);
       if (text) {
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = INK_2;
         ctx.fillText(`—  ${text}`, midX() - w / 2 + 82 + headW, by - 27);
       }
       ctx.restore();
@@ -950,16 +1029,18 @@ export function createBubbleLayer() {
     const x = midX() - w / 2;
     const y = bottomY() - h - 6;
     const a = c.a * dim;
-    glass(ctx, blur, x, y, w, h, RAD, { alpha: a, glow: bb.color });
+    // a voice nobody is named for gets the same soft mist card as a stranger's tag
+    const unknown = bb.color === '#E6EAF0';
+    glass(ctx, blur, x, y, w, h, RAD, { alpha: a, fill: unknown ? MIST : PAPER, glow: unknown ? null : bb.color });
     ctx.save();
     ctx.globalAlpha *= a;
     const hy = y + PADT + HEADH / 2;
-    dot(ctx, x + PADX + 7, hy, 7, bb.color);
+    dot(ctx, x + PADX + 7, hy, 7, unknown ? '#B9C3CF' : bb.color);
     ctx.font = F.name;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = unknown ? MIST_INK : INK;
     ctx.fillText(bb.name, x + PADX + 26, hy);
-    eqBars(ctx, x + w - PADX - 26, hy, bb.color, STILL, speakLevel(c, !!b && bb.speaking, anim), 18);
+    eqBars(ctx, x + w - PADX - 26, hy, unknown ? MIST_INK : deepen(bb.color, 0.3), STILL, speakLevel(c, !!b && bb.speaking, anim), 18);
     c.wrap.update(ctx, bb.tokens, w - PADX * 2, F.body, anim);
     scrollTo(c.scroll, c.wrap.lines.length, rows, dt);
     drawText(ctx, c.wrap, c.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: w - PADX * 2 });
@@ -989,12 +1070,12 @@ export function createBubbleLayer() {
     const x = midX() - w / 2;
     const y = R().y + R().h - 118 + (REDUCED_MOTION ? 0 : (1 - easeOut(c.a)) * 12);
     const a = c.a * (b ? b.alpha : 1) * dim;
-    glass(ctx, blur, x, y, w, h, h / 2, { alpha: a, tint: 'rgba(14,16,22,0.46)' });
+    glass(ctx, blur, x, y, w, h, h / 2, { alpha: a });
     ctx.save();
     ctx.globalAlpha *= a;
     ctx.font = F.youLabel;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = bb.typed ? ACCENT : 'rgba(255,255,255,0.58)';
+    ctx.fillStyle = bb.typed ? TEAL : INK_3;
     ctx.fillText(label, x + 24, y + h / 2 + 1);
     const tx = x + 24 + lw + 16;
     const tw = w - (tx - x) - 28;
@@ -1009,19 +1090,17 @@ export function createBubbleLayer() {
     const { blur, anim } = env;
     const dim = view.paused ? 0.3 : 1;
 
-    // face brackets: strangers when they first appear, proposals while they wait for an answer.
-    // The dashes stand still (t 0); brackets only fade in and out.
+    // focus marks only while Attune is identifying someone: solid teal corners while a name waits
+    // for Y / N, turning green as it is confirmed, then gone. Strangers get no marks at all: their
+    // soft grey tag says it calmly.
     for (const f of view.faces) {
       if (f.tiny || f.ghost) continue;
       const prop = f.proposal;
-      const t = 0;
       if (prop && prop.state === 'proposed') {
-        faceBrackets(ctx, f, { a: 0.9 * dim, color: ACCENT, dashed: true, t, scale: 1.3 });
+        const inA = REDUCED_MOTION || prop.wStart == null ? 1 : clamp((anim - prop.wStart) / 0.3);
+        focusMarks(ctx, f, { a: inA * dim, color: TEAL });
       } else if (prop && prop.state === 'confirmed' && prop.age < 1.2) {
-        faceBrackets(ctx, f, { a: (1 - prop.age / 1.2) * dim, color: MINT, t, scale: 1.3 });
-      } else if (!f.known && anim - f.born < 3.5) {
-        const a = clamp((anim - f.born) / 0.35) * clamp((3.5 - (anim - f.born)) / 0.5);
-        faceBrackets(ctx, f, { a: a * 0.85 * dim, color: '#FFFFFF', dashed: true, t, scale: 1.3 });
+        focusMarks(ctx, f, { a: (1 - prop.age / 1.2) * dim, color: LEAF });
       }
     }
 
@@ -1044,12 +1123,7 @@ export function createBubbleLayer() {
       if (!f.tiny || cards.has(f.key)) continue;
       ctx.save();
       ctx.globalAlpha = dim * (f.ghost ? 0.5 : 1);
-      dot(ctx, f.cx, f.top - 8, 7, f.color, 14);
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(f.cx, f.top - 8, 11, 0, Math.PI * 2);
-      ctx.stroke();
+      dot(ctx, f.cx, f.top - 8, 7, f.known ? f.color : '#B9C3CF', 14);
       ctx.restore();
     }
 

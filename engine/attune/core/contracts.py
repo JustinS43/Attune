@@ -431,7 +431,7 @@ class NameEvidence:
 @dataclass
 class Alert:
     alert_id: str
-    kind: str  # smoke, co, doorbell
+    kind: str  # smoke, co, doorbell, knock
     side: str
     confidence: float
     state: str  # start, update, watch, acknowledged, clear

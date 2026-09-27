@@ -48,7 +48,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `scene` | 1 Vision (fusion) | `frame_no, t, faces: [FaceState], offscreen: [Offscreen], you_speaking` | 15/s and on every change |
 | `name.proposal` | 2 Audio & Lang | `proposal_id, track_id, name, state, expires_t` | `state`: proposed, confirmed, rejected, expired. Explicit self-introductions or repeated directly addressed names may produce a proposal; confirmation can name an automatic profile. |
 | `name.evidence` | 2 Audio & Lang | `track_id, person_id=None, name, utt_id` | A validated self-introduction or direct address associated with one visible unknown or automatic face. Vision stores only candidate counts, distinct utterance IDs and dates for automatic profiles; never transcript text. |
-| `alert` | 2 Audio & Lang | `alert_id, kind, side, confidence, state` | `kind`: smoke, co, doorbell; `state`: start, update, watch, acknowledged, clear |
+| `alert` | 2 Audio & Lang | `alert_id, kind, side, confidence, state` | `kind`: smoke, co, doorbell, knock; `state`: start, update, watch, acknowledged, clear |
 | `reply.suggestions` | 2 Audio & Lang | `options: [str, str, str]` | For keys 7–9 |
 | `sensors.levels` | 3 Hardware | `t, left, right, motor_on` | Every 50 ms, 0–1023 |
 | `sensors.touch` | 3 Hardware | `t, gesture` (`tap`, `hold`, `double`, `triple`) | Raw gesture |
