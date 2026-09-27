@@ -111,6 +111,19 @@ def test_whisper_fallback_uses_its_own_draft_interval_and_still_finalizes(config
     assert transcripts(bus, final=True)
 
 
+def test_whisper_skips_drafts_when_audio_is_queued_but_keeps_final(config, bus):
+    cfg = config | {"whisper": {"draft_interval_ms": 560, "max_draft_backlog_ms": 250}}
+    asr = GrowingWhisper()
+    s = service(cfg, bus, asr)
+    for n in range(30):
+        s.worker.inbox.put_nowait(("audio.block", {"t": 10 + n * 0.01}, 0))
+    audio(s, 10.0, 1.2, SPEECH)
+    assert asr.fed == []
+    audio(s, 11.2, 0.6, QUIET)
+    assert len(asr.fed) == 1 and asr.fed[0][1]
+    assert transcripts(bus, final=True)
+
+
 def test_a_capture_gap_finishes_the_utterance_instead_of_dropping_it(config, bus):
     s = service(config, bus, GrowingASR())
     audio(s, 10.0, 1.0, SPEECH)
