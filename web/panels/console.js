@@ -6,6 +6,8 @@
  * Enroll with live thumbnails and explicit consent, the people list (rename / delete), pause and
  * forget session, switches and languages, pattern tests with the rig link, the calibration steps,
  * the status strip with per-part health, and the event log with a Mark button.
+ * Cloud captions (P-48): a "Cloud captions" cell in the status strip from the `cloud` message
+ * (Off / Connecting / On · 420 ms / Fell back to local: network / Unavailable: credentials missing).
  */
 
 import { h, section, clockText, dateText } from './ui.js';
@@ -70,6 +72,29 @@ export function createConsole(ctx) {
     return llm.warm ? ['Ready', 'ok'] : ['Starting', 'warn'];
   }
 
+  // cloud captions (P-48): one cell that follows the `cloud` message, kept across status ticks
+  const cloudLabel = h('span', { class: 'atp-stat-label', text: 'Cloud captions' });
+  const cloudValue = h('span', { class: 'atp-stat-value', text: '—' });
+  const cloudStat = h('div', { class: 'atp-stat atp-stat-wide', id: 'atp-cloud' }, cloudLabel, cloudValue);
+  const CLOUD_REASON = { error: 'Google error' };
+  function cloudText(c) {
+    if (!c) return ['—', ''];
+    const reason = CLOUD_REASON[c.reason] || c.reason || '';
+    if (!c.enabled || c.state === 'off') return ['Off', ''];
+    if (c.state === 'connecting') return ['Connecting', ''];
+    if (c.state === 'on') return [Number.isFinite(c.latency_ms) ? `On · ${Math.round(c.latency_ms)} ms` : 'On', 'ok'];
+    if (c.state === 'fallback') return [`Fell back to local${reason ? `: ${reason}` : ''}`, 'warn'];
+    if (c.state === 'unavailable') return [`Unavailable${reason ? `: ${reason}` : ''}`, 'warn'];
+    if (c.state === 'paused') return ['Paused', ''];
+    return [String(c.state || '—'), ''];
+  }
+  function renderCloud(c) {
+    const [text, tone] = cloudText(c);
+    cloudStat.className = `atp-stat atp-stat-wide ${tone}`;
+    cloudValue.textContent = text;
+    cloudStat.title = `Cloud captions: ${text}`;
+  }
+
   function renderStatus(s) {
     const delay = typeof s.caption_delay === 'number' ? `${s.caption_delay.toFixed(2)} s` : '—';
     const delayTone = typeof s.caption_delay === 'number' ? (s.caption_delay <= 1 ? 'ok' : s.caption_delay <= 1.5 ? 'warn' : 'bad') : '';
@@ -84,6 +109,7 @@ export function createConsole(ctx) {
       stat('Ollama', oll, ollTone),
       stat('Power', s.on_battery == null ? '—' : s.on_battery ? 'On battery' : 'Plugged in', s.on_battery == null ? '' : s.on_battery ? 'bad' : 'ok'),
       meter('Mic level', s.mic_level),
+      cloudStat,
     );
     const parts = Array.isArray(s.parts) ? s.parts : Object.entries(s.parts || {}).map(([part, v]) => (typeof v === 'object' && v ? { part, ...v } : { part, ok: !!v }));
     partsRow.replaceChildren(...parts.map((p) => h('span', { class: `atp-part ${p.ok && !p.stale ? 'ok' : 'bad'}`, title: p.stale ? 'status is stale' : p.detail || (p.ok ? 'healthy' : 'not running') }, h('i'), p.part)));
@@ -430,6 +456,7 @@ export function createConsole(ctx) {
         case 'event_log': addLog(m); break;
         case 'paused': case 'welcome': renderPaused(); break;
         case 'hw_link': renderLink(); break;
+        case 'cloud': renderCloud(m); if (!cloudStat.isConnected) statusGrid.append(cloudStat); break;
         default: break;
       }
     },

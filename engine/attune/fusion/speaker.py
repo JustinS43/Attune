@@ -9,8 +9,9 @@ While speech is detected, each tick (15 per second) checks, in order:
    matches this utterance while its lips move at least in the probable band.
    Held at least 0.5 s; only switches to someone scoring 1.5x higher. Continuity:
    while speech runs on without a pause and no other face talks, the face keeps
-   the speech for up to `continuity_s` after its last own evidence, unless its
-   voice is vetoed or Light-ASD scores it (`_continues`).
+   the speech for up to `continuity_s` after its last own evidence (only
+   `asd_continuity_s` when Light-ASD scores it silent: a hand by the mouth), unless
+   its voice is vetoed (`_continues`).
 3. A probable visible speaker: exactly one face that passes the talking checks
    only in the probable band (`lip_uncertain`), while everyone else is still.
    Dashed tail.
@@ -48,9 +49,11 @@ mouth reached r >= 0.3 about as often against the room's speech shifted by
 seconds as against the real one, so it is one requirement among several.
 
 Voices. This utterance's `audio.voice_match` vetoes a face when it matches
-someone else: a known person, a stranger ("track-N") who was on screen at the
-same time as this face, or an off-screen voice ("offscreen-N"). No match is
-inconclusive. A match to the face's own print lets it speak with the
+someone else: a saved contact, a stranger ("track-N") or automatic contact
+("auto-...") who was on screen on another face at the same time as this face, or an
+off-screen voice ("offscreen-N") while Light-ASD doesn't hear this face talking
+(V-31, `_voice_verdict`). No match is inconclusive. A match to the face's own print
+(or its track's print from before it was recognised) lets it speak with the
 probable-band mouth bar.
 Voice prints are harvested from a face that is talking on its own evidence
 with r >= `harvest_min_corr`, and as "offscreen-N" (`learn_offscreen`) from
@@ -64,11 +67,17 @@ Light-ASD (V-22, asd_gate.py). For a face with a fresh `asd_score`, Light-ASD's 
 veto, the hold and switch rules and "You" still apply. Other faces keep the checks.
 
 Captions: every word has a time, so a transcript is split where the speaker
-changes. If nobody qualifies yet, the first words wait up to 300 ms for a
+changes (a switch Light-ASD made is dated back `asd_switch_lag_s`, and each change
+moves back to the pause before it, `_snap`). If nobody qualifies yet, the first words wait up to 300 ms for a
 speaker before showing as "Someone". Once a segment is shown, later drafts keep
 its words and speaker unless the evidence over most of it changes (see
 `_redraft`); a face leaving never re-labels what it already said, and segment
 ids that drop out are retracted (`caption.retract`).
+
+Cloud captions (V-32, cloud_tags.py). While the wearer has them on, Google's per-word
+speaker tags are one more input: each caption word's evidence comes from the tag's
+face, a new voice gets its own bubble at once, and a final waits a moment for its tags.
+Without them (`cloud=None`, or no tags) nothing here changes.
 
 This class is pure logic with an explicit `now`, so tests can drive it with
 simulated events; FusionService (service.py) runs it on the bus.
@@ -96,6 +105,7 @@ from ..vision.types import (
     get,
 )
 from .asd_gate import AsdGate
+from .cloud_tags import CloudTags
 from .harvest import Harvester, voice_id
 from .sync import Envelope, in_time_score
 
@@ -276,8 +286,9 @@ def _merge_neighbours(groups: list[_Group]) -> list[_Group]:
 
 
 class SpeakerFusion:
-    def __init__(self, settings: FusionSettings | None = None):
+    def __init__(self, settings: FusionSettings | None = None, cloud: CloudTags | None = None):
         self.s = settings or FusionSettings()
+        self.cloud = cloud  # V-32: cloud captions' speaker tags (None: not used)
         self.asd_gate = AsdGate(self.s)  # V-22: Light-ASD decides for the faces it scores
         self.tracks: dict[int, _TrackInfo] = {}
         self.frame_no = 0
@@ -309,6 +320,9 @@ class SpeakerFusion:
         self._earned: tuple[float | None, dict[int, float]] = (None, {})  # speech run -> s talked
         self._stopped: dict[int, float] = {}  # track -> when it last stopped talking (5 s)
         self.last_seen: dict[int, float] = {}  # track -> when it was last on screen
+        # voice id -> {track: when last on screen with it}: whether a saved or automatic
+        # contact was in view on another face at the same time as a given face (V-31)
+        self.voice_seen: dict[str, dict[int, float]] = {}
         self._offscreen_n = 0  # "offscreen-N" voices learnt this session
         self._offscreen_run: tuple[float, str] | None = None  # (speech start, its new id)
         self.claimed: dict[str, str] = {}  # "offscreen-N" -> the voice id of the face it was
@@ -341,7 +355,9 @@ class SpeakerFusion:
             mouth = get(tr, "mouth_open")
             if mouth is not None:
                 info.mouth.append((t, float(mouth)))
-            self.voice_labels[voice_id(info.person_id, tid)] = self.label_for(info)
+            vid = voice_id(info.person_id, tid)
+            self.voice_labels[vid] = self.label_for(info)
+            self.voice_seen.setdefault(vid, {})[tid] = t
         for tid in [k for k in self.tracks if k not in seen]:
             del self.tracks[tid]
 
@@ -408,6 +424,16 @@ class SpeakerFusion:
         prev = self.pending.get(utt)
         self.pending[utt] = _Pending(ev, prev.first_seen if prev else now)
 
+    def on_cloud_words(self, ev, now: float) -> None:
+        """V-32: `speaker.cloud`, per-word speaker tags from cloud captions."""
+        if self.cloud is not None:
+            self.cloud.on_words(ev, now)
+
+    def on_cloud_state(self, ev) -> None:
+        """V-32: `cloud.state` (a final waits for tags only while it is "on")."""
+        if self.cloud is not None:
+            self.cloud.on_state(ev)
+
     def on_appearance(self, ev) -> None:
         self.colors[int(get(ev, "track_id"))] = get(ev, "color")
 
@@ -434,9 +460,12 @@ class SpeakerFusion:
         self.harvester.reset()
         self.harvested.clear()
         self.last_seen.clear()
+        self.voice_seen.clear()
         self._offscreen_n = 0
         self._offscreen_run = None
         self.claimed.clear()
+        if self.cloud is not None:
+            self.cloud.forget()
 
     # ---------------- labels ----------------
     def label_for(self, info: _TrackInfo) -> str:
@@ -630,39 +659,70 @@ class SpeakerFusion:
         return next((m for m in reversed(self.voice_matches) if m[0] >= start - 0.5), None)
 
     def _voice_verdict(self, tr: _TrackInfo, now: float) -> str | None:
-        """What this utterance's voice match says about a face: "veto", "support" or None."""
+        """What this utterance's voice match says about a face: "veto", "support" or None.
+
+        V-31: a stranger's or an automatic contact's voice vetoes a face only when its owner
+        was in view on another face at the same time as this face: an automatic print may
+        be this very face (not recognised yet on a new track, or saved twice), as a
+        stranger's may be the same person tracked again. The face's own print from before
+        it was recognised ("track-N") supports it. An off-screen voice ("offscreen-N")
+        never vetoes the face Light-ASD hears talking: it may have been learnt from this
+        face while a hand hid its mouth (that face then claims it, `_claim`). A saved
+        contact's voice still vetoes any other face.
+        """
         match = self._latest_voice_match(now)
         if match is None:
             return None
         _, _, pid, score = match
-        if score < self.s.voice_match:
+        if score < self.s.voice_match or pid is None:
+            return None  # nobody matched: inconclusive, it must not overrule lips and sound
+        if self._own_voice(pid, tr):
+            return "support"
+        if self._stale_voice(pid, now):
             return None
-        vid = voice_id(tr.person_id, tr.track_id)
-        if pid is not None:
-            if pid == vid or self.claimed.get(pid) == vid:
-                return "support"
-            if self._stale_voice(pid, now):
-                return None
-            # Another voice matched. It vetoes this face when it is clearly someone else: a
-            # known person, a voice learnt off screen, or a stranger who was on screen at the
-            # same time as this face. (A stranger last seen before this face appeared may be
-            # this same person, tracked again after leaving.)
-            if not pid.startswith("track-"):
-                return "veto"
+        if self._asd_hears(tr, now) and self._quiet_in_view(pid, now):
+            return None  # Light-ASD hears this face; the voice's face in view is still: stale
+        if self._seen_elsewhere(pid, tr):
+            return "veto"  # its owner is (or was, beside this face) another face in view
+        if pid.startswith(("track-", "auto-")):
+            # a stranger or an automatic contact never in view beside this face: it may be
+            # this same person (tracked again, not recognised yet, or saved twice)
+            return None
+        if pid.startswith("offscreen-") and self._asd_hears(tr, now):
+            return None  # an off-screen voice vs Light-ASD's lips and sound: they win
+        return "veto"
+
+    def _own_voice(self, pid: str, tr: _TrackInfo) -> bool:
+        """Is voice id `pid` this face's own: its print, its track's print from before it was
+        recognised, or an off-screen voice it claimed?"""
+        mine = (voice_id(tr.person_id, tr.track_id), f"track-{tr.track_id}")
+        return pid in mine or self.claimed.get(pid) in mine
+
+    def _seen_elsewhere(self, pid: str, tr: _TrackInfo) -> bool:
+        """Was voice `pid`'s owner in view on another face since this face appeared?"""
+        if pid.startswith("track-"):
             other = pid.removeprefix("track-")
             seen = self.last_seen.get(int(other)) if other.isdigit() else None
-            if seen is not None and seen >= tr.first_t:
-                return "veto"
-            return None
-        # Nobody matched. A low score against a session print is inconclusive in
-        # background noise, so it must not overrule positive lip and sound evidence.
-        return None
+            return int(other) != tr.track_id and seen is not None and seen >= tr.first_t
+        owner = self.claimed.get(pid, pid)
+        return any(
+            tid != tr.track_id and t >= tr.first_t
+            for tid, t in self.voice_seen.get(owner, {}).items()
+        )
+
+    def _asd_hears(self, tr: _TrackInfo, now: float) -> bool:
+        """Does Light-ASD (a fresh score, in its talking state) hear this face talking?"""
+        asd = self.asd_gate.covered(self, now).get(tr.track_id)
+        return asd is not None and asd.talking
 
     def _visible_track(self, vid: str, now: float) -> _TrackInfo | None:
         """The face in view right now that voice id `vid` belongs to, if any."""
         vid = self.claimed.get(vid, vid)
         for tr in self.tracks.values():
-            if now - tr.t <= 0.5 and voice_id(tr.person_id, tr.track_id) == vid:
+            if now - tr.t <= 0.5 and vid in (
+                voice_id(tr.person_id, tr.track_id),
+                f"track-{tr.track_id}",  # its print from before it was recognised
+            ):
                 return tr
         return None
 
@@ -680,6 +740,17 @@ class SpeakerFusion:
         asd = self.asd_gate.covered(self, now).get(tr.track_id)
         return asd is not None and asd.score < self.s.asd_off
 
+    def _quiet_in_view(self, vid: str, now: float) -> bool:
+        """Is voice `vid`'s face in view, not scored by Light-ASD, and its mouth measured and
+        still? (The voice match then hears an earlier turn, like `_stale_voice`.)"""
+        tr = self._visible_track(vid, now)
+        return (
+            tr is not None
+            and tr.track_id not in self.asd_gate.covered(self, now)
+            and tr.measured
+            and not (tr.stirring or tr.talking)
+        )
+
     def _claim(self, now: float) -> None:
         """Let a face that clearly talks with an off-screen voice claim it (offscreen_claim_s)."""
         s = self.s
@@ -688,7 +759,9 @@ class SpeakerFusion:
         if pid is None or not pid.startswith("offscreen-") or pid in self.claimed:
             pid = None
         for tr in self.tracks.values():
-            strong = tr.talking and tr.r is not None and tr.r >= s.harvest_min_corr
+            strong = (
+                tr.talking and tr.r is not None and tr.r >= s.harvest_min_corr
+            ) or self._asd_hears(tr, now)
             tr.claims.append((now, pid if strong else None))
             while tr.claims and now - tr.claims[0][0] > s.offscreen_claim_s:
                 tr.claims.popleft()
@@ -706,8 +779,11 @@ class SpeakerFusion:
         face is a candidate, or `decide` would have taken it), speech has not paused since
         this face last talked on its own evidence (a pause is `speech_hangover_s`: a turn
         can start there), that was under `continuity_s` ago, the face has earned it (see
-        below), and the voice has not vetoed it. Only while Light-ASD has no fresh score for the face (vision too slow, face
-        turned away): Light-ASD's own verdict, when it has one, is never overruled.
+        below), and the voice has not vetoed it. When Light-ASD scores the face and calls it
+        silent, only for `asd_continuity_s` (V-31; `continuity_s` while the voice match is
+        this face's own): a hand resting by the mouth drops Light-ASD's score for a moment
+        while the person talks on; a longer silence is its verdict (someone off camera took
+        over without a pause).
         """
         s = self.s
         tid, t = self._evidence
@@ -722,7 +798,11 @@ class SpeakerFusion:
         earned = self._earned[1].get(track_id, 0.0) if self._earned[0] == run else 0.0
         if earned < s.continuity_min_s or earned < s.continuity_share * (now - run):
             return False
-        return track_id not in self.asd_gate.covered(self, now)
+        if track_id not in self.asd_gate.covered(self, now):
+            return True
+        # its own voice still heard: the whole continuity_s, like a face Light-ASD can't score
+        own = track_id in self.tracks and self._voice_verdict(self.tracks[track_id], now)
+        return now - t <= (s.continuity_s if own == "support" else s.asd_continuity_s)
 
     def decide(self, now: float) -> tuple[Speaker | None, float | None]:
         """The speaker right now, and the in-time score behind it (face cases only)."""
@@ -858,6 +938,8 @@ class SpeakerFusion:
         the new words at the end are split again. Segment ids that are no longer part of
         the utterance are queued in `retractions`.
         """
+        if self.cloud is not None and self.cloud.wait(ev, now):
+            return None  # V-32: a final waits a moment for the cloud's tags on its words
         words = [tuple(w) for w in (get(ev, "words") or [])]
         t_start = float(get(ev, "t_start", now))
         t_end = float(get(ev, "t_end", now))
@@ -874,11 +956,15 @@ class SpeakerFusion:
         ):
             return None  # wait a little for a speaker (only before anything is shown)
         evidence = [self.speaker_at(_mid(w)) or _someone() for w in words]
+        if self.cloud is not None:
+            evidence = self.cloud.evidence(self, words, evidence, now)  # V-32
+        # V-31: each change moves back to its pause before smoothing too, so a short reply
+        # whose evidence came late is long enough to keep its own bubble
         if mem is None:
             mem = _UttMemory()
-            groups = self._smooth(_raw_groups(list(zip(words, evidence))))
+            groups = self._smooth(self._snap(_raw_groups(list(zip(words, evidence)))))
         else:
-            groups = self._smooth(self._redraft(mem.segs, words, evidence))
+            groups = self._smooth(self._snap(self._redraft(mem.segs, words, evidence)))
         groups = self._snap(groups)
 
         ids: list[str] = []
@@ -985,7 +1071,10 @@ class SpeakerFusion:
         speaker next to it, and any other piece under `min_segment_s` joins its
         longer neighbour. Real turn changes (each side longer) stay split. A piece
         already shown with a known speaker (locked) and at least `min_segment_s`
-        long never takes another's speaker.
+        long never takes another's speaker. V-31: neither does a known speaker's piece of at
+        least `turn_min_s` next to another known speaker, with a pause (`snap_gap_s`) on both
+        sides: a short reply ("Okay.", "Do you like it?") is a turn of its own, not a flicker
+        inside someone's sentence.
         """
 
         def span(ws: list) -> float:
@@ -1007,11 +1096,29 @@ class SpeakerFusion:
                 )
             ]
 
+        def turn(gs: list[_Group], i: int) -> bool:
+            """Piece i is a short turn between two known talkers: another known speaker is
+            next to it, with a pause (or the caption's edge) on both sides."""
+            g, gap, cap = gs[i], self.s.snap_gap_s, self.s.max_word_s
+            if g.speaker.kind == "someone" or span(g.words) < self.s.turn_min_s:
+                return False
+            nbrs = [gs[k] for k in (i - 1, i + 1) if 0 <= k < len(gs)]
+            if not any(
+                n.speaker.kind != "someone" and _who(n.speaker) != _who(g.speaker) for n in nbrs
+            ):
+                return False
+            ws = g.words
+            before = i == 0 or float(ws[0][1]) - _end(gs[i - 1].words[-1], cap) >= gap
+            after = i == len(gs) - 1 or float(gs[i + 1].words[0][1]) - _end(ws[-1], cap) >= gap
+            return before and after
+
         def rule(gs: list[_Group], i: int) -> tuple[int, int | None]:
             """(priority, neighbour to join) for piece i; lower priority acts first."""
             g = gs[i]
             if g.locked and g.speaker.kind != "someone":
                 return 9, None  # shown with a known speaker: it keeps it
+            if turn(gs, i):
+                return 9, None  # a short reply between pauses: a turn of its own
             nbrs = [k for k in (i - 1, i + 1) if 0 <= k < len(gs)]
             known = [k for k in nbrs if gs[k].speaker.kind != "someone"]
             sandwiched = len(nbrs) == 2 and _who(gs[i - 1].speaker) == _who(gs[i + 1].speaker)
@@ -1026,6 +1133,8 @@ class SpeakerFusion:
                 return 2, max(nbrs, key=lambda k: span(gs[k].words))
             return 9, None
 
+        if self.cloud is not None:
+            groups = self.cloud.protect(groups)  # V-32: a turn the cloud heard stays split
         gs = _merge_neighbours(groups)
         while len(gs) > 1:
             # sandwiched flickers, then unknown words, then the shortest other piece
@@ -1053,6 +1162,8 @@ class SpeakerFusion:
         for a, b in pairwise(groups):
             if b.speaker.kind == "someone" or _who(a.speaker) == _who(b.speaker):
                 continue
+            if self.cloud is not None and self.cloud.placed(a.words, b.words):
+                continue  # V-32: the cloud's tags put the change here
             change = float(b.words[0][1])
             best_k, best_gap = None, change - _end(a.words[-1], s.max_word_s)
             best_gap = max(best_gap, s.snap_gap_s - 1e-9)
@@ -1067,6 +1178,28 @@ class SpeakerFusion:
                 b.evidence[:0] = a.evidence[best_k:]
                 del a.words[best_k:], a.evidence[best_k:]
         return groups
+
+    def _change_time(self, spk: Speaker | None, now: float) -> float:
+        """When a speaker change decided now really happened (V-31).
+
+        Light-ASD scores the newest `asd_score_s` of lips and sound a few times a second,
+        so it hears a new talker `asd_switch_lag_s` or so after they start. A switch from
+        one face to another that Light-ASD made is dated back by that much, so a reply's
+        first words (often without a pause for `_snap`) don't stay the previous talker's.
+        """
+        prev = self.timeline[-1] if self.timeline else None
+        if (
+            self.s.asd_switch_lag_s > 0
+            and prev is not None
+            and spk is not None
+            and spk.kind == "face"
+            and prev[1] is not None
+            and prev[1].kind == "face"
+            and prev[1].track_id != spk.track_id
+            and spk.track_id in self.asd_gate.covered(self, now)
+        ):
+            return max(now - self.s.asd_switch_lag_s, prev[0] + 1e-3)
+        return now
 
     def take_retractions(self) -> list[CaptionRetract]:
         """Segment ids to retract since the last call (the service publishes them)."""
@@ -1084,9 +1217,11 @@ class SpeakerFusion:
         self.current = spk
         self._current_in_time = r
         if not self.timeline or not _same(self.timeline[-1][1], spk):
-            self.timeline.append((now, spk))
+            self.timeline.append((self._change_time(spk, now), spk))
         while self.timeline and now - self.timeline[0][0] > 30:
             self.timeline.popleft()
+        if self.cloud is not None:
+            self.cloud.note(self, now, spk)  # V-32: faces talking, for binding cloud tags
 
         captions = []
         for utt in list(self.pending):
@@ -1119,17 +1254,25 @@ class SpeakerFusion:
     def _offscreen_voice(self, now: float) -> str | None:
         """The "offscreen-N" id to learn this speech under, or None if not clearly off screen.
 
-        Clearly off screen: at least one face is visible, and every visible face's mouth is
-        sampled steadily and still (below its probable line). The id is the off-screen
-        voice this utterance already matched, or a new one for this run of speech. Speech
-        that matched anyone else, or came close to a known print, isn't learnt.
+        Clearly off screen: at least one face is visible, every visible face's mouth is
+        sampled steadily and still (below its probable line), Light-ASD calls every face it
+        scores silent, and no face talked earlier in this run of speech (V-31: a talker whose
+        hand hides their mouth talks on, and their voice must not be learnt as someone off
+        screen, which would then take their own speech away from them). The id is the
+        off-screen voice this utterance already matched, or a new one for this run of
+        speech. Speech that matched anyone else, or came close to a known print, isn't learnt.
         """
         if not self.s.learn_offscreen:
             return None
         fresh = [tr for tr in self.tracks.values() if now - tr.t <= 0.5]
         if not fresh or any(not tr.measured or tr.stirring for tr in fresh):
             return None
+        covered = self.asd_gate.covered(self, now)
+        if any(asd.score >= self.s.asd_off for asd in covered.values()):
+            return None
         start = self.speech_start if self.speech_start is not None else now
+        if self._earned[0] == start and any(v > 0 for v in self._earned[1].values()):
+            return None
         match = self._latest_voice_match(now)
         if match is not None:
             _, _, pid, score = match

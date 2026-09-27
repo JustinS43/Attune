@@ -41,6 +41,8 @@ SESSION_FORGET = "session.forget"
 PAUSED = "paused"
 COMMAND = "command"
 STATUS_PART = "status.part"
+SPEAKER_CLOUD = "speaker.cloud"  # V-32: cloud captions' per-word speaker tags
+CLOUD_STATE = "cloud.state"  # V-32: whether cloud captions are on
 
 
 def get(event: Any, name: str, default: Any = None) -> Any:

@@ -34,6 +34,13 @@ class InputGain:
     slowly, and never so much that the quiet frames (10th percentile over
     `floor_window_s`: the room's floor) go above `floor_dbfs`. Only the VAD hears it; the
     recogniser has its own level matching.
+
+    A-31, far talker bench (5 test clips, speech at -20 dBFS attenuated and reverberated,
+    a -57 dBFS room floor; real Silero + Nemotron): WER off -> on 0.078 -> 0.055 at
+    -24 dB, 0.203 -> 0.129 at -30 dB (VAD recall 77% -> 90%), 0.935 -> 0.364 at -36 dB
+    (15% -> 82%); with a -50 dBFS floor 0.848 -> 0.502 at -30 dB. Close speech unchanged
+    (0.014), and no speech was found in a minute of room, white or metro noise up to
+    -40 dBFS either way. On by default.
     """
 
     def __init__(self, config: dict):

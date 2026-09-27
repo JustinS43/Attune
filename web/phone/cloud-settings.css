@@ -1,0 +1,26 @@
+/* Cloud captions (Google) in Settings and the calm "Cloud captions on" pill (P-48). */
+.cloud-settings-card { display: grid; gap: 10px; padding: 8px 18px 18px; }
+.cloud-settings-card p { margin: 0; }
+.cloud-settings-card label { font-size: 13px; font-weight: 600; }
+.cloud-switch { margin: 0 -14px; min-height: 60px; }
+.cloud-switch:disabled { opacity: .55; cursor: default; }
+.cloud-switch .card-title, .cloud-switch .card-sub { display: block; }
+.cloud-bubble .cloud-glyph { width: 20px; height: 20px; }
+.cloud-switch .card-sub.cloud-attention { color: var(--ink); }
+.cloud-privacy { padding: 10px 12px; border-radius: 12px; background: var(--surface-soft); color: var(--ink); }
+.cloud-settings-card .select-wrap select:disabled { opacity: .55; }
+.cloud-settings-form { display: grid; gap: 10px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cloud-settings-form input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; border: 1px solid var(--line, #ccd8d6); border-radius: 10px; background: transparent; color: inherit; font: inherit; }
+.cloud-settings-form input:focus-visible { outline: 2px solid var(--accent, #157f72); outline-offset: 2px; }
+.cloud-settings-form button { margin-top: 4px; }
+.cloud-settings-form input:disabled, .cloud-settings-form button:disabled { opacity: .55; }
+
+/* the badge: the app's pill shape in a quiet sky blue, never an alert colour, never animated */
+.cloud-glyph { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; flex: none; }
+.pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.pill-row .demo-pill { margin: 0; }
+.demo-pill.cloud-pill { color: #1f4f86; background: #e2eefb; }
+.demo-pill.cloud-pill:before { display: none; }
+.demo-pill.cloud-pill .cloud-glyph { width: 14px; height: 14px; }
+.cloud-pill .cloud-quiet { font-weight: 650; letter-spacing: .02em; opacity: .72; }
+.phone-screen[data-theme=dark] .demo-pill.cloud-pill { color: #a9d0ff; background: #163049; }

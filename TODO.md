@@ -46,6 +46,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-28 Light-ASD scores at 8+ fps with gaps up to 0.35 s (a busy laptop), and speaker continuity: a face that earned the speech keeps it through a dip in lip evidence while speech runs on without a pause (#87)
 - [x] V-29 A voice match that still hears the last turn never vetoes the face Light-ASD hears talking; a voice whose face is in view is never shown off screen (#87)
 - [x] V-30 A speaker change moves back to the pause before the reply, so a reply's first words no longer end the previous bubble (#91)
+- [x] V-31 A visible talker with a hand by the mouth keeps their words through a Light-ASD dip, and their own automatic, earlier-track or off-screen voice print no longer vetoes their face; two people taking turns each get bubbles (a short reply keeps its own, Light-ASD switches dated back 0.3 s); simulated two-person bench 0.87 → 0.93 words on the right face — live check with two people still to do (#102)
+- [x] V-32 Cloud captions in who's talking: Google's per-word speaker tags bind to the face talking with them, a new tag gets its own bubble at once (even a short reply inside a shown caption), a voice with no face its own dock bubble; tags carried across stream restarts; a final waits up to 1.2 s for its tags only while cloud captions are on (#101)
 
 ## Section 2 – Audio & Language
 
@@ -79,6 +81,8 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-28 A sounding alarm stays on while the glasses tap: tapped windows can't show that it stopped, so they no longer run down the 15 s quiet-clear (it cycled 14 s on, 10 s off); it ends with "Got it" or 15 s of heard quiet (#89)
 - [x] A-29 Caption words in a script the configured languages don't use are dropped (Arabic words inside English podcast captions) (#87)
 - [x] A-30 Door knock alert: a knock on the door (EfficientAT "Knock" at `knock_score` or more, blocked by music but not by speech) raises a `knock` alert with the BELL pattern, on the side the sensors hear it; threshold set on synthetic knocks, real knocks on the rig still to check (#92)
+- [x] A-31 Far talkers: the gain before the VAD (A-24's `vad_gain`) is on by default, so speech a few metres from the laptop mic starts an utterance; far-talker bench WER 0.20 -> 0.13 at -30 dB and 0.94 -> 0.36 at -36 dB, close speech unchanged, no false speech in room, white or metro noise; the recogniser gain rise (`level_rise_db_s`) stays off (it measured worse) — live check at 1-3 m still to do (#103)
+- [x] A-32 Cloud captions client (optional, off by default): Google Speech-to-Text v1 streaming diarization on the 16 kHz mic stream while the wearer has it on; `speaker.cloud` word tags on the engine clock, seamless restarts with overlap, instant fallback on missing or rejected credentials, network, quota or slow results; silence during our own reply; the choice kept in data/cloud.json — live Google check pending credentials (#100)
 
 ## Section 3 – Hardware & Services
 
@@ -151,6 +155,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-44 Daylight lens: bright paper tags and a soft grey bubble for people not named yet (no dashed brackets), solid focus marks only while identifying, gliding alert stack, door-knock chip, light demo chrome; the hub replays alerts still sounding to a page that reconnects
 - [x] P-45 Podcast evaluation (scripts/eval_podcast.py): real multi-person YouTube clips with human captions, seat-anchored truth, word/bubble/speaker/right-face scores, recorded fusion inputs replayed offline; scripts/replay_podcast.py shows a recorded run on the real pages (#91)
 - [x] P-46 Live demo sound meter: show both Arduino amplitudes and a baseline-adjusted left/right direction estimate at the top-right of the glasses pane (#96)
+- [x] P-48 Cloud captions (Google) in the pages: Settings toggle, Google API key field saved to the laptop's .env (like P-41), language, status; "Cloud captions on" badge on the lens (all three modes) and phone; console status and latency; setup steps (#105)
 
 ## Gates and end-to-end checks (whole team)
 

@@ -18,7 +18,9 @@ verdict instead of `_assess`'s (only for that call; `_assess` keeps its own stat
   history, vision too slow) keeps the lip-score checks, unchanged.
 
 When Light-ASD says none of the visible faces is talking, `decide` finds no face and
-the words go to off-screen or "Someone", however much a still mouth twitches. A covered
+the words go to off-screen or "Someone", however much a still mouth twitches; only a
+face that earned this stretch of speech keeps it through a dip of up to
+`asd_continuity_s` (V-31, `SpeakerFusion._continues`: a hand by the mouth). A covered
 face that Light-ASD stops counts as a visible talker stopping (a turn), as in `_assess`.
 
 Voice prints are still harvested only from a face that `decide` picks as talking and
