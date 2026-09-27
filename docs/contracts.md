@@ -379,7 +379,7 @@ only "cloud: credentials present" or "cloud: credentials missing".
 | `off` | the wearer hasn't turned it on | local speaker evidence only |
 | `connecting` | opening a stream | local only |
 | `on` | streaming, results fresh | uses the tags; may hold a final up to `[cloud] final_wait_ms` for them |
-| `fallback` | on, but not usable right now: `network`, `quota`, `slow` (recent results later than `latency_fallback_ms`, or speech with no result for `stall_s`); it retries by itself | uses tags that still arrive, never waits |
+| `fallback` | on, but not usable right now: `network`, `quota`, `slow` (recent results later than `latency_fallback_ms`, or speech with no result for `stall_s`), `error` (Google refused a request); it retries by itself | uses tags that still arrive, never waits |
 | `unavailable` | on, but can't run: `credentials missing`, `credentials rejected`, `library missing`; nothing is sent (a new key is picked up by itself) | local only |
 | `paused` | recognition is paused: the stream is closed | — |
 

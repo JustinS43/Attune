@@ -242,6 +242,9 @@ latency_window = 5               # results in that median
 stall_s = 4.0                    # speech heard but no result for this long: fall back to local
 retry_s = [2, 5, 15, 30, 60]     # reconnect delays after network errors (the last one repeats)
 quota_retry_s = 300              # reconnect delay after a quota error
+connect_grace_s = 2.0            # a stream open this long without an error counts as "on"
+idle_close_s = 5.0               # no audio arriving this long: close the stream (Google times out)
+credentials_poll_s = 2.0         # how often .env is checked for a new or changed key
 # How fusion (Section 1) uses the tags
 final_wait_ms = 1200             # a final caption waits up to this long for tags on its words
                                  # (only while the state is "on"; the draft is on screen meanwhile)
