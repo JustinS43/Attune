@@ -222,6 +222,11 @@ Paste the key only into the laptop's Settings page or its `.env`: never into cha
 a commit, a screenshot or anywhere else. If it leaks, delete it in the Cloud console and make
 a new one.
 
+Whether Google accepts an API key for *streaming* recognition hasn't been checked live yet: it
+does for other Speech-to-Text calls. If the status reads "Unavailable: Google rejected the key"
+with a key you know is right and restricted only to the Speech-to-Text API, use a service
+account instead (below). Attune tries it by itself when the key is refused.
+
 **Alternative: a service account.** In **IAM & Admin → Service accounts**, create a service
 account with the **Cloud Speech Client** role (`roles/speech.client`), then **Keys → Add key →
 Create new key → JSON**. Save the JSON file outside the repo (for example
