@@ -151,7 +151,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-44 Daylight lens: bright paper tags and a soft grey bubble for people not named yet (no dashed brackets), solid focus marks only while identifying, gliding alert stack, door-knock chip, light demo chrome; the hub replays alerts still sounding to a page that reconnects
 - [x] P-45 Podcast evaluation (scripts/eval_podcast.py): real multi-person YouTube clips with human captions, seat-anchored truth, word/bubble/speaker/right-face scores, recorded fusion inputs replayed offline; scripts/replay_podcast.py shows a recorded run on the real pages (#91)
 - [x] P-46 Live demo sound meter: show both Arduino amplitudes and a baseline-adjusted left/right direction estimate at the top-right of the glasses pane (#96)
-- [x] P-48 Cloud captions (Google) in the pages: Settings toggle, Google API key field saved to the laptop's .env (like P-41), language, status; "Cloud captions on" badge on the lens (all three modes) and phone; console status and latency; setup steps (#PR)
+- [x] P-48 Cloud captions (Google) in the pages: Settings toggle, Google API key field saved to the laptop's .env (like P-41), language, status; "Cloud captions on" badge on the lens (all three modes) and phone; console status and latency; setup steps (#105)
 
 ## Gates and end-to-end checks (whole team)
 
