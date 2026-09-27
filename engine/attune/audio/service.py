@@ -20,6 +20,7 @@ import numpy as np
 
 from .asr import NemotronASR, Recognition, UtteranceLevel
 from .asr_whisper import WhisperASR
+from .direction import SpeechDirection
 from .language_id import LanguageID
 from .mic import AudioRing, MicReader
 from .runtime import Worker, engine_clock
@@ -49,6 +50,7 @@ class AudioService:
         self.auto_voice_tracks: dict[str, str] = {}
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(cfg)
+        self.direction = SpeechDirection(config["fusion"]["side_db"])
         # gain before the VAD only: quiet or distant speech must be detected at all (A-24)
         self.vad_gain = InputGain(cfg) if cfg.get("vad_gain") else None
         self.ring = AudioRing()
@@ -118,6 +120,7 @@ class AudioService:
             "paused",
             "vision.track_lost",
             "caption",
+            "sensors.levels",
         ):
             self.worker.subscribe(topic)
         self.worker.start()
@@ -155,6 +158,7 @@ class AudioService:
         self.enrollment = self.pending_consent = None
 
     def _reset(self) -> None:
+        self.direction.reset()
         self.pending = np.empty(0, np.float32)
         self.pending_t = None
         self._end_utterance()
@@ -246,6 +250,8 @@ class AudioService:
         elif topic == "person.changed" and e["action"] == "deleted":
             self.voices.delete(e["person_id"])
             self.enrollment = self.pending_consent = None
+        elif topic == "sensors.levels":
+            self.direction.observe(e["t"], e["left"], e["right"], e["motor_on"])
         elif topic == "voice.harvest" and not self.paused and self.clock() >= self.muted_until:
             audio = self._speech_span(e["t0"], e["t1"])
             if generation == self.worker.generation:
@@ -457,6 +463,11 @@ class AudioService:
         while self.speech_intervals and self.speech_intervals[0][1] <= t - self.ring.seconds:
             self.speech_intervals.popleft()
         self.worker.publish("audio.vad", {"t": t, "is_speech": active, "prob": prob}, generation)
+        self.worker.publish(
+            "audio.speech_direction",
+            {"t": t, "side": self.direction.side(t, active and self.segmenter.confirmed)},
+            generation,
+        )
         if self.segmenter.start is not None:
             if not self.utterance:
                 self.utt_id = str(uuid4())
