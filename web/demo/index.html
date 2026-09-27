@@ -7,10 +7,10 @@
   <title>Attune · Demo</title>
   <link rel="icon" type="image/svg+xml" href="../phone/favicon.svg">
   <link rel="stylesheet" href="../shared/theme.css">
-  <link rel="stylesheet" href="./demo.css">
+  <link rel="stylesheet" href="./demo.css?v=sound-meter-2">
   <link rel="stylesheet" href="./guide.css">
   <link rel="stylesheet" href="./pov.css">
-  <script type="module" src="./demo.js"></script>
+  <script type="module" src="./demo.js?v=sound-meter-2"></script>
 </head>
 <body data-view="split">
   <header class="bar" aria-label="Demo controls">
@@ -55,6 +55,10 @@
   <main class="stage">
     <section class="pane lens-pane" aria-label="Glasses view">
       <iframe id="lens" title="Attune glasses view" allow="autoplay; fullscreen"></iframe>
+      <div class="sound-meter" id="sound-meter" role="group" aria-label="Glasses sound sensors" title="50 ms peak-to-peak amplitude (0–1023). Direction estimates left or right from changes above each sensor's baseline.">
+        <span class="sound-direction" id="sound-direction">Sound · waiting</span>
+        <span class="sound-values"><span>L <b id="sound-left">—</b></span><span>R <b id="sound-right">—</b></span></span>
+      </div>
       <div class="cam-off-card" id="cam-off-card" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 13.5v2a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1M9 6.5h4.5a2 2 0 0 1 2 2v2l5-3v9"/><path d="M3 3l18 18"/></svg>
         <h2>Camera off</h2>
