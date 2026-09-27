@@ -9,7 +9,7 @@
 
 import { W, H, K, clamp, follow, wrapChars, nowS } from './hud.js';
 
-export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 4 };
+export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 4, name_labels: true };
 
 const PALETTE = ['#FF8FA3', '#FFB86B', '#C4A7FF', '#7CC8FF', '#86E3B0', '#FFD36E', '#5FE0D8', '#B8F07A'];
 export const NEUTRAL = '#E6EAF0';
@@ -82,10 +82,14 @@ export function createStore() {
         s.sessionId = msg.session_id ?? null;
         if (typeof msg.paused === 'boolean') s.paused = msg.paused;
         if (msg.config) {
-          for (const k of Object.keys(DEFAULT_CONFIG)) {
+          for (const k of ['bubble_chars', 'bubble_lines', 'bubble_fade_s']) {
             if (Number.isFinite(msg.config[k]) && msg.config[k] > 0) s.config[k] = msg.config[k];
           }
+          if (typeof msg.config.name_labels === 'boolean') s.config.name_labels = msg.config.name_labels;
         }
+        break;
+      case 'lens_settings':
+        if (typeof msg.name_labels === 'boolean') s.config.name_labels = msg.name_labels;
         break;
       case 'paused':
         if (s.paused !== !!msg.paused) s.tPaused = wall();
@@ -300,6 +304,7 @@ export function createViewBuilder(store) {
   const threads = new Map(); // speaker key -> thread
   const uttThread = new Map(); // utt_id -> speaker key of the thread holding it
   const dirs = new Map(); // key -> { side, up }
+  const offSides = new Map(); // offscreen side changes only after a stable interval
   const famMem = new Map(); // utterance id -> its segments, for view.utterances
   const retired = new Set(); // utterances that have faded from view.utterances
   let threadSeq = 0;
@@ -311,7 +316,7 @@ export function createViewBuilder(store) {
   function speakerKey(sp) {
     const kind = sp.kind || 'someone';
     if ((kind === 'face' || kind === 'probable_face') && sp.track_id != null) return keyOfTrack(sp.track_id);
-    if (kind === 'offscreen') return `o${sp.person_id ?? sp.label ?? normSide(sp.side)}`;
+    if (kind === 'offscreen') return `o${sp.person_id ?? 'unidentified'}`;
     if (kind === 'you' || kind === 'you_typed') return 'you';
     return 'someone';
   }
@@ -339,6 +344,7 @@ export function createViewBuilder(store) {
       threads.clear();
       uttThread.clear();
       dirs.clear();
+      offSides.clear();
       famMem.clear();
       retired.clear();
     }
@@ -503,9 +509,17 @@ export function createViewBuilder(store) {
 
     const offMap = new Map();
     for (const o of s.paused ? [] : s.scene.offscreen) {
-      const key = `o${o.person_id ?? o.label ?? normSide(o.side)}`;
+      const key = `o${o.person_id ?? 'unidentified'}`;
+      const rawSide = normSide(o.side);
+      let sideState = offSides.get(key);
+      if (!sideState) sideState = {side: rawSide, candidate: null, since: clock};
+      else if (rawSide === sideState.side) sideState.candidate = null;
+      else if (sideState.candidate !== rawSide) { sideState.candidate = rawSide; sideState.since = clock; }
+      else if (clock - sideState.since >= 0.8) { sideState.side = rawSide; sideState.candidate = null; }
+      offSides.set(key, sideState);
+      const personName = o.person_id != null ? s.people.get(String(o.person_id))?.name : null;
       offMap.set(key, {
-        key, name: o.label || 'Someone', side: normSide(o.side), color: store.colorOf(o.person_id, null, o.person_id != null ? 'named' : 'unknown'),
+        key, name: personName || o.label || 'Someone', side: sideState.side, color: store.colorOf(o.person_id, null, o.person_id != null ? 'named' : 'unknown'),
         person_id: o.person_id ?? null, bubble: null,
       });
     }
@@ -599,7 +613,7 @@ export function createViewBuilder(store) {
       } else if (key.startsWith('o')) {
         let o = offMap.get(key);
         if (!o) {
-          o = { key, name: sp.label || 'Someone', side: normSide(sp.side), color: store.colorOf(sp.person_id, null, sp.person_id != null ? 'named' : 'unknown'), person_id: sp.person_id ?? null, bubble: null };
+          o = { key, name: sp.label || 'Someone', side: offSides.get(key)?.side ?? normSide(sp.side), color: store.colorOf(sp.person_id, null, sp.person_id != null ? 'named' : 'unknown'), person_id: sp.person_id ?? null, bubble: null };
           offMap.set(key, o);
         }
         b.color = o.color;

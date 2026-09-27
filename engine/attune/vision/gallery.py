@@ -55,8 +55,7 @@ class Gallery:
         self.people_dir = people_dir
         self._people: dict[str, Person] = {}
         self._lock = threading.Lock()
-        self._matrix: np.ndarray | None = None
-        self._owners: list[str] = []
+        self._tiers: dict[str, tuple[np.ndarray, list[str], np.ndarray, np.ndarray]] = {}
 
     # ---- storage ----
     def load(self) -> None:
@@ -170,6 +169,7 @@ class Gallery:
                 person.last_seen_t = now
                 if person.source == "auto" and person.tier == "other" and person.seen_count >= 5:
                     person.tier = "familiar"
+                    self._rebuild()
                 self._save(person, prints=False)
             return person
 
@@ -183,6 +183,7 @@ class Gallery:
                 return None
             person.tier = tier
             self._save(person, prints=False)
+            self._rebuild()
             return person
 
     def note_name(self, person_id: str, name: str, utt_id: str, now: float | None = None) -> bool:
@@ -274,27 +275,63 @@ class Gallery:
         return [p for p in self._people.values() if p.enrolled or not enrolled_only]
 
     def _rebuild(self) -> None:
-        owners, rows = [], []
-        for pid, person in self._people.items():
-            owners += [pid] * len(person.prints)
-            rows.append(person.prints)
-        self._owners = owners
-        self._matrix = np.concatenate(rows) if rows else None
+        tiers = {}
+        for person in self._people.values():
+            tier = person.tier if person.enrolled else "other"
+            tiers.setdefault(tier, []).append(person)
+        self._tiers = {}
+        for tier, people in tiers.items():
+            vectors = [p.prints for p in people if len(p.prints)]
+            if not vectors:
+                continue
+            centered = [(p, np.mean(p.prints, axis=0)) for p in people if len(p.prints)]
+            centers = np.stack([center for _, center in centered])
+            radii = np.asarray(
+                [np.max(np.linalg.norm(p.prints - center, axis=1)) for p, center in centered],
+                dtype=np.float32,
+            )
+            self._tiers[tier] = (
+                np.concatenate(vectors),
+                [p.person_id for p in people for _ in range(len(p.prints))],
+                centers,
+                radii,
+            )
 
-    def match(self, embedding: np.ndarray) -> tuple[str | None, float, float]:
-        """Best person, their score (best print), and the runner-up person's score."""
-        matrix, owners = self._matrix, self._owners
-        if matrix is None:
+    def match(
+        self, embedding: np.ndarray, threshold: float = 0.45, margin: float = 0.08
+    ) -> tuple[str | None, float, float]:
+        """Search close first; skip later tiers only when a safe score bound permits it.
+
+        The runner-up may be an upper bound when a tier was skipped. This makes
+        the existing margin test conservative and cannot cause a false accept.
+        """
+        if not self._tiers:
             return None, 0.0, 0.0
-        sims = matrix @ embedding
         best: dict[str, float] = {}
-        for pid, s in zip(owners, sims):
-            if s > best.get(pid, -1.0):
-                best[pid] = float(s)
-        ranked = sorted(best.items(), key=lambda kv: -kv[1])
-        top_pid, top = ranked[0]
-        second = ranked[1][1] if len(ranked) > 1 else 0.0
-        return top_pid, top, second
+        order = [tier for tier in ("close", "familiar", "other") if tier in self._tiers]
+        query_norm = float(np.linalg.norm(embedding))
+        for index, tier in enumerate(order):
+            for pid, score in self._score_tier(tier, embedding):
+                best[pid] = max(best.get(pid, -1.0), float(score))
+            ranked = sorted(best.items(), key=lambda kv: -kv[1])
+            top_pid, top = ranked[0]
+            second = ranked[1][1] if len(ranked) > 1 else 0.0
+            remaining = order[index + 1 :]
+            if not remaining:
+                return top_pid, top, second
+            bound = max(
+                float(np.max(centers @ embedding + radii * query_norm))
+                for name in remaining
+                for _, _, centers, radii in [self._tiers[name]]
+            )
+            conservative_second = max(second, bound + 1e-6)
+            if top >= threshold and top - conservative_second >= margin:
+                return top_pid, top, conservative_second
+        return None, 0.0, 0.0
+
+    def _score_tier(self, tier: str, embedding: np.ndarray):
+        matrix, owners, _, _ = self._tiers[tier]
+        return zip(owners, matrix @ embedding)
 
 
 @dataclass
@@ -328,7 +365,7 @@ class IdentityRules:
     def observe(self, ident: Identity, embedding: np.ndarray, t: float) -> bool:
         """Apply one face-print check. Returns True if the track's name changed."""
         ident.last_check_t = t
-        pid, score, second = self.gallery.match(embedding)
+        pid, score, second = self.gallery.match(embedding, self.threshold, self.margin)
         passes = pid is not None and score >= self.threshold and score - second >= self.margin
 
         if ident.person_id is not None:

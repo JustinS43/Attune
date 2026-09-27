@@ -63,6 +63,27 @@ def test_station_scores_are_shifted_onto_the_voice_match_scale(tmp_path):
     assert v.match(clip(2)) == ("sam", pytest.approx(0.52, abs=0.01))
 
 
+def test_voice_lookup_uses_close_tier_then_checks_other_when_needed(tmp_path):
+    write_print(tmp_path, "sam", vec(0), 1.0)
+    write_print(tmp_path, "ana", vec(5), 1.0)
+    (tmp_path / "sam" / "meta.json").write_text(json.dumps({"tier": "close"}))
+    (tmp_path / "ana" / "meta.json").write_text(json.dumps({"tier": "other"}))
+    voices = prints(tmp_path)
+    checked = []
+    score_tier = voices._score_tier
+
+    def spy(tier, vector):
+        checked.append(tier)
+        return score_tier(tier, vector)
+
+    voices._score_tier = spy
+    assert voices.match(clip(0))[0] == "sam"
+    assert checked == ["close"]
+    checked.clear()
+    assert voices.match(clip(5))[0] == "ana"
+    assert checked == ["close", "other"]
+
+
 def test_old_files_are_glasses_prints_and_the_bank_is_capped_on_load(tmp_path):
     folder = tmp_path / "old"
     folder.mkdir()

@@ -375,7 +375,9 @@ class VisionService:
         # Reuse a strong existing match instead of creating a duplicate profile.
         probe = np.mean(prints, axis=0)
         probe /= max(float(np.linalg.norm(probe)), 1e-9)
-        candidate, score, second = self.gallery.match(probe)
+        candidate, score, second = self.gallery.match(
+            probe, self.s.match_threshold, self.s.match_margin
+        )
         if candidate and score >= self.s.match_threshold and score - second >= self.s.match_margin:
             self.rules.assign(ident, candidate, score, now)
             self.gallery.encounter(candidate)

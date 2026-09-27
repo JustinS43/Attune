@@ -197,8 +197,10 @@ class Hub:
             "bubble_chars": pages.get("bubble_chars", 42),
             "bubble_lines": pages.get("bubble_lines", 2),
             "bubble_fade_s": pages.get("bubble_fade_s", 4),
+            "name_labels": True,
             "presets": list((config.get("speech_out") or {}).get("presets", [])),
         }
+        self.name_labels = True
         enroll = config.get("enroll")
         if isinstance(enroll, dict):
             # V-23: where people are saved; the phone picks its screens from this
@@ -342,7 +344,11 @@ class Hub:
 
     # ------------------------------------------------------------------ loop side
     def broadcast(self, msg_type: str, body: dict[str, Any]) -> None:
-        roles = C.WS_AUDIENCE.get(msg_type, frozenset(C.ROLES))
+        roles = (
+            frozenset({"lens", "phone"})
+            if msg_type == "lens_settings"
+            else C.WS_AUDIENCE.get(msg_type, frozenset(C.ROLES))
+        )
         for client in list(self.clients.values()):
             if client.role in roles:
                 self._push(client, msg_type, body)
@@ -573,6 +579,15 @@ class Hub:
 
     def _on_command_event(self, ev: Any) -> None:
         args = get(ev, "args") or {}
+        if (
+            get(ev, "name") == "switch.set"
+            and isinstance(args, dict)
+            and args.get("key") == "names"
+            and isinstance(args.get("value"), bool)
+        ):
+            self.name_labels = args["value"]
+            self.welcome_config["name_labels"] = self.name_labels
+            self.broadcast("lens_settings", {"name_labels": self.name_labels})
         pending = self.save_pending
         if (
             get(ev, "name") in ("enroll.start", "enroll.station")

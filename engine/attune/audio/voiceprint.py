@@ -154,9 +154,56 @@ class VoicePrints:
         self.adapted: dict[str, list[np.ndarray]] = {}  # glasses-mic bank per saved person
         self._last_adapt: dict[str, float] = {}
         self.session: dict[str, np.ndarray] = {}
+        self.tiers: dict[str, str] = {}
+        self._match_tiers: dict[
+            str, tuple[np.ndarray, list[str], np.ndarray, np.ndarray, float]
+        ] = {}
         if self.root.exists():
             for path in self.root.glob("*/voice.json"):
                 self.load(path.parent.name)
+
+    def refresh_tier(self, person_id: str) -> None:
+        """Refresh a saved person's priority when Vision changes their People page."""
+        try:
+            meta = json.loads((self.root / person_id / "meta.json").read_text())
+            tier = meta.get("tier", "other")
+        except (OSError, ValueError, TypeError):
+            tier = "other"
+        self.tiers[person_id] = tier if tier in {"close", "familiar", "other"} else "other"
+        self._rebuild_match_index()
+
+    def _rebuild_match_index(self) -> None:
+        """Group base and adapted vectors into three small, vectorized search tables."""
+        grouped: dict[str, list[tuple[str, np.ndarray, float]]] = {}
+        for pid, base in self.enrolled.items():
+            tier = self.tiers.get(pid, "other")
+            shift = (
+                self.threshold - self.station_threshold if self.sources.get(pid) == STATION else 0.0
+            )
+            grouped.setdefault(tier, []).append((pid, base, shift))
+            bank = self.adapted.get(pid) or []
+            if bank:
+                grouped[tier].append(
+                    (pid, unit(np.mean(bank, axis=0)), self.threshold - self.bank_threshold)
+                )
+        for pid, vector in self.session.items():
+            grouped.setdefault("other", []).append((pid, vector, 0.0))
+        self._match_tiers = {}
+        for tier, rows in grouped.items():
+            matrix = np.stack([vector for _, vector, _ in rows])
+            center = np.mean(matrix, axis=0)
+            radius = float(np.max(np.linalg.norm(matrix - center, axis=1)))
+            self._match_tiers[tier] = (
+                matrix,
+                [pid for pid, _, _ in rows],
+                np.asarray([bias for _, _, bias in rows], dtype=np.float32),
+                center,
+                radius,
+            )
+
+    def _score_tier(self, tier: str, vector: np.ndarray):
+        matrix, owners, biases, _, _ = self._match_tiers[tier]
+        return zip(owners, matrix @ vector + biases)
 
     # ------------------------------------------------------------------ storage
     def load(self, person_id: str) -> bool:
@@ -182,6 +229,7 @@ class VoicePrints:
         self.sources[person_id] = source
         self.consents[person_id] = float(data["consent_t"])
         self.adapted[person_id] = bank
+        self.refresh_tier(person_id)
         return True
 
     def remember_auto(self, person_id: str, session_id: str) -> bool:
@@ -196,12 +244,15 @@ class VoicePrints:
         self.sources[person_id] = GLASSES
         self.consents[person_id] = stamp
         self.adapted[person_id] = []
+        self.refresh_tier(person_id)
         return True
 
     def _drop(self, person_id: str) -> None:
         self.enrolled = {k: v for k, v in self.enrolled.items() if k != person_id}
         for table in (self.sources, self.consents, self.adapted, self._last_adapt):
             table.pop(person_id, None)
+        self.tiers.pop(person_id, None)
+        self._rebuild_match_index()
 
     def enroll(
         self,
@@ -231,6 +282,7 @@ class VoicePrints:
             self.sources[person_id] = source
             self.consents[person_id] = float(consent_t)
             self.adapted[person_id] = []
+            self.refresh_tier(person_id)
 
     # ------------------------------------------------------------------ scoring
     def _base_scores(self, vector: np.ndarray) -> dict[str, float]:
@@ -262,7 +314,23 @@ class VoicePrints:
         if len(samples) < self.match_s * 16000 or not (self.enrolled or self.session):
             return None, 0.0
         vector = unit(self.extract(samples))
-        score, person = max((s, k) for k, s in self.scores(vector).items())
+        order = [tier for tier in ("close", "familiar", "other") if tier in self._match_tiers]
+        score, person = -math.inf, None
+        query_norm = float(np.linalg.norm(vector))
+        for index, tier in enumerate(order):
+            for pid, value in self._score_tier(tier, vector):
+                if value > score or (value == score and person is not None and pid > person):
+                    score, person = float(value), pid
+            remaining = order[index + 1 :]
+            if score >= self.threshold and remaining:
+                bound = max(
+                    float(np.dot(vector, self._match_tiers[name][3]))
+                    + self._match_tiers[name][4] * query_norm
+                    + float(np.max(self._match_tiers[name][2]))
+                    for name in remaining
+                )
+                if bound + 1e-6 < score:
+                    break
         return (person if score >= self.threshold else None), score
 
     # ------------------------------------------------------------------ learning
@@ -279,6 +347,7 @@ class VoicePrints:
         vector = unit(self.extract(samples))
         prior = self.session.get(person_id)
         self.session[person_id] = unit(vector + prior) if prior is not None else vector
+        self._rebuild_match_index()
         return "session"
 
     def _adapt(self, person_id: str, samples: np.ndarray, talkers: int) -> str:
@@ -299,6 +368,7 @@ class VoicePrints:
         bank = (self.adapted.get(person_id) or []) + [vector]
         self.adapted[person_id] = bank[-self.adapt_max :]
         self._last_adapt[person_id] = now
+        self._rebuild_match_index()
         if self.adapt_persist and person_id in self.consents:
             try:
                 write_print(
@@ -331,3 +401,4 @@ class VoicePrints:
     def forget(self) -> None:
         """Retain consented enrollment; wipe all harvested session vectors."""
         self.session.clear()
+        self._rebuild_match_index()

@@ -91,6 +91,40 @@ def test_repeated_encounters_promote_an_automatic_contact(gallery):
         gallery.encounter(person.person_id, now=100 + (i + 1) * 3600)
     assert gallery.get(person.person_id).seen_count == 5
     assert gallery.get(person.person_id).tier == "familiar"
+    assert "familiar" in gallery._tiers
+
+
+def test_close_lookup_skips_later_tiers_only_when_the_bound_is_safe(gallery):
+    close = np.zeros(512, np.float32)
+    close[0] = 1
+    other = np.zeros(512, np.float32)
+    other[1] = 1
+    favored = gallery.enroll("Close", np.stack([close] * 8), "today")
+    gallery.remember_auto(np.stack([other] * 8))
+    checked = []
+    score_tier = gallery._score_tier
+
+    def spy(tier, embedding):
+        checked.append(tier)
+        return score_tier(tier, embedding)
+
+    gallery._score_tier = spy
+    assert gallery.match(close)[0] == favored.person_id
+    assert checked == ["close"]
+    checked.clear()
+    assert gallery.match(other)[0] != favored.person_id
+    assert checked == ["close", "other"]
+
+
+def test_tier_priority_cannot_override_a_stronger_other_face(gallery):
+    close = np.zeros(512, np.float32)
+    close[0] = 1
+    other = close.copy()
+    other[0] = 0.8
+    other[1] = 0.6
+    gallery.enroll("Close", np.stack([close] * 8), "today")
+    correct, _ = gallery.remember_auto(np.stack([other] * 8))
+    assert gallery.match(other)[0] == correct.person_id
 
 
 def test_name_needs_distinct_utterances_across_days_and_survives_restart(

@@ -982,8 +982,13 @@ function onMessage(msg) {
       state.sessionId = msg.session_id ?? state.sessionId;
       state.paused = !!msg.paused;
       if (Array.isArray(msg.config?.presets)) state.presets = msg.config.presets;
+      if (typeof msg.config?.name_labels === 'boolean') state.features.names = msg.config.name_labels;
       station.configure(msg.config?.enroll);
       refresh();
+      break;
+    case 'lens_settings':
+      if (typeof msg.name_labels === 'boolean') state.features.names = msg.name_labels;
+      if (state.screen === 'settings') refresh();
       break;
     case 'paused':
       state.paused = !!msg.paused;
@@ -1227,7 +1232,7 @@ document.addEventListener('click', async event => {
   if (action === 'toggle-feature') {
     const key = control.dataset.feature;
     state.features[key] = !state.features[key];
-    if (state.live && (key === 'alerts' || key === 'translation')) link.send('switch.set', {key, value: state.features[key]});
+    if (state.live && (key === 'alerts' || key === 'translation' || key === 'names')) link.send('switch.set', {key, value: state.features[key]});
     if (key === 'alerts' && !state.features.alerts) { state.alert = null; showAlert(); }
     refresh();
     return;

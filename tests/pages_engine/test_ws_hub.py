@@ -74,6 +74,7 @@ def test_hello_welcome_and_people(hub_env):
             "bubble_chars": 42,
             "bubble_lines": 2,
             "bubble_fade_s": 4,
+            "name_labels": True,
             "presets": ["Nice to meet you", "One moment"],
         }
         people = recv_type(ws, "people")
@@ -84,8 +85,22 @@ def test_hello_welcome_and_people(hub_env):
                 "consent_t": "2026-09-26T10:00:00-04:00",
                 "has_face": True,
                 "has_voice": False,
+                "source": "manual",
+                "tier": "close",
+                "seen_count": 0,
+                "last_seen_t": 0,
             }
         ]
+
+
+def test_name_label_setting_reaches_lens_and_new_clients(hub_env):
+    with page(hub_env.client, "lens") as (lens, _):
+        hub_env.bus.publish(
+            C.COMMAND, {"name": "switch.set", "args": {"key": "names", "value": False}}
+        )
+        assert recv_type(lens, "lens_settings")["name_labels"] is False
+        with page(hub_env.client, "phone") as (_, welcome):
+            assert welcome["config"]["name_labels"] is False
 
 
 def test_seq_increases_per_page(hub_env):

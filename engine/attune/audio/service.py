@@ -182,6 +182,9 @@ class AudioService:
         elif topic == "person.changed" and e["action"] == "deleted":
             self.voices.delete(e["person_id"])
             self.enrollment = self.pending_consent = None
+        elif topic == "person.changed" and e["action"] in {"renamed", "enrolled"}:
+            if e["person_id"] in self.voices.enrolled:
+                self.voices.refresh_tier(e["person_id"])
         elif topic == "voice.harvest" and not self.paused and self.clock() >= self.muted_until:
             audio = self._speech_span(e["t0"], e["t1"])
             if generation == self.worker.generation:
