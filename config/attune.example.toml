@@ -249,6 +249,7 @@ credentials_poll_s = 2.0         # how often .env is checked for a new or change
 final_wait_ms = 1200             # a final caption waits up to this long for tags on its words
                                  # (only while the state is "on"; the draft is on screen meanwhile)
 word_match_s = 0.25              # a caption word takes the tag of a cloud word this close to it
+talk_lag_s = 0.3                 # face evidence (Light-ASD's window) lags the words it is about
 bind_min_s = 0.6                 # a tag binds to a face after this much of its speech overlaps
 bind_share = 0.6                 # ...that face talking, and this share of its face-matched speech
 rebind_ratio = 2.0               # a bound tag moves to another face only with this much more evidence
