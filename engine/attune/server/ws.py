@@ -270,6 +270,8 @@ class Hub:
         self._part_ok: dict[str, bool] = {}
         self._hw_connected: bool | None = None
         self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
+        self._sensor_levels: dict | None = None
+        self._sensor_sent_at = float("-inf")
         self.save_pending: dict | None = None  # the save request waiting for consent (P-29)
         self.active_alerts: OrderedDict[str, dict] = OrderedDict()  # alert_id -> latest message
         self.station_session: str | None = None  # the station save in progress (V-23)
@@ -315,6 +317,7 @@ class Hub:
             C.SAVE_CANCEL: lambda ev: post(self._on_save, C.WS_SAVE_CANCEL, ev),
             C.PERSON_CHANGED: lambda ev: post(self._on_person_changed, ev),
             C.HW_LINK: self._on_hw_link_bus,
+            C.SENSORS_LEVELS: lambda ev: post(self._on_sensor_levels, ev),
             C.STATUS: lambda ev: post(self._on_status, ev),
             C.STATUS_PART: lambda ev: post(self._on_status_part, ev),
             C.SESSION_FORGET: lambda ev: post(self._on_forget, ev),
@@ -613,6 +616,18 @@ class Hub:
         self.latest_status = body
         self.broadcast(C.WS_STATUS, body)
 
+    def _on_sensor_levels(self, ev: Any) -> None:
+        """Relay numeric sound levels to the demo at 10 Hz without filling page queues."""
+        body = to_jsonable(ev)
+        self._sensor_levels = body
+        now = self.clock()
+        if now - self._sensor_sent_at < 0.1:
+            return
+        self._sensor_sent_at = now
+        for client in self.clients.values():
+            if client.role == "console":
+                self._push(client, "sensor_levels", body)
+
     def _on_status_part(self, ev: Any) -> None:
         part, ok = get(ev, "part"), bool(get(ev, "ok", True))
         if part is None:
@@ -738,6 +753,8 @@ class Hub:
         if role == "console":
             if self.latest_status is not None:
                 client.push(C.WS_STATUS, self.latest_status)
+            if self._sensor_levels is not None:
+                client.push("sensor_levels", self._sensor_levels)
             for entry in list(self.event_log):
                 client.push(C.WS_EVENT_LOG, entry)
 

@@ -83,6 +83,16 @@ body {
 .views svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
 
 .tools { justify-self: end; display: flex; align-items: center; gap: 14px; }
+.sound-meter {
+  position: absolute; top: 12px; right: 12px; z-index: 3;
+  display: flex; align-items: center; gap: 10px; min-width: 170px;
+  padding: 7px 10px; border: 1px solid rgba(124, 245, 214, 0.25); border-radius: 10px;
+  background: rgba(7, 8, 11, 0.8); font: 600 11px/1.25 var(--attune-font-text, inherit);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.sound-direction { color: var(--attune-mint, #7cf5d6); }
+.sound-values { display: flex; gap: 7px; color: var(--attune-text-2, #b7c0c9); }
+.sound-values b { color: var(--attune-text, #f4f7fa); font-weight: 650; }
 .cam-toggle {
   display: inline-flex; align-items: center; gap: 7px;
   height: 32px; padding: 0 13px 0 10px;

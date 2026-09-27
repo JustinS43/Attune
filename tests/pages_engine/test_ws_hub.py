@@ -306,6 +306,17 @@ def test_late_pages_get_the_current_hw_link(hub_env):
         assert recv_type(phone, "hw_link")["driver"] == "L298"
 
 
+def test_sensor_levels_reach_demo_console_and_replay_on_reconnect(hub_env):
+    levels = {"t": 1.0, "left": 124, "right": 261, "motor_on": False}
+    with page(hub_env.client, "console") as (console, _):
+        hub_env.bus.publish(C.SENSORS_LEVELS, levels)
+        msg = recv_type(console, "sensor_levels")
+        assert {k: msg[k] for k in levels} == levels
+    with page(hub_env.client, "console") as (console, _):
+        msg = recv_type(console, "sensor_levels")
+        assert {k: msg[k] for k in levels} == levels
+
+
 def test_person_changed_resends_people(hub_env):
     with page(hub_env.client, "console") as (console, _):
         recv_type(console, "people")
