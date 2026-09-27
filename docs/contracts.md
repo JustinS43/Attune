@@ -98,7 +98,7 @@ Endpoint `ws://localhost:8000/ws`. Every message is JSON `{"type": ..., "seq": n
 | `people` | console, phone | list of `{person_id, name, consent_t, has_face, has_voice, source, tier, seen_count, last_seen_t}`; `source` is `manual` or `auto`, `tier` is `close`, `familiar` or `other` |
 | `thumbnails` | console | list of `{track_id, jpeg_b64}` for enrollment picking |
 | `event_log` | console | t, text |
-| `lens_settings` | lens, phone | `name_labels` (bool); sent when the phone changes the on-lens label toggle |
+| `lens_settings` | lens, phone | `name_labels` (bool), `caption_style` (`classic` or `centered`); sent when either Glasses setting changes |
 
 ## 4. Commands (pages → engine)
 
@@ -115,7 +115,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `session.forget` | — | 4 Pages & Engine publishes `session.forget` |
 | `pause.toggle` | — | 4 Pages & Engine publishes `paused` |
 | `camera.set` | on (bool) | 4 Pages & Engine publishes `camera.state` |
-| `switch.set` | key (`translation`, `alerts`, `debug`, `names`), value; `names` controls face labels above heads on the lens | owning section / 4 Pages & Engine |
+| `switch.set` | key (`translation`, `alerts`, `debug`, `names`, `caption_style`), value; `names` controls face labels, `caption_style` chooses `classic` or `centered` in the Colour lens | owning section / 4 Pages & Engine |
 | `languages.set` | langs, e.g. ["en", "es"] | 2 Audio & Lang |
 | `pattern.test` | name, side | 3 Hardware |
 | `calibrate.step` | step, measurements={} (optional manual observations) | 2 Audio & Lang |
@@ -218,7 +218,7 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 
 | type | Sent to | Fields |
 |---|---|---|
-| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, name_labels, presets, enroll?: {source, sentence}}` (`enroll` only when `[enroll]` is configured) |
+| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, name_labels, caption_style, presets, enroll?: {source, sentence}}` (`enroll` only when `[enroll]` is configured) |
 | `paused` | all | `paused` (bool), sent on every change |
 | `camera` | all | `on` (bool), sent on every change |
 | `enroll_result` | all (the lens since P-29) | as the bus event `enroll.result` |
@@ -359,9 +359,11 @@ profiles are available for replacement; it evicts the least encountered, oldest 
 profile outside close. Manual and close profiles are never evicted automatically. Face and voice
 search use separate tier tables in that order. Later tiers are skipped only when a vector upper
 bound proves they cannot win the match, so tier priority never overrides a stronger identity.
-On the full-colour lens, captions occupy fixed bottom slots; only names stay above visible faces.
-Offscreen caption headers include their name and direction arrow. `switch.set` with `names`
-toggles visible face labels and is reflected in `lens_settings` and later `welcome` messages.
+The Colour lens offers `classic` face-anchored bubbles with offscreen docks and a You bar, and
+`centered` captions with a fixed bottom focus slot, smaller side slots, names above visible faces,
+and offscreen names and direction arrows inside captions. `classic` is the default. `switch.set`
+with `names` toggles quiet face labels; `caption_style` switches the Colour layout. Both are
+reflected in `lens_settings` and later `welcome` messages.
 An explicit self-introduction can prompt name confirmation immediately. A contextual name requires at
 least two distinct direct addresses associated with one visible unknown or automatic face;
 the wearer can confirm the proposal before automatic promotion. Five distinct uses across at
