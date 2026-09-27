@@ -25,7 +25,7 @@ const hint = document.querySelector('.desktop-hint');
 const params = new URLSearchParams(location.search);
 
 const DEFAULT_PRESETS = ['Nice to meet you', 'Can you repeat that?', 'One moment', 'Thank you', 'I read captions, go ahead'];
-const ALERT_TEXT = { smoke: 'Smoke alarm', co: 'Carbon monoxide alarm', doorbell: 'Doorbell' };
+const ALERT_TEXT = { smoke: 'Smoke alarm', co: 'Carbon monoxide alarm', doorbell: 'Doorbell', knock: 'Door knock' };
 const VOICE_NAME = { elevenlabs: 'ElevenLabs', kokoro: 'offline voice' };
 
 // Optional Apricot Studio palette (Ryan's colorway); the default keeps the original palette.
@@ -790,7 +790,7 @@ function renderSettings() {
   features.append(
     settingToggle('Captions', state.live ? 'On this phone' : '', 'captions', 'wave'),
     settingToggle('Name labels', state.live ? 'On this phone' : '', 'names', 'people'),
-    settingToggle('Sound alerts', state.live ? 'Smoke, CO and doorbell, on every screen' : '', 'alerts', 'volume'),
+    settingToggle('Sound alerts', state.live ? 'Smoke, CO, doorbell and knocks, on every screen' : '', 'alerts', 'volume'),
     settingToggle('Translation', state.live ? 'English under Spanish, on every screen' : '', 'translation', 'wave'));
   content.append(features, el('h2', 'setting-label', 'Privacy'));
   const privacy = el('div', 'card setting-group');
@@ -975,7 +975,7 @@ function showAlert() {
   const copy = el('div', 'grow');
   copy.append(el('strong', '', ALERT_TEXT[a.kind] || 'Sound alert'), el('span', '', `${side}${a.state === 'watch' ? ' · watching' : ''}`));
   const ack = button('Got it', 'alert-ack', 'alert-ack');
-  alertBanner.append(el('span', `alert-icon ${a.kind === 'doorbell' ? 'bell' : ''}`, a.kind === 'doorbell' ? '🔔' : '!'), copy, ack);
+  alertBanner.append(el('span', `alert-icon ${a.kind === 'doorbell' || a.kind === 'knock' ? 'bell' : ''}`, a.kind === 'doorbell' ? '🔔' : a.kind === 'knock' ? '🚪' : '!'), copy, ack);
 }
 
 // ------------------------------------------------------------------ engine link

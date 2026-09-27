@@ -143,6 +143,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
 - [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
 - [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
+- [x] P-44 Daylight lens: bright paper tags and a soft grey bubble for people not named yet (no dashed brackets), solid focus marks only while identifying, gliding alert stack, door-knock chip, light demo chrome; the hub replays alerts still sounding to a page that reconnects
 
 ## Gates and end-to-end checks (whole team)
 
