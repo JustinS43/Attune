@@ -233,7 +233,8 @@ ENROLL_PHASES = (
 
 # Cloud captions (cloud.state `state`): off = the wearer hasn't turned them on (no network client,
 # no audio sent); connecting; on = streaming with fresh results (fusion uses the tags); fallback =
-# on but not usable right now (network, quota, slow): local speaker labels only, retrying;
+# on but not usable right now (network, quota, slow, or error: Google refused a request):
+# local speaker labels only, retrying;
 # unavailable = on but can't run (no or rejected credentials, library missing): nothing is sent;
 # paused = recognition is paused: nothing is sent.
 CLOUD_STATES = ("off", "connecting", "on", "fallback", "unavailable", "paused")
@@ -245,6 +246,7 @@ CLOUD_REASONS = (
     "network",
     "quota",
     "slow",
+    "error",
 )
 
 # Touch gestures (sensors.touch) and what the touch router makes of them (touch.action target).
