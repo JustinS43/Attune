@@ -98,6 +98,7 @@ Endpoint `ws://localhost:8000/ws`. Every message is JSON `{"type": ..., "seq": n
 | `people` | console, phone | list of `{person_id, name, consent_t, has_face, has_voice, source, tier, seen_count, last_seen_t}`; `source` is `manual` or `auto`, `tier` is `close`, `familiar` or `other` |
 | `thumbnails` | console | list of `{track_id, jpeg_b64}` for enrollment picking |
 | `event_log` | console | t, text |
+| `lens_settings` | lens, phone | `name_labels` (bool); sent when the phone changes the on-lens label toggle |
 
 ## 4. Commands (pages → engine)
 
@@ -114,7 +115,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `session.forget` | — | 4 Pages & Engine publishes `session.forget` |
 | `pause.toggle` | — | 4 Pages & Engine publishes `paused` |
 | `camera.set` | on (bool) | 4 Pages & Engine publishes `camera.state` |
-| `switch.set` | key (`translation`, `alerts`, `debug`), value | owning section |
+| `switch.set` | key (`translation`, `alerts`, `debug`, `names`), value; `names` controls face labels above heads on the lens | owning section / 4 Pages & Engine |
 | `languages.set` | langs, e.g. ["en", "es"] | 2 Audio & Lang |
 | `pattern.test` | name, side | 3 Hardware |
 | `calibrate.step` | step, measurements={} (optional manual observations) | 2 Audio & Lang |
@@ -217,7 +218,7 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 
 | type | Sent to | Fields |
 |---|---|---|
-| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, presets, enroll?: {source, sentence}}` (`enroll` only when `[enroll]` is configured) |
+| `welcome` | the page that said hello | `session_id, paused, camera_on, config: {bubble_chars, bubble_lines, bubble_fade_s, name_labels, presets, enroll?: {source, sentence}}` (`enroll` only when `[enroll]` is configured) |
 | `paused` | all | `paused` (bool), sent on every change |
 | `camera` | all | `on` (bool), sent on every change |
 | `enroll_result` | all (the lens since P-29) | as the bus event `enroll.result` |
@@ -355,8 +356,13 @@ Profiles are grouped as `close`, `familiar` and `other`. Manual saves start clos
 can change a profile's tier. Automatic saves start in others and move to familiar after five
 encounters at least one hour apart. The gallery holds at most 150 profiles while automatic
 profiles are available for replacement; it evicts the least encountered, oldest automatic
-profile outside close. Manual and close profiles are never evicted automatically. An explicit
-self-introduction can prompt name confirmation immediately. A contextual name requires at
+profile outside close. Manual and close profiles are never evicted automatically. Face and voice
+search use separate tier tables in that order. Later tiers are skipped only when a vector upper
+bound proves they cannot win the match, so tier priority never overrides a stronger identity.
+On the full-colour lens, captions occupy fixed bottom slots; only names stay above visible faces.
+Offscreen caption headers include their name and direction arrow. `switch.set` with `names`
+toggles visible face labels and is reflected in `lens_settings` and later `welcome` messages.
+An explicit self-introduction can prompt name confirmation immediately. A contextual name requires at
 least two distinct direct addresses associated with one visible unknown or automatic face;
 the wearer can confirm the proposal before automatic promotion. Five distinct uses across at
 least two UTC dates, with a clear lead over other candidates, promote an automatic name;

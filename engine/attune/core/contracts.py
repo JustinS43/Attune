@@ -135,6 +135,7 @@ WS_STATUS = "status"
 WS_PEOPLE = "people"
 WS_THUMBNAILS = "thumbnails"
 WS_EVENT_LOG = "event_log"
+WS_LENS_SETTINGS = "lens_settings"
 WS_PAUSED = "paused"
 WS_ENROLL_RESULT = "enroll_result"
 WS_PERSON_CHANGED = "person_changed"
@@ -170,6 +171,7 @@ WS_AUDIENCE: dict[str, frozenset[str]] = {
     WS_PEOPLE: frozenset({"console", "phone"}),
     WS_THUMBNAILS: frozenset({"console"}),
     WS_EVENT_LOG: frozenset({"console"}),
+    WS_LENS_SETTINGS: frozenset({"lens", "phone"}),
     # the lens shows the save flow's result too (P-29), so enroll results go to every page
     WS_ENROLL_RESULT: _ALL,
     WS_PERSON_CHANGED: frozenset({"console", "phone"}),
