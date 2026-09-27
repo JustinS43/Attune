@@ -65,6 +65,11 @@ side_db = 3.0
 asd_use = true                  # a face with a fresh Light-ASD score talks only when it says so
 asd_on = 0.5                    # score (logit) that starts a face talking...
 asd_off = -0.5                  # ...and that stops it again
+asd_continuity_s = 1.5          # V-31: a talker Light-ASD calls silent keeps the speech this long
+                                # (a hand by the mouth); 0 = Light-ASD's verdict at once
+asd_switch_lag_s = 0.3          # V-31: a switch Light-ASD made is dated back this much (it hears a
+                                # new talker late), so a reply's first words aren't the last talker's
+turn_min_s = 0.25               # V-31: a reply this long between pauses keeps its own bubble
 harvest_after_s = 1.5
 first_words_wait_ms = 300
 rate_hz = 15
@@ -94,6 +99,8 @@ rescue_max_s = 2.5              # a short utterance heard as nothing is decoded 
 voice_match_every_s = 1.0       # voice match at most this often per utterance (and at its end)...
 voice_match_max_s = 6.0         # ...on its newest 6 s of speech (the whole utterance stalled audio)
 inbox_s = 30                    # audio queued while a step is slow is kept, never dropped
+vad_gain = true                 # A-31: gain before the VAD only, so a talker a few metres from the
+                                # mic starts an utterance (far-talker WER 0.20 -> 0.13 at -30 dB)
 
 [alerts]
 window_s = 1.0
