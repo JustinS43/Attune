@@ -223,6 +223,48 @@ adapt_gap_s = 5.0                # at most one adaptation per person this often
 adapt_persist = true             # keep the bank in voice.json (deleted with the person)
 harvest_lag_s = 0.4              # harvests wait this long so their audio has arrived
 
+# Cloud captions (A-32 audio/cloud_diarize.py, V-32 fusion/cloud_tags.py; docs/cloud-diarization.md).
+# OPTIONAL and OFF by default. While the wearer has them on (phone Settings -> cloud.set), the
+# 16 kHz mic audio is streamed to Google Speech-to-Text v1 with speaker diarization, and the
+# per-word speaker tags help fusion put each speaker's words on the right face. Local captions
+# keep running and are always the fallback. Credentials only in .env (GOOGLE_SPEECH_API_KEY,
+# or GOOGLE_APPLICATION_CREDENTIALS = a service-account JSON file).
+[cloud]
+enabled = false                  # the wearer turns it on in Settings; nothing is sent while off
+remember = true                  # keep the wearer's choice (and language) in <data_dir>/cloud.json
+provider = "google"
+language = "en-US"               # Google diarizes while streaming for en-US; es-US only with its
+                                 # short-phrase model (preview). Local captions keep Spanish anyway.
+models = { "en-US" = "latest_long", "es-US" = "command_and_search" }
+min_speakers = 2
+max_speakers = 6
+interim_results = true           # interim results rarely carry tags; used only when they do
+endpoint = ""                    # "" = speech.googleapis.com
+chunk_ms = 100                   # audio per streaming request (Google suggests ~100 ms)
+queue_s = 5.0                    # audio waiting to be sent; beyond this the stream restarts
+stream_max_s = 290               # restart each stream before Google's ~305 s limit...
+overlap_s = 3.0                  # ...starting the new one with this much audio the old one heard
+latency_fallback_ms = 2500       # median lag of recent results above this: fall back to local
+latency_window = 5               # results in that median
+stall_s = 4.0                    # speech heard but no result for this long: fall back to local
+retry_s = [2, 5, 15, 30, 60]     # reconnect delays after network errors (the last one repeats)
+quota_retry_s = 300              # reconnect delay after a quota error
+connect_grace_s = 2.0            # a stream open this long without an error counts as "on"
+idle_close_s = 5.0               # no audio arriving this long: close the stream (Google times out)
+credentials_poll_s = 2.0         # how often .env is checked for a new or changed key
+# How fusion (Section 1) uses the tags
+final_wait_ms = 1200             # a final caption waits up to this long for tags on its words
+                                 # (only while the state is "on"; the draft is on screen meanwhile)
+word_match_s = 0.25              # a caption word takes the tag of a cloud word this close to it
+talk_lag_s = 0.3                 # face evidence (Light-ASD's window) lags the words it is about
+bind_min_s = 0.6                 # a tag binds to a face after this much of its speech overlaps
+bind_share = 0.6                 # ...that face talking, and this share of its face-matched speech
+rebind_ratio = 2.0               # a bound tag moves to another face only with this much more evidence
+turn_min_s = 0.3                 # a run of another tag this long always gets its own bubble
+bridge_min_s = 0.5               # after a restart, a new tag takes an old tag's face after this
+                                 # much overlapping speech
+memory_s = 90                    # tags and face evidence are kept this long
+
 # Enrollment station (V-23, A-21, P-35): people are saved at the laptop's own camera and mic;
 # the glasses camera and mic are for the world outside. engine/attune/station/
 [enroll]
