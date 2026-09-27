@@ -100,6 +100,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-16 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
 - [x] H-17 Test patterns stop after one cycle; board restarts (brown-out) noticed and logged; heartbeat kept within 0.1–1 s; simulator reboot/heartbeat/sound controls; speech_out device "none" (#61)
 - [x] H-18 Firmware 1.1.1: no false link loss (the watchdog's time math wrapped on ~1 % of heartbeats and stopped a playing alarm about once a minute) and no skipped one-shot patterns; the engine plays a real alert's T3/T4 again when the board says READY (#88)
+- [x] H-19 Sensor-only live demo mode: keep Arduino sound levels and heartbeats flowing without playing patterns or rearming an alarm (#95)
 
 ## Section 4 – Pages, Engine & Demo
 
