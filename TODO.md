@@ -79,6 +79,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-28 A sounding alarm stays on while the glasses tap: tapped windows can't show that it stopped, so they no longer run down the 15 s quiet-clear (it cycled 14 s on, 10 s off); it ends with "Got it" or 15 s of heard quiet (#89)
 - [x] A-29 Caption words in a script the configured languages don't use are dropped (Arabic words inside English podcast captions) (#87)
 - [x] A-30 Door knock alert: a knock on the door (EfficientAT "Knock" at `knock_score` or more, blocked by music but not by speech) raises a `knock` alert with the BELL pattern, on the side the sensors hear it; threshold set on synthetic knocks, real knocks on the rig still to check (#92)
+- [x] A-32 Cloud captions client (optional, off by default): Google Speech-to-Text v1 streaming diarization on the 16 kHz mic stream while the wearer has it on; `speaker.cloud` word tags on the engine clock, seamless restarts with overlap, instant fallback on missing or rejected credentials, network, quota or slow results; silence during our own reply; the choice kept in data/cloud.json — live Google check pending credentials (#PR)
 
 ## Section 3 – Hardware & Services
 
