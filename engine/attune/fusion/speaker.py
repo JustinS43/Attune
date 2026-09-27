@@ -879,6 +879,7 @@ class SpeakerFusion:
             groups = self._smooth(_raw_groups(list(zip(words, evidence))))
         else:
             groups = self._smooth(self._redraft(mem.segs, words, evidence))
+        groups = self._snap(groups)
 
         ids: list[str] = []
         for i, g in enumerate(groups):
@@ -1035,6 +1036,37 @@ class SpeakerFusion:
             fold(gs, best, j)
             gs = _merge_neighbours(gs)  # neighbours that now share a speaker become one piece
         return gs
+
+    def _snap(self, groups: list[_Group]) -> list[_Group]:
+        """Move each speaker change back to the pause it really happened at.
+
+        The evidence for a new talker arrives 0.5-1 s after they start (Light-ASD's window,
+        the hold), so the first words of a reply ("Yeah, well, you know") would end the
+        previous speaker's bubble. People leave a small pause before they answer: within
+        `snap_max_s` before a change to a known speaker, the longest gap between words
+        (at least `snap_gap_s`, and longer than the gap at the change itself) becomes
+        the change. The earlier piece always keeps at least one word.
+        """
+        s = self.s
+        if s.snap_max_s <= 0:
+            return groups
+        for a, b in pairwise(groups):
+            if b.speaker.kind == "someone" or _who(a.speaker) == _who(b.speaker):
+                continue
+            change = float(b.words[0][1])
+            best_k, best_gap = None, change - _end(a.words[-1], s.max_word_s)
+            best_gap = max(best_gap, s.snap_gap_s - 1e-9)
+            for k in range(len(a.words) - 1, 0, -1):
+                if change - float(a.words[k][1]) > s.snap_max_s:
+                    break
+                gap = float(a.words[k][1]) - _end(a.words[k - 1], s.max_word_s)
+                if gap > best_gap:
+                    best_k, best_gap = k, gap
+            if best_k is not None:
+                b.words[:0] = a.words[best_k:]
+                b.evidence[:0] = a.evidence[best_k:]
+                del a.words[best_k:], a.evidence[best_k:]
+        return groups
 
     def take_retractions(self) -> list[CaptionRetract]:
         """Segment ids to retract since the last call (the service publishes them)."""

@@ -95,3 +95,37 @@ def test_a_stale_voice_of_a_silent_face_in_view_is_someone():
     faces = {1: (300, 0.0, False, -3.0), 2: (900, 0.0, False, -3.0)}
     spk = sim.run(2.0, faces, voice="track-1")
     assert spk.kind == "someone"
+
+
+# ---------------------------------------------------------------- change at the pause
+def test_a_speaker_change_snaps_back_to_the_pause_before_the_reply():
+    from attune.fusion.speaker import SpeakerFusion, _Group
+    from attune.vision.settings import FusionSettings
+    from attune.vision.types import Speaker
+
+    f = SpeakerFusion(FusionSettings())
+    a, b = Speaker("face", 1, None, "A"), Speaker("face", 2, None, "B")
+    # A: "I don't like it" | pause 0.4 s | B: "yeah well" (credited to A: late evidence) "you know"
+    words_a = [("I", 0.0, 0.2), ("don't", 0.2, 0.4), ("like", 0.4, 0.6), ("it.", 0.6, 0.8),
+               ("Yeah,", 1.2, 1.4), ("well,", 1.4, 1.6)]  # fmt: skip
+    words_b = [("you", 1.62, 1.8), ("know", 1.8, 2.0)]
+    groups = f._snap([_Group(a, list(words_a), evidence=[a] * 6), _Group(b, list(words_b), evidence=[b] * 2)])
+    assert [w[0] for w in groups[0].words] == ["I", "don't", "like", "it."]
+    assert [w[0] for w in groups[1].words] == ["Yeah,", "well,", "you", "know"]
+    assert len(groups[1].evidence) == 4
+
+
+def test_no_pause_no_snap_and_someone_is_never_given_words():
+    from attune.fusion.speaker import SpeakerFusion, _Group
+    from attune.vision.settings import FusionSettings
+    from attune.vision.types import Speaker
+
+    f = SpeakerFusion(FusionSettings())
+    a, b = Speaker("face", 1, None, "A"), Speaker("face", 2, None, "B")
+    even = [("one", 0.0, 0.3), ("two", 0.3, 0.6), ("three", 0.6, 0.9)]
+    g = f._snap([_Group(a, list(even), evidence=[a] * 3), _Group(b, [("four", 0.9, 1.2)], evidence=[b])])
+    assert len(g[0].words) == 3
+    someone = Speaker("someone", label="Someone")
+    paused = [("one", 0.0, 0.3), ("two", 0.8, 1.0)]
+    g = f._snap([_Group(a, list(paused), evidence=[a] * 2), _Group(someone, [("x", 1.1, 1.3)], evidence=[someone])])
+    assert len(g[0].words) == 2

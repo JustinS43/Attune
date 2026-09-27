@@ -582,8 +582,22 @@ export function createViewBuilder(store) {
       x.b = b;
       if (key.startsWith('t')) {
         let face = byKey.get(key);
-        if (face && !face.ghost) th.face = face;
-        else if (!face && th.face) face = { ...th.face, ghost: true, isSpeaker: false, lip: 0, proposal: null }; // hold its place
+        if (face && !face.ghost) {
+          th.face = face;
+          th.faceSeen = clock;
+        } else if (!face && th.face) {
+          if (clock - (th.faceSeen ?? clock) <= TRACK_HOLD_S) face = { ...th.face, ghost: true, isSpeaker: false, lip: 0, proposal: null }; // hold its place
+          else {
+            // their face has left the view: the bubble docks to the edge they left by, instead of
+            // hanging where they were (over whoever is there now)
+            const lk = `o~${key}`;
+            const side = th.face.cx < 960 ? 'left' : 'right';
+            offMap.set(lk, { key: lk, name: th.face.label, side, color: th.face.color, person_id: th.face.person_id, bubble: b });
+            Object.assign(b, { name: th.face.label, color: th.face.color, side, known: th.face.known, relation: th.face.relation });
+            feed.push(b);
+            continue;
+          }
+        }
         if (face) {
           b.face = face;
           b.name = face.proposal?.state === 'proposed' ? `${face.proposal.name}?` : face.label;

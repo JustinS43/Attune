@@ -144,6 +144,11 @@ class FusionSettings:
     # Words already shown move to a new segment (a turn change found late) only as part
     # of a run of another speaker at least this long.
     move_segment_s: float = 1.2
+    # A speaker change moves back to the longest pause between words (>= snap_gap_s) within
+    # snap_max_s before it: the new talker's evidence arrives late, the reply's first words
+    # would otherwise end the previous bubble (fusion/speaker.py `_snap`). 0 turns it off.
+    snap_max_s: float = 1.2
+    snap_gap_s: float = 0.15
     utterance_memory_s: float = 60.0  # forget an unfinished utterance's segments after this
     rate_hz: float = 15.0
     # In time: lips and loudness (both band-passed to syllable rates) correlate at least
