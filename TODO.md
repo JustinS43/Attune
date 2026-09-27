@@ -83,7 +83,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-30 Door knock alert: a knock on the door (EfficientAT "Knock" at `knock_score` or more, blocked by music but not by speech) raises a `knock` alert with the BELL pattern, on the side the sensors hear it; threshold set on synthetic knocks, real knocks on the rig still to check (#92)
 - [x] A-31 Far talkers: the gain before the VAD (A-24's `vad_gain`) is on by default, so speech a few metres from the laptop mic starts an utterance; far-talker bench WER 0.20 -> 0.13 at -30 dB and 0.94 -> 0.36 at -36 dB, close speech unchanged, no false speech in room, white or metro noise; the recogniser gain rise (`level_rise_db_s`) stays off (it measured worse) — live check at 1-3 m still to do (#103)
 - [x] A-32 Cloud captions client (optional, off by default): Google Speech-to-Text v1 streaming diarization on the 16 kHz mic stream while the wearer has it on; `speaker.cloud` word tags on the engine clock, seamless restarts with overlap, instant fallback on missing or rejected credentials, network, quota or slow results; silence during our own reply; the choice kept in data/cloud.json — live Google check pending credentials (#100)
-- [x] A-34 Explicit self introductions ("I am", "I'm", "My name is") offer a grounded name as soon as the final caption arrives, without waiting for Ollama; saving still requires confirmation (PR number pending)
+- [x] A-34 Explicit self introductions ("I am", "I'm", "My name is") offer a grounded name as soon as the final caption arrives, without waiting for Ollama; saving still requires confirmation (#107)
 
 ## Section 3 – Hardware & Services
 
