@@ -399,8 +399,20 @@ near the restart are tagged in both streams and fusion can carry each old tag's 
 the new tag.
 
 **In fusion.** A tag's speech that overlaps a visible face that Light-ASD (or the lip checks)
-hears talking binds the tag to that face (and to its person, when known). Afterwards a change
-of tag between words starts a new caption segment for the other speaker at once, even for a
-short reply; a bound tag's words go to its face; a tag bound to no face goes to the dock
-(`offscreen`, the sensors' side or `none`). A shown segment still changes speaker only by the
-"Caption segments" rules, and a final caption is never changed after it is sent.
+hears talking binds the tag to that face (and to its person, when known).
+- **Turn changes.** Afterwards a change of tag between words starts a new caption segment for
+  the other speaker at once, even for a short reply (`[cloud] turn_min_s`). Inside one other
+  voice's sentence it also needs two words, since a single wrongly tagged word isn't a turn.
+  Google tags only final results, so a reply inside a segment already shown as a draft is cut
+  out into its own segment when the final comes. The rest keeps its segment id; new ids are
+  new segments, and ids that drop out are retracted as usual.
+- **Words of a bound tag** go to its face. If that face is out of view, they go to the dock
+  (`offscreen`) with its label and exit side. Words said while it was in view keep the face.
+- **Words of a tag bound to no face yet** go to one of these, in order:
+  1. the face the local evidence gives them, unless that face is another tag's;
+  2. a face seen talking then;
+  3. a voice print's off-screen person;
+  4. their own dock segment: `offscreen`, label "Someone", `person_id` `session-cloud-N`,
+     side from the sensors or `none`. It is session-only like any stranger, so forget session
+     removes it from history.
+- **Finals.** A final caption is never changed after it is sent.

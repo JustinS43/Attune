@@ -112,8 +112,10 @@ names, never Google's full error text.
 **Fusion** (`engine/attune/fusion/cloud_tags.py`, Section 1) treats tags as evidence from one
 stream. It never trusts a tag number across streams:
 - **Cloud speakers.** Each (stream, tag) is a *cloud speaker*. After a restart, a new tag takes
-  over an old tag's cloud speaker when their words overlap in time for `bridge_min_s`. That
-  overlap is why the new stream starts with audio the old one already heard.
+  over an old tag's cloud speaker when they share at least `bridge_min_s` of the same words
+  (the same text at the same moment). The strongest pairs are made first, one to one, so a
+  wrong tag or two in the overlap can't hand one voice to another. That overlap is why the new
+  stream starts with audio the old one already heard.
 - **Binding to faces.** Each fusion tick records which visible faces are talking: Light-ASD's
   verdict where it is fresh, otherwise the lip checks. A cloud speaker binds to a face once
   `bind_min_s` of its words overlap that face talking, and that face has `bind_share` of its
@@ -121,15 +123,25 @@ stream. It never trusts a tag number across streams:
   binding holds until another face has `rebind_ratio` times the evidence. When the face's
   person is known, the binding also remembers the person, so a new track of the same person
   takes it over.
-- **Caption words.** Each word takes the cloud speaker of the cloud word nearest its middle
-  (within `word_match_s`). A bound speaker's words go to its face. A face that isn't in view
-  sends its words to the dock with that person's label and the side they left from.
-- **Unbound speakers.** An unbound speaker whose words the local evidence gave to a face bound to
-  someone else goes to another face that was talking then, if there is one. Otherwise it goes to
-  the dock as its own "Someone", never merged into the neighbouring speaker's bubble.
+  Binding runs on the first tick after new tags arrive, while the faces are still in view.
+- **Caption words.** Each word takes the cloud speaker of the cloud word at its middle (within
+  `word_match_s`). In overlapping speech two voices' words cover the same moment, so the cloud
+  word with the same text wins. A bound speaker's words go to its face. If that face isn't in
+  view, its words go to the dock with that person's label and the side they left from. Words
+  said while the face was in view keep it.
+- **Unbound speakers.** All of an unbound speaker's words in a caption go to one place, the
+  first of:
+  1. the face the local evidence gives most of them, unless that face is bound to another voice;
+  2. a face seen talking during them;
+  3. an off-screen voice print;
+  4. its own dock bubble, "Someone" (`session-cloud-N`, session-only), never merged into the
+     neighbouring speaker's bubble.
 - **Turn changes.** A run of another cloud speaker at least `turn_min_s` long always gets its own
-  caption segment. The smoothing that folds short pieces into their neighbours leaves it alone,
-  and the "move the change to the pause" rule doesn't move words the cloud tagged.
+  caption segment. Inside one other voice's sentence it also needs two words, since a single
+  wrongly tagged word isn't a turn. The smoothing that folds short pieces into their neighbours
+  leaves it alone, and the "move the change to the pause" rule doesn't move a change the cloud
+  placed. Drafts carry no tags, because Google tags only final results. So a reply inside a
+  caption already shown as a draft is cut out into its own bubble when the final comes.
 - **Waiting for tags.** While the state is `on`, a final caption waits up to `final_wait_ms`
   (1.2 s) for the cloud to hear past its last word. The draft stays on screen meanwhile. In any
   other state it never waits.
@@ -158,16 +170,75 @@ states the rule.
 
 ## Tests and evaluation
 
-See the PRs for the numbers:
 - `tests/audio_language/test_cloud_diarize.py`: a fake Google client with realistic
   responses covers interim and final results, word offsets, tags, restarts, errors and
   fallback. It also checks that with cloud captions off, no client is created and no audio is
   queued.
-- `tests/vision/test_cloud_tags.py`: two alternating speakers, overlapping speech, tags
-  renumbered after a restart, an off-screen speaker, and fallback.
-- `scripts/eval_podcast.py refuse --cloud-sim`: replays recorded fusion inputs with a cloud tag
-  stream simulated from the reference. It adds Google-like finals at pauses, a lag, tag errors
-  and restarts, and gives the before/after on speaker and right-face scores.
+- `tests/vision/test_cloud_tags.py`: scripted conversations with Light-ASD running late, and
+  one-off cases. They cover:
+  - two alternating speakers, including a quick reply and a reply inside a shown caption;
+  - overlapping speech;
+  - tags renumbered after a restart, with wrong tags in the overlap;
+  - an off-screen voice, and a bound face walking out;
+  - fallback: no waiting unless `on`;
+  - finals never changing;
+  - off by default: captions are identical to local-only.
+- `scripts/eval_podcast.py refuse <run.json> --cloud-sim` replays a recorded run's fusion
+  inputs twice: local only, and with a cloud tag stream simulated from the reference. The
+  simulated stream:
+  - aligns the local final words to the reference and takes each word's speaker from it;
+  - sends a final at each pause, `--cloud-lag` late;
+  - gives `--cloud-error` of the words a wrong tag;
+  - restarts every `--cloud-restart` s with a 3 s overlap, renumbering the voices.
+- `scripts/eval_cloud_sim.py` does the same on synthetic conversations, because this laptop
+  has no podcast clips and no Google key.
+  - The scenes are two and three seated people, two plus a voice off screen, and two with lots
+    of overlap. Each has 5 conversations of 150 s with long turns, quick replies,
+    backchannels, overlaps and pauses.
+  - Each face's Light-ASD score is computed from the truth over the model's window, so it
+    turns on late, stays on after a turn, misses replies shorter than the window, and is
+    noisy.
+  - The local recogniser splits utterances at its pauses. No voice prints are simulated.
+
+Results with 3% wrong tags, finals 0.9 s (± 0.2 s) after each pause, and a restart every 60 s
+(Google's limit is ~5 min), over 20 conversations:
+
+| | local only | with cloud captions |
+|---|---|---|
+| speaker accuracy | 83.7% | **92.9%** |
+| words on the right face | 83.7% | **87.1%** |
+| words on a wrong face | 9.0% | **4.7%** |
+| speaker changes that start a new bubble | 34.7% | **57.6%** |
+| words sharing a bubble with another speaker | 8.1% | **4.1%** |
+| words shown as "Someone" | 7.4% | **2.3%** |
+| bubbles per long turn | 2.18 | 2.13 |
+| word to first shown, p50 / p90 | 0.43 / 0.64 s | 0.43 / 0.64 s |
+
+By scene, speaker accuracy:
+- two people: 91.4% → 96.0%;
+- three people: 91.3% → 95.9%;
+- two plus a voice off screen: 60.1% → 84.8% ("Someone" 29% → 9%: the off-screen voice gets its own dock bubble);
+- lots of overlap: 91.8% → 94.8%.
+
+A harsher cloud has 10% wrong tags and finals 1.6 s late, so a final often stops waiting
+after 1.2 s without its tags. It still helps:
+- speaker accuracy 83.7% → 89.7%;
+- right face 83.7% → 85.5%;
+- speaker changes that start a new bubble 34.7% → 51.1%;
+- shared bubbles 8.1% → 5.2%;
+- "Someone" 7.4% → 3.3%.
+
+The cost is that long turns get cut a little more often (2.18 → 2.28 bubbles per long turn),
+by runs of two wrong tags.
+
+Latency doesn't change, because drafts are shown from local evidence as before. Only the final
+may wait, up to 1.2 s, for its tags.
+
+These are simulations. Real tags will be worse than the random errors here: Google's errors
+cluster at turn boundaries and in a stream's first seconds, before it has heard each voice.
+Real local fusion also has voice prints, which the simulation leaves out. The real numbers
+come from `eval_podcast.py refuse --cloud-sim` on recorded clips, and from the live check
+below.
 
 ## Live check (pending credentials)
 
