@@ -1,12 +1,12 @@
 /*
- * Lens view controller: the stage, the two sources, the three glasses modes, keys and chrome.
+ * Lens view controller: the stage, the two sources, the glasses modes, keys and chrome.
  *
  * Section 4 - Pages, Engine & Demo. TODO: P-06 (with P-07 bubbles.js, P-08 alerts.js, P-12 keys).
  *
  * Sources (V, or ?source=live|film):
  *   Live - the engine over web/shared/ws.js (role lens, with frames).
  *   Film - the launch film's footage + script, replayed as the same contract messages.
- * Glasses modes (M, or ?mode=color|mono|mono-corner): each redraws the same view model within
+ * Glasses modes (M, or ?mode=color|focused|mono|mono-corner): each redraws the same view model within
  * that display's limits. Both sources feed one store, so every mode renders both the same way.
  */
 
@@ -14,6 +14,7 @@ import { onKey, listKeys } from '../shared/keys.js';
 import { createStore, createViewBuilder } from './store.js';
 import { W, setPixelScale, nowS, addSkew, setManualClock } from './hud.js';
 import { createColorMode } from './modes/color.js';
+import { createFocusedMode } from './modes/focused.js';
 import { createMonoMode, MONO_LEVELS, MONO_DEFAULT_LEVEL } from './modes/mono.js';
 import { createCornerMode } from './modes/corner.js';
 import { createLiveSource } from './live.js';
@@ -23,11 +24,12 @@ import { createSaveFlow } from './save.js';
 const params = new URLSearchParams(location.search);
 const MODE_ALIASES = {
   color: 'color', colour: 'color', full: 'color', ar: 'color',
+  focused: 'focused', focus: 'focused',
   mono: 'mono', green: 'mono', waveguide: 'mono',
   'mono-corner': 'corner', corner: 'corner', monocular: 'corner',
 };
-const MODE_ORDER = ['color', 'mono', 'corner'];
-const MODE_URL = { color: 'color', mono: 'mono', corner: 'mono-corner' };
+const MODE_ORDER = ['color', 'focused', 'mono', 'corner'];
+const MODE_URL = { color: 'color', focused: 'focused', mono: 'mono', corner: 'mono-corner' };
 const ASSETS = params.get('assets') || '/data/reels/film/';
 
 // ---------------------------------------------------------------- model
@@ -65,7 +67,7 @@ const chrome = {
 };
 const help = $('help');
 
-const modes = { color: createColorMode(), mono: createMonoMode(), corner: createCornerMode() };
+const modes = { color: createColorMode(), focused: createFocusedMode(), mono: createMonoMode(), corner: createCornerMode() };
 const layers = [...document.querySelectorAll('canvas.hud')].map((canvas) => ({
   id: canvas.dataset.mode,
   canvas,
@@ -75,6 +77,7 @@ const layers = [...document.querySelectorAll('canvas.hud')].map((canvas) => ({
 }));
 
 let modeId = MODE_ALIASES[params.get('mode')] ?? 'color';
+let labelsOn = params.get('labels') !== '0';
 let sourceKind = params.get('source') === 'live' || params.get('source') === 'film'
   ? params.get('source')
   : location.pathname.includes('/web/lens') ? 'film' : 'live';
@@ -209,6 +212,8 @@ function syncUrl() {
   const p = new URLSearchParams(location.search);
   p.set('source', sourceKind);
   p.set('mode', MODE_URL[modeId]);
+  if (labelsOn) p.delete('labels');
+  else p.set('labels', '0');
   if (monoLevel !== MONO_DEFAULT_LEVEL) p.set('height', String(monoLevel));
   else p.delete('height');
   if (modes.corner.variant === 'glass') p.set('variant', 'glass');
@@ -225,6 +230,12 @@ function syncChrome() {
   for (const l of layers) l.canvas.classList.toggle('on', l.id === modeId);
   for (const b of document.querySelectorAll('[data-source]')) b.setAttribute('aria-pressed', String(b.dataset.source === sourceKind));
   for (const b of document.querySelectorAll('button[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === modeId));
+  const labelButton = document.querySelector('#speaker-labels');
+  if (labelButton) {
+    labelButton.hidden = modeId !== 'focused';
+    labelButton.setAttribute('aria-pressed', String(labelsOn));
+    labelButton.textContent = labelsOn ? 'Labels on' : 'Labels off';
+  }
   chrome.transport.hidden = sourceKind !== 'film';
   document.body.classList.toggle('chrome-hidden', chromeHidden);
 }
@@ -293,7 +304,7 @@ function step(now, at, dtOverride) {
     saveFlow.decorate(view, dt);
     const rendering = layers.filter((l) => l.id === modeId || now < l.until);
     if (rendering.some((l) => modes[l.id].blur)) updateBlur(source?.blurSource ?? null);
-    const env = { anim, dt, blur: blurReady ? blurCanvas : null, chrome: !chromeHidden, px: scale, monoLevel };
+    const env = { anim, dt, blur: blurReady ? blurCanvas : null, chrome: !chromeHidden, px: scale, monoLevel, labelsOn };
     for (const l of layers) {
       const on = rendering.includes(l);
       if (!on && !l.dirty) continue;
@@ -369,8 +380,15 @@ function setMonoLevel(level) {
   syncChrome();
 }
 
+function setLabels(on) {
+  labelsOn = !!on;
+  syncUrl();
+  syncChrome();
+}
+
 // ---------------------------------------------------------------- keys (web/shared/keys.js)
 onKey('M', () => setMode(MODE_ORDER[(MODE_ORDER.indexOf(modeId) + 1) % MODE_ORDER.length]), 'Next glasses mode');
+onKey('L', () => setLabels(!labelsOn), 'Toggle name labels in Focused mode');
 onKey('V', () => setSource(sourceKind === 'live' ? 'film' : 'live'), 'Switch source: Live / Film');
 onKey('H', () => {
   chromeHidden = !chromeHidden;
@@ -411,6 +429,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   if (b.dataset.source) setSource(b.dataset.source);
   else if (b.dataset.mode) setMode(b.dataset.mode);
+  else if (b.id === 'speaker-labels') setLabels(!labelsOn);
   else if (b.id === 'help-btn') toggleHelp();
   else if (b.id === 'play') film?.togglePlay();
   else if (b.id === 'prev') film?.prev();
@@ -490,6 +509,7 @@ async function renderAt(t, mode) {
     build = createViewBuilder(store);
     const variant = modes.corner.variant;
     modes.color = createColorMode();
+    modes.focused = createFocusedMode();
     modes.mono = createMonoMode();
     modes.corner = createCornerMode();
     modes.corner.variant = variant;
@@ -510,7 +530,7 @@ async function renderAt(t, mode) {
 
 // debugging and scripted demos: attuneLens.seek(33), attuneLens.setMode('mono')
 window.attuneLens = {
-  store, setMode, setSource, setMonoLevel, modes, saveFlow,
+  store, setMode, setSource, setMonoLevel, setLabels, modes, saveFlow,
   seek: (t) => film?.seek(t),
   get film() {
     return film;
@@ -575,5 +595,3 @@ for (const [key, view, label] of [['C', 'console', 'Console panel'], ['S', 'spea
 syncChrome();
 setSource(sourceKind);
 requestAnimationFrame(frame);
-
-
