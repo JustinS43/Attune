@@ -9,8 +9,9 @@ While speech is detected, each tick (15 per second) checks, in order:
    matches this utterance while its lips move at least in the probable band.
    Held at least 0.5 s; only switches to someone scoring 1.5x higher. Continuity:
    while speech runs on without a pause and no other face talks, the face keeps
-   the speech for up to `continuity_s` after its last own evidence, unless its
-   voice is vetoed or Light-ASD scores it (`_continues`).
+   the speech for up to `continuity_s` after its last own evidence (only
+   `asd_continuity_s` when Light-ASD scores it silent: a hand by the mouth), unless
+   its voice is vetoed (`_continues`).
 3. A probable visible speaker: exactly one face that passes the talking checks
    only in the probable band (`lip_uncertain`), while everyone else is still.
    Dashed tail.
@@ -66,7 +67,8 @@ Light-ASD (V-22, asd_gate.py). For a face with a fresh `asd_score`, Light-ASD's 
 veto, the hold and switch rules and "You" still apply. Other faces keep the checks.
 
 Captions: every word has a time, so a transcript is split where the speaker
-changes. If nobody qualifies yet, the first words wait up to 300 ms for a
+changes (a switch Light-ASD made is dated back `asd_switch_lag_s`, and each change
+moves back to the pause before it, `_snap`). If nobody qualifies yet, the first words wait up to 300 ms for a
 speaker before showing as "Someone". Once a segment is shown, later drafts keep
 its words and speaker unless the evidence over most of it changes (see
 `_redraft`); a face leaving never re-labels what it already said, and segment
