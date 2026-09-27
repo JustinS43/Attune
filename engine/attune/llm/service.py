@@ -32,6 +32,9 @@ class LLMService:
         self.track_generations = {}
         self._state_generation = self.worker.generation
         self._error = ""
+        # A-23: suggestions are asked for once the talk pauses, not on every final
+        self.reply_delay_s = float(config["llm"].get("reply_delay_s", 0.0))
+        self._reply_due: tuple[float, int] | None = None
         self._visible: list[dict] = []
         self._tracks_unsub = None
 
@@ -40,10 +43,14 @@ class LLMService:
         if warm:
             self._error = ""
         error = getattr(self.client, "error", "") or self._error
+        metrics = {"warm": warm, "pending": len(self.jobs)}
+        stats = getattr(self.client, "stats", None)
+        if stats:
+            metrics["jobs"] = {kind: dict(s) for kind, s in list(stats.items())}
         return {
             "ok": warm and not error,
             "detail": error or ("ready" if warm else "warming local language model"),
-            "metrics": {"warm": warm, "pending": len(self.jobs)},
+            "metrics": metrics,
         }
 
     def start(self) -> None:
@@ -103,6 +110,7 @@ class LLMService:
         self._visible = []
         self._state_generation = self.worker.generation
         self._error = ""
+        self._reply_due = None
 
     def _handle(self, topic: str, e: dict, generation: int) -> None:
         if generation != self.worker.generation and topic not in {
@@ -161,14 +169,17 @@ class LLMService:
                     e | {"track_generation": self.track_generations.get(track, 0)},
                     generation,
                 )
-            self._queue(
-                "replies", replies.messages(list(self.context)), replies.SCHEMA, {}, generation
-            )
+            if self.reply_delay_s > 0:
+                self._reply_due = (self.clock() + self.reply_delay_s, generation)
+            else:
+                self._queue_reply(generation)
         elif not self.paused and topic == "vision.appearance":
             self.lost.discard(e["track_id"])
             self._queue(
                 "descriptions",
-                describe.messages(e["crop"]),
+                describe.messages(
+                    e["crop"], int(self.config["llm"].get("description_max_px", 224))
+                ),
                 describe.SCHEMA,
                 {
                     "track_id": e["track_id"],
@@ -176,6 +187,10 @@ class LLMService:
                 },
                 generation,
             )
+
+    def _queue_reply(self, generation: int) -> None:
+        self._reply_due = None
+        self._queue("replies", replies.messages(list(self.context)), replies.SCHEMA, {}, generation)
 
     def _answer(self, key: str, accept: bool, generation: int) -> None:
         if self.paused or generation != self.worker.generation:
@@ -195,6 +210,9 @@ class LLMService:
             return
         for event in self.names.expire(self.clock()):
             self.worker.publish("name.proposal", event, self._state_generation)
+        due = self._reply_due
+        if due is not None and self.clock() >= due[0] and due[1] == self.worker.generation:
+            self._queue_reply(due[1])
         pending = []
         for future, kind, source, generation in self.jobs:
             if not future.done():
@@ -233,6 +251,8 @@ class LLMService:
                 if event:
                     self.worker.publish(topic, event, generation)
                 self._error = ""
+            except TimeoutError:
+                continue  # a slow answer, skipped: the client logged it (A-23)
             except Exception:
                 self._error = "local language job failed"
                 logger.exception("local language job failed")

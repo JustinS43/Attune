@@ -13,7 +13,7 @@ Built for ShellHacks (MLH).
 | Build against the other sections | [docs/contracts.md](docs/contracts.md) |
 | Contribute (people and AI agents) | [AGENTS.md](AGENTS.md) |
 | See what's done and what's next | [TODO.md](TODO.md) |
-| Set up your laptop | [docs/setup.md](docs/setup.md) |
+| Set up your laptop and local models | [docs/setup.md](docs/setup.md), [models/README.md](models/README.md) |
 
 ## Team sections
 

@@ -240,9 +240,9 @@ def test_synthetic_talker_after_off_camera_speech_without_a_pause():
         room.step(talking=True, speech=True)
         if first is None and room.f.current.kind == "face":
             first = (i + 1) / FPS
-    # a face that starts in the middle of someone's speech has to keep it up for
-    # talk_sustain_s (plus the in-time window catching up) before it gets the speech
-    assert first is not None and first <= FusionSettings().talk_sustain_s + 0.8
+    # Repeated mouth swings and positive A/V timing identify a real turn before
+    # the full swing-history window has elapsed.
+    assert first is not None and first <= 0.8
 
 
 # ---------------- voice evidence ----------------
@@ -257,14 +257,14 @@ def test_a_voice_matching_someone_else_vetoes_a_talking_face():
     assert room.f.current.kind != "face"
 
 
-def test_a_face_with_a_session_print_is_vetoed_when_the_voice_matches_nobody():
+def test_a_weak_voice_match_does_not_overrule_a_talking_face():
     room = Room()
     room.f.harvested.add("track-1")  # this face's voice was learnt earlier
     for _ in range(60):
         room.step(talking=False, speech=False)
     for _ in range(90):
         room.step(talking=True, speech=True, voice=(None, 0.1))
-    assert room.f.current.kind != "face"
+    assert room.f.current.kind == "face"
     # the audio side's "not enough speech yet" (None, 0.0) is not a verdict
     room2 = Room()
     room2.f.harvested.add("track-1")
@@ -273,6 +273,13 @@ def test_a_face_with_a_session_print_is_vetoed_when_the_voice_matches_nobody():
     for _ in range(90):
         room2.step(talking=True, speech=True, voice=(None, 0.0))
     assert room2.f.current.kind == "face"
+    # A low score is inconclusive even if an upstream sender supplies an identity.
+    room3 = Room()
+    for _ in range(60):
+        room3.step(talking=False, speech=False)
+    for _ in range(90):
+        room3.step(talking=True, speech=True, voice=("p-alex", 0.1))
+    assert room3.f.current.kind == "face"
 
 
 def test_the_face_own_voice_lets_small_lip_movement_count():

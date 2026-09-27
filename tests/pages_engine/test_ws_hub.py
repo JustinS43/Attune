@@ -31,16 +31,12 @@ def frame_event(frame_no=7, t=12.5, w=1920, h=1080):
 
 def scene_event(box=(960, 540, 192, 108)):
     face = C.FaceState(4, list(box), "Sam", "enrolled", np.float32(0.04), True, False)
-    return C.Scene(
-        10, 12.5, [face], [C.Offscreen(None, "Person in blue", "left")], False
-    )
+    return C.Scene(10, 12.5, [face], [C.Offscreen(None, "Person in blue", "left")], False)
 
 
 def caption_event(utt="u1", text="Hi, my name is Sam", final=True):
     speaker = C.Speaker("face", 4, "sam-abc123", "Sam", "none")
-    return C.Caption(
-        utt, speaker, text, final, "en", [("Hi", 1.0, 1.2), ("Sam", 1.5, 1.8)]
-    )
+    return C.Caption(utt, speaker, text, final, "en", [("Hi", 1.0, 1.2), ("Sam", 1.5, 1.8)])
 
 
 # ---------------------------------------------------------------- static routes
@@ -57,9 +53,7 @@ def test_static_routes(hub_env):
     assert c.get("/data/reels/film/timeline.json").json() == {"ok": True}
     assert c.get("/data/people/sam-abc123/meta.json").status_code == 404
     assert c.get("/data/people/").status_code == 404
-    assert (
-        c.get("/data/reels/film/../../people/sam-abc123/meta.json").status_code == 404
-    )
+    assert c.get("/data/reels/film/../../people/sam-abc123/meta.json").status_code == 404
 
 
 # ---------------------------------------------------------------- hello / welcome / seq
@@ -277,9 +271,7 @@ def test_relays_and_audiences(hub_env):
         bus.publish(C.REPLY_SUGGESTIONS, {"options": ["Yes", "No", "Maybe"]})
         bus.publish(C.REPLY_SPOKEN, {"text": "Hello", "voice": "kokoro", "t": 3.0})
         bus.publish(C.ENROLL_RESULT, C.EnrollResult("sam-abc123", "face", True, "", 4))
-        bus.publish(
-            C.HW_LINK, {"connected": True, "firmware": "1.0", "driver": "TB6612"}
-        )
+        bus.publish(C.HW_LINK, {"connected": True, "firmware": "1.0", "driver": "TB6612"})
         bus.publish(C.STATUS, {"fps": 30.0, "parts": {}})
         assert recv_type(lens, "name_proposal")["name"] == "Sam"
         assert recv_type(lens, "alert")["kind"] == "smoke"
@@ -316,15 +308,11 @@ def test_relays_and_audiences(hub_env):
             "people",
             "thumbnails",
         }
-        assert (
-            "enroll_result" in kinds
-        )  # the save flow's result shows on the glasses (P-29)
+        assert "enroll_result" in kinds  # the save flow's result shows on the glasses (P-29)
 
 
 def test_late_pages_get_the_current_hw_link(hub_env):
-    hub_env.bus.publish(
-        C.HW_LINK, {"connected": True, "firmware": "1.0", "driver": "L298"}
-    )
+    hub_env.bus.publish(C.HW_LINK, {"connected": True, "firmware": "1.0", "driver": "L298"})
     with page(hub_env.client, "phone") as (phone, _):
         assert recv_type(phone, "hw_link")["driver"] == "L298"
 
@@ -336,9 +324,7 @@ def test_person_changed_resends_people(hub_env):
         person.mkdir()
         (person / "meta.json").write_text('{"name": "Ana", "consent_t": null}')
         (person / "voice.json").write_text("{}")
-        hub_env.bus.publish(
-            C.PERSON_CHANGED, C.PersonChanged("ana-1", "Ana", "enrolled")
-        )
+        hub_env.bus.publish(C.PERSON_CHANGED, C.PersonChanged("ana-1", "Ana", "enrolled"))
         assert recv_type(console, "person_changed")["action"] == "enrolled"
         people = recv_type(console, "people")["people"]
         ana = next(p for p in people if p["person_id"] == "ana-1")
@@ -356,9 +342,7 @@ def test_thumbnails_for_console(hub_env):
         thumb = msg["thumbnails"][0]
         assert thumb["track_id"] == 4
         raw = base64.b64decode(thumb["jpeg_b64"])
-        assert (
-            cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR).shape[0] == 112
-        )
+        assert cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR).shape[0] == 112
 
 
 # ---------------------------------------------------------------- commands
@@ -373,9 +357,7 @@ def test_pause_toggle_publishes_and_broadcasts(hub_env):
         assert recv_type(lens, "paused")["paused"] is True
         assert recv_type(phone, "paused")["paused"] is True
         assert wait_for(lambda: hub_env.rec[C.PAUSED] == [{"paused": True}])
-        assert wait_for(
-            lambda: {"name": "pause.toggle", "args": {}} in hub_env.rec[C.COMMAND]
-        )
+        assert wait_for(lambda: {"name": "pause.toggle", "args": {}} in hub_env.rec[C.COMMAND])
         # a new page is told it is paused
         with page(hub_env.client, "console") as (_other, welcome):
             assert welcome["paused"] is True
@@ -406,9 +388,7 @@ def test_camera_set_publishes_and_broadcasts(hub_env):
 def test_bus_pause_command_toggles_once(hub_env):
     """Section 3's touch router publishes touch.action AND command pause.toggle: one flip."""
     with page(hub_env.client, "lens") as (lens, _):
-        hub_env.bus.publish(
-            C.TOUCH_ACTION, {"target": "pause", "id": None, "accept": True}
-        )
+        hub_env.bus.publish(C.TOUCH_ACTION, {"target": "pause", "id": None, "accept": True})
         hub_env.bus.publish(C.COMMAND, {"name": "pause.toggle", "args": {}})
         assert recv_type(lens, "paused")["paused"] is True
         assert hub_env.rec[C.PAUSED] == [{"paused": True}]
@@ -439,16 +419,12 @@ def test_commands_routed_to_bus(hub_env):
 
 def test_mark_goes_to_session_log_and_event_log(hub_env):
     with page(hub_env.client, "console") as (ws, _):
-        ws.send_json(
-            {"type": "command", "name": "mark", "args": {"note": "Sam walks in"}}
-        )
+        ws.send_json({"type": "command", "name": "mark", "args": {"note": "Sam walks in"}})
         assert recv_type(ws, "event_log")["text"] == "Mark: Sam walks in"
         hub_env.log.start()
         hub_env.log.mark("again")
         hub_env.log.stop()
-        text = (hub_env.data / "sessions" / "test-session.jsonl").read_text(
-            encoding="utf-8"
-        )
+        text = (hub_env.data / "sessions" / "test-session.jsonl").read_text(encoding="utf-8")
         assert "again" in text
 
 

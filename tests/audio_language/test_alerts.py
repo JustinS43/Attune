@@ -258,3 +258,62 @@ def test_sound_model_gets_up_to_ten_seconds_of_context(config, bus):
     assert model.lengths[0] == 32000
     assert model.lengths == sorted(model.lengths)
     assert model.lengths[-1] == 10 * 32000
+
+
+def test_taps_cannot_clear_a_sounding_alarm(config):
+    """A-28: the rig's own taps hide the room, so tapped windows can't show that an alarm
+    stopped. The alert holds through them and clears only after heard quiet."""
+    r = AlertRules(config["alerts"], 3)
+    assert r.evaluate(0, {}, RhythmEvidence(t3_cycles=2), (10, 1))[0][1]["state"] == "start"
+    for i in range(1, 121):  # a minute of tapping, a window every 0.5 s
+        assert not r.evaluate(i / 2, {}, RhythmEvidence(), motor_on=True)
+    assert r.active["smoke"]["side"] == "left"
+    quiet = config["alerts"]["clear_quiet_s"]
+    assert not r.tick(60 + quiet - 0.5)
+    out = r.tick(60 + quiet)
+    assert out[0][1]["state"] == "clear"
+    assert out[-1] == ("hw.stop", {})
+
+
+def test_alarm_holds_while_the_rig_taps_until_got_it(config, bus):
+    """A-28 on the service: a minute of T3 while the rig taps T3 back (every window is
+    motor-flagged) is one alert, not a 15 s on / 10 s off cycle. It stays on after the alarm
+    stops until "Got it"; then the room is heard quiet and it clears."""
+    from attune.alerts.service import AlertService
+
+    class Model:
+        def score(self, pcm):
+            return {}
+
+    now = [0.0]
+    service = AlertService(bus, config, model=Model())
+    service.clock = lambda: now[0]
+    audio = np.concatenate(
+        (np.asarray(tones.samples("T3", cycles=15), np.float32), np.zeros(40 * 32000, np.float32))
+    )
+    seen: list[tuple[float, str, dict]] = []
+    tapping = acked = False
+    for offset in range(0, len(audio), 1600):
+        t = now[0] = offset / 32000
+        if not acked and t >= 70:  # the wearer taps "Got it" 10 s after the alarm stopped
+            alert_id = next(e["alert_id"] for topic, e in bus.events if topic == "alert")
+            service._handle("command", {"name": "alert.ack", "args": {"alert_id": alert_id}}, 0)
+            acked = True
+        service._handle(
+            "sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": tapping}, 0
+        )
+        service._handle(
+            "audio.block",
+            {"t": t, "sample_rate": 32000, "samples": audio[offset : offset + 1600]},
+            0,
+        )
+        for topic, e in bus.events[len(seen) :]:
+            seen.append((t, topic, e))
+            if topic == "hw.pattern":
+                tapping = True  # the rig plays T3 until STOP
+            elif topic == "hw.stop":
+                tapping = False
+    alerts = [(t, e["state"]) for t, topic, e in seen if topic == "alert"]
+    assert [s for _, s in alerts] == ["start", "acknowledged", "clear"]
+    assert alerts[0][0] < 10
+    assert 85 <= alerts[2][0] <= 88  # 15 s of heard quiet after the last tapped window

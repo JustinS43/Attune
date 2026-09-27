@@ -161,9 +161,7 @@ def start_with_glasses(st, glasses, **args):
         "consent": True,
         "consent_t": 1700000000.0,
     }
-    st.enroller.command(
-        {**base, "track_id": 7, "request_id": "save-1", **args}, glasses
-    )
+    st.enroller.command({**base, "track_id": 7, "request_id": "save-1", **args}, glasses)
 
 
 # ------------------------------------------------------------------ the whole save
@@ -178,32 +176,40 @@ def test_a_save_without_a_glasses_face_goes_face_then_voice(tmp_path):
     assert last["face_ok"] and last["voice_ok"] and last["person_id"] == "sam-1"
     assert all(e["client_id"] == 4 for e in st.rec[C.ENROLL_STATE])
     # the camera closed before the face was saved, the mic after the speech was collected
-    assert (
-        st.order.index("camera.stop")
-        < st.order.index("save_face")
-        < st.order.index("mic.start")
-    )
+    assert st.order.index("camera.stop") < st.order.index("save_face") < st.order.index("mic.start")
     assert st.order[-1] == "mic.stop"
     # no glasses face: nothing to check, and the save isn't linked to a track
     assert not st.rec[C.ENROLL_MISMATCH] and st.saved[0]["track_id"] is None
     assert 5 <= len(st.saved[0]["prints"]) <= 8  # the 8 most varied, at least 5
     results = [(r["part"], r["ok"], r["source"]) for r in st.rec[C.ENROLL_RESULT]]
-    assert results == [
-        ("voice", True, "station")
-    ]  # face result comes from vision's save
+    assert results == [("voice", True, "station")]  # face result comes from vision's save
 
 
 def test_only_prints_are_stored(tmp_path):
     st = Station(tmp_path)
     st.start()
     st.wait_closed()
-    files = [
-        p.relative_to(st.people).as_posix() for p in st.people.rglob("*") if p.is_file()
-    ]
+    files = [p.relative_to(st.people).as_posix() for p in st.people.rglob("*") if p.is_file()]
     assert files == ["sam-1/voice.json"]
     record = json.loads((st.people / "sam-1" / "voice.json").read_text())
     assert record["source"] == "station" and record["consent"] is True
-    assert set(record) == {"consent", "consent_t", "source", "embedding", "adapted"}
+    assert set(record) == {"consent", "consent_t", "source", "embedding", "adapted", "automatic"}
+    assert record["automatic"] is False
+
+
+def test_a_station_print_names_the_voice_model_that_made_it(tmp_path):
+    class TaggedCAM:  # like CAMExtractor, which knows its model's tag (A-27)
+        model_id = "357a834f702b8016"
+
+        def __call__(self, audio):
+            return unit_vec(len(audio))
+
+    st = Station(tmp_path)
+    st.enroller._extractor = TaggedCAM()
+    st.start()
+    st.wait_closed()
+    record = json.loads((st.people / "sam-1" / "voice.json").read_text())
+    assert record["model"] == "357a834f702b8016"
 
 
 def test_preview_goes_with_a_face_box_and_is_jpeg(tmp_path):
@@ -213,11 +219,7 @@ def test_preview_goes_with_a_face_box_and_is_jpeg(tmp_path):
     previews = st.rec[C.ENROLL_PREVIEW]
     assert previews and all(p["client_id"] == 9 for p in previews)
     first = previews[0]
-    assert (
-        first["jpeg"][:2] == b"\xff\xd8"
-        and first["width"] == 360
-        and first["height"] == 480
-    )
+    assert first["jpeg"][:2] == b"\xff\xd8" and first["width"] == 360 and first["height"] == 480
     x, _y, w, _h = first["face"]
     assert 0.3 < x + w / 2 < 0.7 and first["ok"] is True
 
@@ -359,10 +361,7 @@ def test_cancel_during_the_face_step(tmp_path):
     st.wait_phase("face")
     st.enroller.cancel("paused")
     st.wait_closed()
-    assert (
-        st.rec.phases()[-1] == "cancelled"
-        and st.rec[C.ENROLL_STATE][-1]["reason"] == "paused"
-    )
+    assert st.rec.phases()[-1] == "cancelled" and st.rec[C.ENROLL_STATE][-1]["reason"] == "paused"
     assert st.cameras[0].stopped and not st.saved
 
 
@@ -429,9 +428,7 @@ class StoppingMic(FakeMic):
 
 
 def test_a_mic_that_stops_mid_sentence_is_reported(tmp_path):
-    st = Station(
-        tmp_path, mic=StoppingMic(speech_like(6.0), blocks=50)
-    )  # 0.5 s, then gone
+    st = Station(tmp_path, mic=StoppingMic(speech_like(6.0), blocks=50))  # 0.5 s, then gone
     st.start()
     st.wait_phase("voice_failed")
     assert "stopped" in st.rec[C.ENROLL_STATE][-1]["reason"]
@@ -457,9 +454,7 @@ def test_too_little_voice_for_cam_is_a_voice_failure(tmp_path):
 # ------------------------------------------------------------------ requests
 def test_consent_is_required(tmp_path):
     st = Station(tmp_path)
-    st.enroller.command(
-        {"action": "start", "name": "Sam", "consent": False, "consent_t": 1.0}
-    )
+    st.enroller.command({"action": "start", "name": "Sam", "consent": False, "consent_t": 1.0})
     assert st.rec[C.ENROLL_STATE][-1]["phase"] == "cancelled"
     assert st.rec[C.ENROLL_STATE][-1]["reason"] == "consent is required"
     assert not st.cameras
@@ -482,8 +477,6 @@ def test_a_new_save_replaces_the_running_one(tmp_path):
     st.start(client_id=2, name="Ana")
     assert first.closed.wait(5)
     st.wait_closed()
-    ends = [
-        (e["session_id"], e["phase"], e.get("reason")) for e in st.rec[C.ENROLL_STATE]
-    ]
+    ends = [(e["session_id"], e["phase"], e.get("reason")) for e in st.rec[C.ENROLL_STATE]]
     assert (first.session_id, "cancelled", "replaced") in ends
     assert ends[-1][1] == "done" and st.saved[-1]["name"] == "Ana"

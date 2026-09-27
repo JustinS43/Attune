@@ -10,6 +10,7 @@
  */
 
 import { connect } from '../shared/ws.js';
+import { speechSettings } from './speech-settings.js';
 import { createSaveSheet } from './save.js';
 import { createStation } from './station.js';
 import {listContacts, saveContact, deleteContact, photoFromFile} from './contacts.js';
@@ -36,7 +37,7 @@ if (palette === 'apricot') {
 }
 
 const state = {
-  screen: 'home', theme: 'light', paused: false, powered: true,
+  screen: 'home', theme: 'light', paused: false, powered: true, cameraOn: true,
   features: { captions: true, names: true, alerts: true, translation: true },
   people: [
     { id: 'maya', name: 'Maya Chen', seen: 12, color: '', tier: 'close', source: 'manual' },
@@ -187,6 +188,12 @@ function timeNow() {
   return new Intl.DateTimeFormat('en-US', {hour: 'numeric', minute: '2-digit'}).format(new Date());
 }
 
+/** A language worth a tag: not English and not 'und'/'unk' (the language wasn't known). */
+function isOtherLanguage(lang) {
+  const l = String(lang || '').toLowerCase().split(/[-_]/)[0];
+  return !!l && !['en', 'und', 'unk', 'xx', 'auto'].includes(l);
+}
+
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -196,6 +203,7 @@ function glassesStatus() {
   if (state.live) {
     if (!state.connected) return {title: 'Reconnecting to Attune…', sub: 'Showing the last captions received', dot: true, dotClass: 'off'};
     if (state.paused) return {title: 'Glasses connected', sub: 'Recognition is paused', dot: true, dotClass: 'paused'};
+    if (!state.cameraOn) return {title: 'Glasses connected', sub: 'Camera off · captions still live', dot: true, dotClass: 'paused'};
     return {title: 'Glasses connected', sub: 'Captions are live', dot: true};
   }
   return {title: state.powered ? 'Glasses preview ready' : 'Glasses preview off', sub: state.powered ? (state.paused ? 'Recognition paused in this demo' : 'Demo captions, not connected') : 'Turn on in Settings to resume', dot: state.powered && !state.paused};
@@ -475,7 +483,7 @@ function renderEnroll() {
       if (enrollment.face === 'ok') content.append(button('Skip voice for now', 'outline full enroll-skip', 'skip-voice'));
     }
   }
-  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and optional voice prints on the laptop. Your contact photo stays on this device; the spoken recording is not kept.'));
+  content.append(el('div', 'info-card enroll-privacy', 'Attune saves consented face and optional voice prints on the laptop. People who talk with you are also remembered as face and voice prints, never photos or audio, and you can delete any contact. Your contact photo stays on this device; the spoken recording is not kept.'));
   content.append(button(`View contacts (${state.people.length + state.contacts.filter(item => !item.personId).length})`, 'outline full enroll-contacts', 'people'));
 }
 
@@ -763,7 +771,7 @@ function renderSettings() {
     const link = state.hwLink;
     content.append(pressCard({
       title: state.connected ? 'Connected to Attune' : 'Reconnecting to Attune…',
-      sub: !state.connected ? 'Commands are sent when the link is back' : state.paused ? 'Recognition is paused' : link?.connected ? `Captions live · rig firmware ${link.firmware || '?'}` : 'Captions live · light-and-buzz rig not connected',
+      sub: !state.connected ? 'Commands are sent when the link is back' : state.paused ? 'Recognition is paused' : !state.cameraOn ? 'Captions live · camera off' : link?.connected ? `Captions live · rig firmware ${link.firmware || '?'}` : 'Captions live · light-and-buzz rig not connected',
       action: 'pause', dot: true, dotClass: !state.connected ? 'off' : state.paused ? 'paused' : ''
     }));
   } else {
@@ -777,7 +785,7 @@ function renderSettings() {
     choice.setAttribute('aria-pressed', String(theme === state.theme));
     mode.append(choice);
   }
-  content.append(mode, el('h2', 'setting-label', 'Live features'));
+  content.append(mode, speechSettings({demo: params.has('demo')}), el('h2', 'setting-label', 'Live features'));
   const features = el('div', 'card setting-group');
   features.append(
     settingToggle('Captions', state.live ? 'On this phone' : '', 'captions', 'wave'),
@@ -797,7 +805,11 @@ function renderSettings() {
   const on = state.live ? !state.paused : state.powered;
   const power = button(on ? 'Turn off glasses' : 'Turn on glasses', on ? 'danger full' : 'primary full', 'toggle-power');
   power.prepend(icon('power'));
-  actions.append(pause, power, button('Forget this session', 'outline full', 'forget'));
+  // the camera alone: captions and sound alerts keep working without it
+  const camera = button(state.cameraOn ? 'Turn camera off' : 'Turn camera on', 'outline full', 'camera');
+  camera.prepend(icon('camera'));
+  camera.setAttribute('aria-pressed', String(!state.cameraOn));
+  actions.append(pause, camera, power, button('Forget this session', 'outline full', 'forget'));
   content.append(actions, el('p', 'subtle-center', state.live
     ? 'Turning off pauses all recognition on the laptop. Nothing leaves the laptop except text you type to speak.'
     : 'Demo mode: these controls only change this preview. Open the page from the Attune laptop to go live.'));
@@ -840,7 +852,7 @@ function fillLiveFeed(feed) {
     const head = el('div', 'live-head');
     const who = el('strong', `live-name ${colorFor(name)}`, name);
     head.append(who);
-    if (c.lang && c.lang !== 'en') head.append(el('span', 'lang-tag', c.lang.toUpperCase()));
+    if (isOtherLanguage(c.lang)) head.append(el('span', 'lang-tag', c.lang.toUpperCase()));
     if (c.speaker?.kind === 'offscreen') head.append(el('span', 'side-tag', c.speaker.side === 'left' ? '← off screen' : c.speaker.side === 'right' ? 'off screen →' : 'off screen'));
     head.append(el('span', 'timeline-time', c.time));
     card.append(head, el('p', '', captionText(c)));
@@ -867,6 +879,10 @@ function render() {
 
 /** Re-render in place for live updates, keeping scroll position and any text being typed. */
 function refresh() {
+  if (content.querySelector('.speech-settings-form[data-editing]')) {
+    renderHint();
+    return;
+  }
   const active = document.activeElement;
   if (active && content.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) {
     renderHint();
@@ -974,6 +990,20 @@ function goLive() {
   state.powered = true;
 }
 
+function showCaptions() {
+  if (state.screen === 'live') {
+    const feed = document.querySelector('#live-feed');
+    if (feed) {
+      const atBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 40;
+      fillLiveFeed(feed);
+      if (atBottom) viewport.scrollTop = viewport.scrollHeight;
+    }
+  } else if (state.screen === 'home') {
+    const preview = document.querySelector('#home-preview');
+    if (preview) fillHomePreview(preview);
+  }
+}
+
 function onMessage(msg) {
   saveSheet.onMessage(msg); // P-29: the "Save this person?" sheet over any screen
   station.onMessage(msg); // P-35: saving at the laptop camera and mic, over any screen
@@ -981,6 +1011,7 @@ function onMessage(msg) {
     case 'welcome':
       state.sessionId = msg.session_id ?? state.sessionId;
       state.paused = !!msg.paused;
+      if (typeof msg.camera_on === 'boolean') state.cameraOn = msg.camera_on;
       if (Array.isArray(msg.config?.presets)) state.presets = msg.config.presets;
       if (typeof msg.config?.name_labels === 'boolean') state.features.names = msg.config.name_labels;
       station.configure(msg.config?.enroll);
@@ -1000,17 +1031,15 @@ function onMessage(msg) {
       const entry = {...msg, time: i >= 0 ? state.captions[i].time : timeNow()};
       if (i >= 0) state.captions[i] = entry; else state.captions.push(entry);
       if (state.captions.length > 80) state.captions.splice(0, state.captions.length - 80);
-      if (state.screen === 'live') {
-        const feed = document.querySelector('#live-feed');
-        if (feed) {
-          const atBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 40;
-          fillLiveFeed(feed);
-          if (atBottom) viewport.scrollTop = viewport.scrollHeight;
-        }
-      } else if (state.screen === 'home') {
-        const preview = document.querySelector('#home-preview');
-        if (preview) fillHomePreview(preview);
-      }
+      showCaptions();
+      break;
+    }
+    case 'caption_retract': {
+      // a segment the engine folded back into its utterance: its words are in another caption
+      const i = state.captions.findIndex(c => c.utt_id === msg.utt_id);
+      if (i < 0) break;
+      state.captions.splice(i, 1);
+      showCaptions();
       break;
     }
     case 'people':
@@ -1122,6 +1151,12 @@ function onMessage(msg) {
         updateSpeakButton();
         showToast(`Spoken aloud with ${VOICE_NAME[msg.voice] || msg.voice}.`);
       }
+      break;
+    case 'camera':
+      if (state.cameraOn === !!msg.on) break;
+      state.cameraOn = !!msg.on;
+      refresh();
+      showToast(state.cameraOn ? 'Camera on. Names are back.' : 'Camera off. Captions and sound alerts keep working.');
       break;
     case 'hw_link':
       state.hwLink = {connected: !!msg.connected, firmware: msg.firmware, driver: msg.driver};
@@ -1241,6 +1276,10 @@ document.addEventListener('click', async event => {
     if (state.live) { link.send('pause.toggle'); return; }
     state.paused = !state.paused; render(); showToast(state.paused ? 'Recognition paused in the demo.' : 'Recognition resumed in the demo.'); return;
   }
+  if (action === 'camera') {
+    if (state.live) { link.send('camera.set', {on: !state.cameraOn}); return; }
+    state.cameraOn = !state.cameraOn; render(); showToast(state.cameraOn ? 'Camera on in the demo.' : 'Camera off in the demo. Captions keep working.'); return;
+  }
   if (action === 'toggle-power') {
     if (state.live) {
       if (!state.paused && !(await confirmAction('Turn off the glasses? All recognition on the laptop pauses until you turn them back on.'))) return;
@@ -1313,7 +1352,7 @@ document.addEventListener('click', async event => {
     return;
   }
   if (action === 'forget') {
-    const message = state.live ? 'Forget this session? Strangers, session names and this session’s captions are wiped on the laptop. People who consented stay saved.' : 'Forget this session? The preview conversation and session names will disappear.';
+    const message = state.live ? 'Forget this session? People only seen this session, session names and this session’s captions are wiped on the laptop. Saved contacts stay: people who consented and people who talked with you. You can delete any contact in Contacts.' : 'Forget this session? The preview conversation and session names will disappear.';
     if (await confirmAction(message)) {
       if (state.live) { link.send('session.forget'); state.captions = []; state.liveProposal = null; }
       state.history = []; state.proposal = ''; window.speechSynthesis?.cancel(); render(); showToast('Session forgotten.');

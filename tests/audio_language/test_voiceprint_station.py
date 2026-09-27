@@ -275,3 +275,67 @@ def test_cam_prints_do_not_depend_on_the_clip_length():
         va, vb = va / np.linalg.norm(va), vb / np.linalg.norm(vb)
         assert float(va @ vb) < 0.6, n  # two voices stay apart at every length
         assert float(va @ base) > 0.9, n  # one voice stays itself
+
+
+class SizedExtractor:
+    """A fake CAM++ that makes 192-value prints and says so, like the real extractor."""
+
+    dim = 192
+
+    def __call__(self, samples):
+        v = np.zeros(192, np.float32)
+        v[int(samples[0]) % 192] = 1.0
+        return v
+
+
+def test_a_print_from_another_voice_model_is_ignored_with_one_warning(tmp_path, caplog):
+    other = np.zeros(512, np.float32)
+    other[3] = 1.0
+    write_print(
+        tmp_path, "mac", other, 1.0, GLASSES, [other]
+    )  # a 512-value WeSpeaker print
+    mine = np.zeros(192, np.float32)
+    mine[7] = 1.0
+    write_print(tmp_path, "sam", mine, 1.0, STATION)
+    with caplog.at_level("WARNING"):
+        prints = VoicePrints(tmp_path, SizedExtractor(), 0.5, 5, 1)
+        prints.load("mac")  # a reload warns no more
+    assert set(prints.enrolled) == {"sam"}
+    warnings = [r for r in caplog.records if "another voice model" in r.getMessage()]
+    assert len(warnings) == 1 and "re-enroll" in warnings[0].getMessage()
+    assert (tmp_path / "mac" / "voice.json").exists()  # the file stays
+    person, score = prints.match(np.full(16000, 7.0, np.float32))
+    assert person == "sam" and score == pytest.approx(1.0)
+
+
+def test_without_a_known_size_the_first_voice_heard_sets_it(tmp_path, caplog):
+    other = np.zeros(512, np.float32)
+    other[3] = 1.0
+    write_print(tmp_path, "mac", other, 1.0, GLASSES)
+    mine = np.zeros(192, np.float32)
+    mine[7] = 1.0
+    write_print(tmp_path, "sam", mine, 1.0, STATION)
+
+    def extract(samples):  # no .dim
+        return SizedExtractor()(samples)
+
+    prints = VoicePrints(tmp_path, extract, 0.5, 5, 1)
+    assert set(prints.enrolled) == {"mac", "sam"}
+    with caplog.at_level("WARNING"):
+        person, _ = prints.match(np.full(16000, 7.0, np.float32))  # no ValueError
+    assert person == "sam" and set(prints.enrolled) == {"sam"}
+    assert any("another voice model" in r.getMessage() for r in caplog.records)
+
+
+def test_a_print_of_the_same_size_from_another_model_is_ignored_by_its_tag(tmp_path):
+    v = np.zeros(192, np.float32)
+    v[7] = 1.0
+    write_print(tmp_path, "mac", v, 1.0, GLASSES, model="wespeaker")
+    write_print(tmp_path, "old", v, 1.0, GLASSES)  # no tag: an older file, kept
+    extractor = SizedExtractor()
+    extractor.model_id = "3dspeaker"
+    prints = VoicePrints(tmp_path, extractor, 0.5, 5, 1)
+    assert set(prints.enrolled) == {"old"}
+    prints.enroll("new", np.full(5 * 16000, 9.0, np.float32), True, 2.0)
+    record = json.loads((tmp_path / "new" / "voice.json").read_text())
+    assert record["model"] == "3dspeaker"

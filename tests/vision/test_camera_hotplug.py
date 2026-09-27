@@ -127,6 +127,9 @@ def test_macos_prefers_any_usb_camera_without_matching_a_model_name(monkeypatch)
     assert camera_mod.pick_camera("unmatched") == cameras[1]
     cameras[:] = cameras[:1]
     assert camera_mod.pick_camera("Logitech", fallback_any=False) is None
+    assert (
+        camera_mod.pick_camera("FaceTime HD Camera", fallback_any=False) == cameras[0]
+    )
     assert camera_mod.pick_camera("Logitech", fallback_any=True) == cameras[0]
 
 
