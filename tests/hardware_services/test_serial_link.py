@@ -123,6 +123,17 @@ def test_pattern_is_sent_and_acked(rig):
     assert wait_for(lambda: fake.active_pattern is None)
 
 
+def test_sensor_only_keeps_levels_without_playing_patterns(rig):
+    rig.service.levels_only = True
+    before = len(rig.bus.of("sensors.levels"))
+    rig.bus.publish("hw.pattern", {"name": "T3", "side": "R"})
+    rig.bus.publish("command", {"name": "pattern.test", "args": {"name": "BELL"}})
+    rig.service._alarm = ("T3", "R")
+    rig.service._on_ready()  # a reconnect must not rearm an old alarm
+    assert wait_for(lambda: len(rig.bus.of("sensors.levels")) > before)
+    assert not any(line.startswith("PAT") for line in rig.fake().received)
+
+
 def test_pattern_test_command(rig):
     rig.bus.publish(
         "command", {"name": "pattern.test", "args": {"name": "BELL", "side": "L"}}

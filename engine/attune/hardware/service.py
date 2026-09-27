@@ -16,6 +16,9 @@ With ``hardware.simulate = true`` (or ``ATTUNE_SIMULATE_HARDWARE=1``) a FakeArdu
 in-process instead of the rig; ``hw.sim_touch`` {gesture} injects a touch into it.
 Without a board and without the simulator the service reports ``hw.link``
 connected=false and keeps scanning; it never crashes the engine.
+
+``ATTUNE_SENSOR_ONLY=1`` keeps live level reporting and heartbeats but suppresses every
+pattern command, including tests and alarm rearming, for a quiet rig demo.
 """
 
 from __future__ import annotations
@@ -69,6 +72,7 @@ class HardwareService:
         self.cfg = section(config, "hardware")
         self._connect_override = connect
         self.simulate = simulate_requested(self.cfg)
+        self.levels_only = os.environ.get("ATTUNE_SENSOR_ONLY", "") == "1"
         self.fake: FakeArduino | None = None
         self.link: SerialLink | None = None
         self.router: TouchRouter | None = None
@@ -197,6 +201,8 @@ class HardwareService:
     def _on_ready(self) -> None:
         self.icon = None
         self._update_icon()
+        if self.levels_only:
+            return
         alarm = self._alarm
         if alarm is None or not self.link:
             return
@@ -213,6 +219,8 @@ class HardwareService:
 
     # ------------------------------------------------------------- bus -> serial
     def _on_pattern(self, event, *, test: bool = False) -> None:
+        if self.levels_only:
+            return  # live sound-meter demo: never actuate the rig
         e = fields(event)
         name = str(e.get("name", "")).upper()
         if name not in p.PATTERNS:
