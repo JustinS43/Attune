@@ -165,6 +165,17 @@ def mount_sim_routes(app: FastAPI, hub: Hub) -> None:
     log.info("Simulated-Arduino controls mounted at /api/sim")
 
 
+class _RevalidatedStatic(StaticFiles):
+    """Page files the browser must check (ETag) before reusing, so an updated lens or phone
+    script always loads on a normal reload, including inside the demo page's frames. Without
+    this, browsers guess a freshness time and keep running old modules."""
+
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(
     hub: Hub,
     web_root: str | Path | None = None,
@@ -220,7 +231,7 @@ def create_app(
     for name in PAGE_FOLDERS:
         folder = web / name
         if folder.is_dir():
-            app.mount(f"/{name}", StaticFiles(directory=folder, html=True), name=name)
+            app.mount(f"/{name}", _RevalidatedStatic(directory=folder, html=True), name=name)
         else:
             log.warning("Page folder missing: %s", folder)
     if reels.is_dir():

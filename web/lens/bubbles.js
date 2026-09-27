@@ -93,6 +93,11 @@ export function createBubbleLayer() {
   const cards = new Map(); // face key -> card (tag or bubble)
   let ghosts = []; // what a card showed before it re-formed elsewhere, fading out in place
   let lowerCard = null;
+  const LOWER_HOLD_S = 1.5; // a bottom caption cut off mid-read waits this long before easing out
+  const LOWER_SIDE_HOLD_S = 3; // the bottom caption keeps its direction at least this long
+  const SIDE_ANGLE = { left: Math.PI, right: 0, behind: Math.PI / 2 };
+  const SIDE_LABEL = { left: 'from left', right: 'from right', behind: 'behind' };
+  const GHOST_FADE_S = 0.45; // a card that re-forms elsewhere eases out in place over this long
   const youCard = { a: 0, wrap: createLineWrap(), scroll: {}, b: null };
   let avgChar = 0;
 
@@ -603,6 +608,8 @@ export function createBubbleLayer() {
     [card.h, card.vh] = springStep(card.h, card.vh, t.h, dt, MOVE_W);
   }
   const ease = (cur, target, dt, rate) => cur + (target - cur) * (1 - Math.exp(-dt * rate));
+  // fades: in at the given rate, out at a third of it (~0.6-0.8 s), so leaving is calm, never a blink
+  const fade = (cur, target, dt, rate) => ease(cur, target, dt, target < cur ? rate / 3 : rate);
 
   // ------------------------------------------------------------ face cards (tags and bubbles)
   function layoutFaces(ctx, view, env) {
@@ -693,15 +700,18 @@ export function createBubbleLayer() {
       c.bw = Math.max(c.bw, c.headW); // a longer name may widen it, never the text
       const th = bubbleH(c.rows, c.orig);
       let r = slotRect(c.slot, A, c.bw, th);
-      // once placed, a bubble only moves for faces, the display edge or an alert: never because
-      // another bubble arrived (the older one steps back instead, below)
+      // once placed, a bubble only moves for faces, the display edge, an alert, or when it has
+      // come to lie over an older bubble (talkers moved together): then it glides to a free side
+      // at once, so two captions are never drawn over each other
       const q = fit(r, c.key, A, faces, [], obstacles);
-      if (q.ok) c.badSince = null;
+      const onBubble = placed.some((p) => overlap(r, p) > TOLERANCE);
+      if (q.ok && !onBubble) c.badSince = null;
       else {
         c.badSince ??= anim;
-        if (q.hard || anim - c.badSince > SLOT_HOLD_S) {
+        if (q.hard || onBubble || anim - c.badSince > SLOT_HOLD_S) {
           const pick = chooseSlot(c, A, faces, placed, obstacles, [{ w: c.bw, h: th }], null);
-          if (pick && pick.slot !== c.slot && fit(pick.r, c.key, A, faces, [], obstacles).ok) {
+          const clear = pick && !placed.some((p) => overlap(pick.r, p) > TOLERANCE);
+          if (pick && pick.slot !== c.slot && clear && fit(pick.r, c.key, A, faces, [], obstacles).ok) {
             c.slot = pick.slot;
             r = pick.r;
             c.badSince = null;
@@ -745,8 +755,9 @@ export function createBubbleLayer() {
         const p = bubbles[i];
         const q = bubbles[j];
         if (!p.b || !q.b) continue;
-        const v = overlap(p.target, q.target);
-        if (v <= 0.12 * Math.min(p.target.w * p.target.h, q.target.w * q.target.h)) continue;
+        // any real overlap (no free side was left for the newer one): the one updated less
+        // recently fades out entirely rather than sitting dimmed under the other
+        if (overlap(p.target, q.target) <= TOLERANCE) continue;
         (p.b.tUpdate < q.b.tUpdate ? p : q).yielded = true;
       }
     }
@@ -758,16 +769,16 @@ export function createBubbleLayer() {
       let aT;
       if (c.kind === 'bubble' && b) {
         // the panel keeps its name while the words fade (b.alpha), then shrinks back to a tag
-        aT = (b.current ? 1 : 0.62) * (c.yielded ? 0.18 : 1);
+        aT = c.yielded ? 0 : b.current ? 1 : 0.62;
       } else {
         aT = ghost ? 0.6 : 1;
         if (placed.some((p) => overlap(p, c.target) > 0)) aT = 0; // a tag never sits under a bubble
       }
-      c.a = REDUCED_MOTION ? aT * dim : ease(c.a, aT * dim, dt, 10);
+      c.a = REDUCED_MOTION ? aT * dim : fade(c.a, aT * dim, dt, 10);
       c.appear = ease(c.appear, 1, dt, 9);
       c.mist = REDUCED_MOTION ? c.mistT : ease(c.mist ?? c.mistT, c.mistT, dt, 9);
-      c.tailA = ease(c.tailA, c.kind === 'bubble' ? (ghost ? 0.4 : 1) : 0, dt, 10);
-      c.textA = REDUCED_MOTION && c.kind !== 'bubble' ? 0 : ease(c.textA, c.kind === 'bubble' && b ? b.alpha : 0, dt, 14);
+      c.tailA = fade(c.tailA, c.kind === 'bubble' ? (ghost ? 0.4 : 1) : 0, dt, 10);
+      c.textA = REDUCED_MOTION && c.kind !== 'bubble' ? 0 : fade(c.textA, c.kind === 'bubble' && b ? b.alpha : 0, dt, 14);
       if (c.kind === 'bubble' && b) {
         c.wrap.update(ctx, b.tokens, c.bw - PADX * 2, F.body, anim);
         scrollTo(c.scroll, c.wrap.lines.length, c.rows, dt);
@@ -776,8 +787,8 @@ export function createBubbleLayer() {
     // cards whose person left fade out where they are
     for (const [key, c] of cards) {
       if (live.has(key)) continue;
-      c.a = ease(c.a, 0, dt, 10);
-      c.tailA = ease(c.tailA, 0, dt, 10);
+      c.a = fade(c.a, 0, dt, 10);
+      c.tailA = fade(c.tailA, 0, dt, 10);
       if (c.a < 0.01 || anim - c.seen > 3) cards.delete(key);
     }
     return placed;
@@ -790,52 +801,98 @@ export function createBubbleLayer() {
     const b = view.lower;
     const cfg = view.config;
     const rows = rowsOf(cfg);
-    if (b && (!lowerCard || lowerCard.threadId !== b.id)) {
-      lowerCard = { threadId: b.id, a: lowerCard?.a ?? 0, wrap: createLineWrap(), scroll: {}, b };
+    // ONE bottom notification: it rises in once; while it is up, any further off-frame speech
+    // or sound (another voice, a new utterance) only updates its words in place. It never
+    // restarts, crossfades or stacks, however many sounds come at once.
+    if (b && !lowerCard) {
+      lowerCard = {
+        threadId: b.id, a: 0, rise: 0, wrap: createLineWrap(), scroll: {}, b,
+        seen: anim, side: b.side, sideAt: anim, ang: SIDE_ANGLE[b.side] ?? null,
+      };
     }
     if (!lowerCard) return null;
     const c = lowerCard;
-    if (b) c.b = b;
-    const aT = b ? b.alpha * (b.current ? 1 : 0.7) : 0;
-    c.a = REDUCED_MOTION ? aT : ease(c.a, aT, dt, 9);
-    if (!b && c.a < 0.01) {
+    if (b) {
+      if (c.threadId !== b.id) {
+        c.threadId = b.id; // new words in the same card
+        c.wrap.reset();
+        c.scroll = {};
+      }
+      c.b = b;
+      c.seen = anim;
+      c.lastA = b.alpha * (b.current ? 1 : 0.7);
+      // a direction shows as soon as one is known; once shown it stays LOWER_SIDE_HOLD_S before
+      // it may change, and "unknown" never erases it
+      const known = b.side in SIDE_ANGLE;
+      const shown = c.side in SIDE_ANGLE;
+      if (b.side !== c.side && known && (!shown || anim - c.sideAt >= LOWER_SIDE_HOLD_S)) {
+        c.side = b.side;
+        c.sideAt = anim;
+      }
+    }
+    // cooldown: a bottom caption cut off while still showing (its speaker flickered away, or
+    // another voice took the slot) stays LOWER_HOLD_S before easing out, so a quick sound to
+    // the side never blinks it off and on. One that already faded out stays gone.
+    const held = !b && anim - c.seen < LOWER_HOLD_S && c.lastA > 0.5;
+    const aT = b ? c.lastA : held ? c.lastA : 0;
+    // in at a calm pace, out slower still (~1 s)
+    c.a = REDUCED_MOTION ? aT : ease(c.a, aT, dt, aT < c.a ? 2.6 : 6);
+    c.rise = REDUCED_MOTION ? 1 : ease(c.rise, aT > 0 ? 1 : 0, dt, aT > 0 ? 5 : 2.6);
+    if (!b && !held && c.a < 0.01) {
       lowerCard = null;
       return null;
     }
-    const bb = c.b;
     const w = Math.round(reserveW(ctx, cfg)) + PADX * 2;
     const h = bubbleH(rows, false);
     const x = midX() - w / 2;
-    const y = bottomY() - h - 6;
+    // rises 18 px into place as it appears, settles back down as it leaves
+    const y = bottomY() - h - 6 + (1 - easeOut(clamp(c.rise))) * 18;
     const a = c.a * dim;
+    const bb = c.b;
     // a voice nobody is named for gets the same soft mist card as a stranger's tag
     const unknown = bb.color === '#E6EAF0';
     glass(ctx, blur, x, y, w, h, RAD, { alpha: a, fill: unknown ? MIST : PAPER, glow: unknown ? null : bb.color });
+    // the arrow turns smoothly to a new direction (shortest way round)
+    const target = SIDE_ANGLE[c.side];
+    if (target == null) c.ang = null;
+    else if (c.ang == null || REDUCED_MOTION) c.ang = target;
+    else {
+      const d = Math.atan2(Math.sin(target - c.ang), Math.cos(target - c.ang));
+      c.ang += d * (1 - Math.exp(-dt * 7));
+    }
+    drawLowerContent(ctx, c, bb, x, y, w, rows, dt, anim, a, !!b);
+    return { x: x - 10, y: y - 10, w: w + 20, h: h + 20 };
+  }
+
+  /** The bottom caption's header (arrow, name, direction, meter) and words, at alpha `a`. */
+  function drawLowerContent(ctx, c, bb, x, y, w, rows, dt, anim, a, live) {
+    if (a < 0.01) return;
+    const unknown = bb.color === '#E6EAF0';
     ctx.save();
     ctx.globalAlpha *= a;
     const hy = y + PADT + HEADH / 2;
-    const side = bb.side;
-    const direction = { left: ['from left', Math.PI], right: ['from right', 0], behind: ['behind', Math.PI / 2] }[side];
+    const label = SIDE_LABEL[c.side];
     const marker = unknown ? MIST_INK : deepen(bb.color, 0.3);
-    if (direction) arrow(ctx, x + PADX + 8, hy, 17, direction[1], marker, 3);
+    if (c.ang != null) arrow(ctx, x + PADX + 8, hy, 17, c.ang, marker, 3);
     else dot(ctx, x + PADX + 7, hy, 7, unknown ? '#B9C3CF' : bb.color);
     ctx.font = F.name;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = unknown ? MIST_INK : INK;
     const name = fitTail(ctx, bb.name, w - 220, F.name);
     ctx.fillText(name, x + PADX + 26, hy);
-    if (direction) {
+    if (label) {
       ctx.font = F.sub;
       ctx.fillStyle = INK_2;
-      ctx.fillText(`· ${direction[0]}`, x + PADX + 38 + textW(ctx, name, F.name), hy + 1);
+      ctx.fillText(`· ${label}`, x + PADX + 38 + textW(ctx, name, F.name), hy + 1);
     }
-    eqBars(ctx, x + w - PADX - 26, hy, unknown ? MIST_INK : deepen(bb.color, 0.3), STILL, speakLevel(c, !!b && bb.speaking, anim), 18);
-    c.wrap.update(ctx, bb.tokens, w - PADX * 2, F.body, anim);
-    scrollTo(c.scroll, c.wrap.lines.length, rows, dt);
+    eqBars(ctx, x + w - PADX - 26, hy, marker, STILL, speakLevel(c, live && bb.speaking, anim), 18);
+    if (live) {
+      c.wrap.update(ctx, bb.tokens, w - PADX * 2, F.body, anim);
+      scrollTo(c.scroll, c.wrap.lines.length, rows, dt);
+    }
     drawText(ctx, c.wrap, c.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: w - PADX * 2 });
     pendingBelow(ctx, bb, c.wrap, rows, x + PADX, y + PADT + HEADH + BODY_GAP, w - PADX * 2);
     ctx.restore();
-    return { x: x - 10, y: y - 10, w: w + 20, h: h + 20 };
   }
 
   /** The wearer's own words: one line of fixed width that rolls up as it fills. */
@@ -901,9 +958,9 @@ export function createBubbleLayer() {
     } : null;
     const placed = layoutFaces(ctx, view, { ...env, obstacles: [...(env.obstacles || []), ...(lowerRect ? [lowerRect] : [])] });
 
-    ghosts = ghosts.filter((g) => anim - g.born < 0.25);
+    ghosts = ghosts.filter((g) => anim - g.born < GHOST_FADE_S);
     for (const g of ghosts) {
-      g.a = g.a0 * (REDUCED_MOTION ? 0 : 1 - (anim - g.born) / 0.25);
+      g.a = g.a0 * (REDUCED_MOTION ? 0 : 1 - easeOut(clamp((anim - g.born) / GHOST_FADE_S)));
       g.blur = blur;
       drawCard(ctx, g, anim);
     }

@@ -172,6 +172,10 @@ class _Group:
     shown: bool = False  # holds words already shown in another segment
 
 
+SIDE_TAU_S = 0.6  # the sensors' left-right difference is averaged over about this long
+SIDE_RELEASE = 0.4  # a side is let go once the difference falls under this share of side_db
+
+
 def _db(level: float) -> float:
     return 20.0 * math.log10(max(float(level), 1.0))
 
@@ -296,6 +300,9 @@ class SpeakerFusion:
         self.envelope = Envelope()
         self._level_src_t = -1e9  # last audio.level sample; sensors are only the fallback
         self.levels: tuple[float, float, float] | None = None  # (t, left dB, right dB)
+        # left-right dB smoothed over ~SIDE_TAU_S and the side it settled on (see _sensor_side)
+        self._side_diff: float | None = None
+        self._side = "none"
         self.is_speech = False
         self.speech_start: float | None = None
         self.last_speech_t = -1e9
@@ -405,7 +412,14 @@ class SpeakerFusion:
         left, right = _db(get(ev, "left", 0)), _db(get(ev, "right", 0))
         if get(ev, "motor_on", False):
             return  # our own buzz, not sound in the room
+        prev_t = self.levels[0] if self.levels else None
         self.levels = (t, left, right)
+        diff = left - right
+        if self._side_diff is None or prev_t is None or t - prev_t > 0.5:
+            self._side_diff = diff
+        else:
+            k = 1 - math.exp(-max(t - prev_t, 0.0) / SIDE_TAU_S)
+            self._side_diff += k * (diff - self._side_diff)
         if t - self._level_src_t > 1.0:  # no mic envelope: use the sensors
             self.envelope.add(t, max(left, right))
 
@@ -494,14 +508,22 @@ class SpeakerFusion:
 
     # ---------------- decision ----------------
     def _sensor_side(self, now: float) -> str:
-        if self.levels is None or now - self.levels[0] > 0.5:
+        """Which side the room's sound comes from, from the rig's two sensors.
+
+        The raw level difference jumps around with every syllable, so it is smoothed (SIDE_TAU_S)
+        and the answer is sticky: a side is taken at side_db, kept until the difference falls
+        under SIDE_RELEASE of that, and the other side needs the full side_db again."""
+        if self.levels is None or self._side_diff is None or now - self.levels[0] > 0.5:
+            self._side = "none"
             return "none"
-        diff = self.levels[1] - self.levels[2]
-        if diff >= self.s.side_db:
-            return "left"
-        if diff <= -self.s.side_db:
-            return "right"
-        return "none"
+        diff, on = self._side_diff, self.s.side_db
+        if diff >= on:
+            self._side = "left"
+        elif diff <= -on:
+            self._side = "right"
+        elif abs(diff) < on * SIDE_RELEASE or (self._side == "left") != (diff > 0):
+            self._side = "none"
+        return self._side
 
     def _speaking(self, now: float) -> bool:
         return self.is_speech or now - self.last_speech_t <= self.s.speech_hangover_s

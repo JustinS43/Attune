@@ -748,3 +748,19 @@ def test_shown_words_need_a_longer_run_to_move_to_another_speaker():
     caps = f._captions_for(draft("u9", words, True), now=2.5, first_seen=0.0)
     assert [(c.utt_id, c.speaker.track_id) for c in caps] == [("u9", 1)]
     assert f.take_retractions() == []
+
+
+def test_sensor_side_ignores_syllable_to_syllable_jitter():
+    """A voice on the left stays "left" though single readings swing past the other side."""
+    f = SpeakerFusion(FusionSettings())
+    sides = []
+    for i in range(60):  # 3 s of sensor readings at 20 Hz
+        t = i / 20
+        left, right = (250, 700) if i % 3 == 2 else (900, 250)  # every third reading points right
+        f.on_sensor_levels({"t": t, "left": left, "right": right, "motor_on": False})
+        sides.append(f._sensor_side(t))
+    assert set(sides) == {"left"}
+    for i in range(60, 120):  # then the room evens out: the side is let go
+        t = i / 20
+        f.on_sensor_levels({"t": t, "left": 400, "right": 400, "motor_on": False})
+    assert f._sensor_side(119 / 20) == "none"
