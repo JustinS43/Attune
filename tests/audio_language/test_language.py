@@ -47,6 +47,43 @@ def test_name_lifecycle_expiry_and_wrong_speaker(config):
     assert names.eligible(caption())
 
 
+@pytest.mark.parametrize(
+    "text,name",
+    [
+        ("I am Sam.", "Sam"),
+        ("My name is maya.", "Maya"),
+        ("I'm Jordan.", "Jordan"),
+        ("My name is Maya Chen.", "Maya Chen"),
+    ],
+)
+def test_direct_self_introduction_needs_no_model(config, text, name):
+    names = Names(config["llm"])
+    proposal = names.direct(caption(text), 1)
+    assert proposal["name"] == name
+    assert proposal["state"] == "proposed"
+    assert names.direct(caption(text), 2) is None  # one pending proposal per face
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I'm tired",
+        "I am Sam's sister",
+        "My name is maya chen",
+        "I am the teacher",
+        "I am not Sam",
+    ],
+)
+def test_direct_introduction_leaves_ambiguous_words_to_model(config, text):
+    assert Names(config["llm"]).direct(caption(text), 1) is None
+
+
+def test_direct_introduction_requires_an_identified_visible_speaker(config):
+    names = Names(config["llm"])
+    assert names.direct(caption("I am Sam", kind="someone"), 1) is None
+    assert names.direct(caption("I am Sam") | {"final": False}, 1) is None
+
+
 def test_contextual_name_needs_repeated_address_and_confirmation(config):
     names = Names(config["llm"])
     target = {"kind": "face", "track_id": 7, "person_id": "auto-abc"}
@@ -302,6 +339,19 @@ class PendingClient:
             future.cancel()
 
 
+def test_direct_name_reaches_pages_without_ollama_result(config, bus):
+    client = PendingClient()
+    service = LLMService(bus, config, client=client)
+    service.clock = lambda: 1
+    service._handle("caption", caption("My name is Sam"), 0)
+    proposal = [event for topic, event in bus.events if topic == "name.proposal"]
+    assert len(proposal) == 1 and proposal[0]["name"] == "Sam"
+    assert [
+        event["name"] for topic, event in bus.events if topic == "name.evidence"
+    ] == ["Sam"]
+    assert not [kind for kind, _ in client.futures if kind == "names"]
+
+
 def test_forget_received_after_queued_name_answer_cannot_confirm(config, bus):
     service = LLMService(bus, config, client=PendingClient())
     service.clock = lambda: 0
@@ -361,14 +411,14 @@ def test_old_introduction_cannot_name_a_reappearing_track(config, bus):
     client = PendingClient()
     service = LLMService(bus, config, client=client)
     service.clock = lambda: 0
-    service._handle("caption", caption(), 0)
+    service._handle("caption", caption("My name is sam jones"), 0)
     old_name = next(future for kind, future in client.futures if kind == "names")
     service._handle("vision.track_lost", {"track_id": 1}, 0)
     service._handle(
         "vision.appearance", {"track_id": 1, "crop": np.zeros((1, 1, 3), np.uint8)}, 0
     )
     old_name.set_result(
-        {"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99}
+        {"is_intro": True, "name": "Sam Jones", "whose": "speaker", "confidence": 0.99}
     )
     service._tick()
     assert not [
