@@ -11,7 +11,7 @@
 #pragma once
 #include "board.h"
 
-#define FW_VERSION "1.1.2"   // 1.1.2: A2 left/A0 right and steadier ADC sampling; protocol unchanged
+#define FW_VERSION "1.1.3"   // 1.1.3: hinge LEDs off (HAS_SIDE_LEDS 0); protocol unchanged
 #define SERIAL_BAUD 115200
 #define LINE_MAX 64   // longest laptop line is ~20 chars ("PAT 999999 B BELL")
 

@@ -11,6 +11,7 @@
 #define PIN_SOUND_L A2   // Grove Sound Sensor, left hinge
 #define PIN_SOUND_R A0   // Grove Sound Sensor, right hinge
 #define PIN_TOUCH 2      // Grove Touch Sensor (TTP223), HIGH while touched
+#define HAS_SIDE_LEDS 0  // 2026-09-27: the two hinge LEDs were taken off the rig; 1 drives D5/D6 again
 #define PIN_LED_L 5      // Grove LED Socket, left hinge (PWM, Timer0 on the R3)
 #define PIN_LED_R 6      // Grove LED Socket, right hinge (PWM, Timer0 on the R3)
 #define PIN_SERVO 9      // SG92R servo tapper signal (orange). The Servo library takes Timer1,

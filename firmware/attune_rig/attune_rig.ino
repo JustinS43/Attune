@@ -501,8 +501,13 @@ void writeLeds(uint16_t light, char side, bool dim) {
   if (dim) level = level * LOST_LED_LEVEL / 255;
   uint8_t l = (side == 'L' || side == 'B') ? level : 0;
   uint8_t r = (side == 'R' || side == 'B') ? level : 0;
+#if HAS_SIDE_LEDS
   analogWrite(PIN_LED_L, l);
   analogWrite(PIN_LED_R, r);
+#else
+  (void)l;
+  (void)r;
+#endif
 }
 
 void updatePatterns(unsigned long now) {
@@ -729,10 +734,12 @@ void reportLevels(unsigned long now) {
 void setup() {
   Serial.begin(SERIAL_BAUD);  // never wait for the port: the rig must run on its own
   pinMode(PIN_TOUCH, INPUT);
+#if HAS_SIDE_LEDS
   pinMode(PIN_LED_L, OUTPUT);
   pinMode(PIN_LED_R, OUTPUT);
   analogWrite(PIN_LED_L, 0);
   analogWrite(PIN_LED_R, 0);
+#endif
 #if !RIG_AVR
   analogReadResolution(10);  // the R4 can read 12/14 bit; the protocol's levels are 0..1023
 #endif
