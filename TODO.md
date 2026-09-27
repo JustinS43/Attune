@@ -46,7 +46,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-28 Light-ASD scores at 8+ fps with gaps up to 0.35 s (a busy laptop), and speaker continuity: a face that earned the speech keeps it through a dip in lip evidence while speech runs on without a pause (#87)
 - [x] V-29 A voice match that still hears the last turn never vetoes the face Light-ASD hears talking; a voice whose face is in view is never shown off screen (#87)
 - [x] V-30 A speaker change moves back to the pause before the reply, so a reply's first words no longer end the previous bubble (#91)
-- [x] V-32 Cloud captions in who's talking: Google's per-word speaker tags bind to the face talking with them, a new tag gets its own bubble at once (even a short reply inside a shown caption), a voice with no face its own dock bubble; tags carried across stream restarts; a final waits up to 1.2 s for its tags only while cloud captions are on (#PR)
+- [x] V-32 Cloud captions in who's talking: Google's per-word speaker tags bind to the face talking with them, a new tag gets its own bubble at once (even a short reply inside a shown caption), a voice with no face its own dock bubble; tags carried across stream restarts; a final waits up to 1.2 s for its tags only while cloud captions are on (#101)
 
 ## Section 2 – Audio & Language
 
