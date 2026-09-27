@@ -51,8 +51,10 @@ class AudioService:
         self.worker.cleanup = self._cleanup
         self.segmenter = Segmenter(cfg)
         self.direction = SpeechDirection(config["fusion"]["side_db"])
-        # gain before the VAD only: quiet or distant speech must be detected at all (A-24)
-        self.vad_gain = InputGain(cfg) if cfg.get("vad_gain") else None
+        # gain before the VAD only: quiet or distant speech must be detected at all (A-24).
+        # On unless `vad_gain = false` (A-31): without it Silero missed most of a talker
+        # 2-4 m from the laptop mic (vad.InputGain has the numbers).
+        self.vad_gain = InputGain(cfg) if cfg.get("vad_gain", True) else None
         self.ring = AudioRing()
         self.speech_intervals: deque[tuple[float, float]] = deque()
         self.paused = False

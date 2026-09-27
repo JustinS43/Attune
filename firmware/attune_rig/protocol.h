@@ -11,7 +11,7 @@
 #pragma once
 #include "board.h"
 
-#define FW_VERSION "1.1.1"   // 1.1.1: no false link loss (H-18); 1.1.0: UNO R3 + servo tapper; protocol unchanged
+#define FW_VERSION "1.1.2"   // 1.1.2: A2 left/A0 right and steadier ADC sampling; protocol unchanged
 #define SERIAL_BAUD 115200
 #define LINE_MAX 64   // longest laptop line is ~20 chars ("PAT 999999 B BELL")
 

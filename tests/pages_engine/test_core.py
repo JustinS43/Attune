@@ -198,8 +198,10 @@ def test_contracts_match_vision_types():
 
 def test_contract_names():
     assert "pause.toggle" in C.COMMAND_NAMES and "mark" in C.COMMAND_NAMES
-    assert len(C.COMMAND_NAMES) == 17  # + save.start, save.cancel (P-29), enroll.station (V-23)
+    # + save.start, save.cancel (P-29), enroll.station (V-23), cloud.set (A-32 / P-48)
+    assert len(C.COMMAND_NAMES) == 18 and "cloud.set" in C.COMMAND_NAMES
     assert C.WS_AUDIENCE[C.WS_STATUS] == {"console"}
+    assert C.WS_AUDIENCE[C.WS_CLOUD] == {"lens", "console", "phone"}
     assert C.WS_AUDIENCE[C.WS_CAPTION] == {"lens", "console", "phone"}
     assert C.EnrollResult(None, "face", False).reason == ""
 

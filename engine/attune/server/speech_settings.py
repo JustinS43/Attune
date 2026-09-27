@@ -28,10 +28,10 @@ def _local(host: str | None) -> bool:
         return False
 
 
-def _guard(request: Request) -> None:
+def _guard(request: Request, what: str = "ElevenLabs settings") -> None:
     """Require laptop access and an exact same-origin browser request."""
     if not request.client or not _local(request.client.host) or not _local(request.url.hostname):
-        raise HTTPException(403, "Manage ElevenLabs settings on the Attune laptop.")
+        raise HTTPException(403, f"Manage {what} on the Attune laptop.")
     origin = request.headers.get("origin")
     expected = f"{request.url.scheme}://{request.url.netloc}"
     if origin and origin != expected:
@@ -55,7 +55,8 @@ def _summary(path: Path) -> dict:
     }
 
 
-def _save(path: Path, changes: dict[str, str]) -> dict:
+def _write_env(path: Path, changes: dict[str, str]) -> None:
+    """Set `changes` in the .env at `path` atomically (also used by cloud_settings, P-48)."""
     with _LOCK:
         # Build the replacement privately and swap once, preserving unrelated .env entries.
         fd, name = tempfile.mkstemp(prefix=".env.settings-", dir=path.parent)
@@ -71,7 +72,11 @@ def _save(path: Path, changes: dict[str, str]) -> dict:
             os.replace(temp, path)
         finally:
             temp.unlink(missing_ok=True)
-        return {**_summary(path), "restart_required": False}
+
+
+def _save(path: Path, changes: dict[str, str]) -> dict:
+    _write_env(path, changes)
+    return {**_summary(path), "restart_required": False}
 
 
 def create_router(root: Path) -> APIRouter:

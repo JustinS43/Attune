@@ -14,9 +14,11 @@
  * speaker row only changes when the speaker does, and its arrow turns smoothly with hysteresis.
  * Alerts take over the square. The Google Glass variant is a 285x160 display
  * above the right eye's line of sight (x 1000-1285, y 204-364).
+ * Cloud captions (P-48): while they are on, the right end of the top status line shows a steady
+ * sky-blue cloud and "Cloud captions on" ("Cloud · local captions", dimmer, after a fallback).
  */
 
-import { FD, FT, MINT, ACCENT, PX, font, clamp, lerp, hexA, rrect, icon, eqBars, dot, keycap, arrow, logoMark, textW, springStep, REDUCED_MOTION } from '../hud.js';
+import { FD, FT, MINT, SKY, ACCENT, PX, font, clamp, lerp, hexA, rrect, icon, eqBars, dot, keycap, arrow, logoMark, textW, springStep, REDUCED_MOTION } from '../hud.js';
 import { t3Flash } from '../alerts.js';
 import { dirAngle, sideAngle, inView, createCaptionLog } from './common.js';
 
@@ -145,6 +147,18 @@ export function createCornerMode() {
       dot(ctx, DX + PAD + 22 * k, ty, 3.5 * k, stColor);
       ctx.restore();
       lit(ctx, stLabel, DX + PAD + 30 * k, ty + 1, F.status, WHITE, 0.75);
+      if (view.cloud?.on) {
+        // cloud captions (P-48): steady, never pulsing, at the status line's right end
+        const local = view.cloud.local;
+        const cl = local ? 'Cloud · local captions' : 'Cloud captions on';
+        const cx1 = DX + DW - PAD;
+        lit(ctx, cl, cx1, ty + 1, F.status, WHITE, local ? 0.55 : 0.75, 'right');
+        const ix = cx1 - textW(ctx, cl, F.status) - 18 * k;
+        ctx.save();
+        ctx.globalAlpha *= local ? 0.6 : 0.9;
+        icon(ctx, 'cloud', ix, ty - 7.5 * k, 15 * k, SKY, 1.8);
+        ctx.restore();
+      }
 
       if (view.status === 'connecting') {
         lit(ctx, 'Connecting…', DX + DW / 2, DY + DH / 2 - 8 * k, F.big, WHITE, 0.9, 'center');

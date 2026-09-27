@@ -115,6 +115,10 @@ class FusionSettings:
     # with an off-camera voice for a moment (tests/vision/test_live_talker.py) never gets it.
     continuity_min_s: float = 1.0
     continuity_share: float = 0.5
+    # V-31: when Light-ASD scores the face and calls it silent, continuity holds only this
+    # long after its last own evidence (a hand by the mouth dips Light-ASD's score while the
+    # person talks on); longer, Light-ASD's verdict stands. 0: never against Light-ASD.
+    asd_continuity_s: float = 1.5
     switch_ratio: float = 1.5
     voice_match: float = 0.5
     offscreen_after_s: float = 1.0
@@ -149,6 +153,13 @@ class FusionSettings:
     # would otherwise end the previous bubble (fusion/speaker.py `_snap`). 0 turns it off.
     snap_max_s: float = 1.2
     snap_gap_s: float = 0.15
+    # V-31: a known speaker's caption piece this long with a pause (snap_gap_s) on both sides
+    # is a short turn of its own ("Okay."), never merged into a neighbour as a flicker.
+    turn_min_s: float = 0.25
+    # V-31: Light-ASD hears a new talker about this long after they start (it scores the
+    # newest asd_score_s of lips and sound, a few times a second), so a switch from one face
+    # to another that it made is dated back this much. 0 turns it off.
+    asd_switch_lag_s: float = 0.3
     utterance_memory_s: float = 60.0  # forget an unfinished utterance's segments after this
     rate_hz: float = 15.0
     # In time: lips and loudness (both band-passed to syllable rates) correlate at least

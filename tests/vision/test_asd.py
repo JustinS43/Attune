@@ -49,11 +49,7 @@ def _mfcc_reference(sig: np.ndarray) -> np.ndarray:
         for k in range(13):
             scale = math.sqrt(1 / 26) if k == 0 else math.sqrt(2 / 26)
             c.append(
-                scale
-                * sum(
-                    logfb[m] * math.cos(math.pi * k * (2 * m + 1) / 52)
-                    for m in range(26)
-                )
+                scale * sum(logfb[m] * math.cos(math.pi * k * (2 * m + 1) / 52) for m in range(26))
             )
         c = np.array(c) * (1 + 11 * np.sin(np.pi * np.arange(13) / 22))
         c[0] = np.log(max(p.sum(), np.finfo(float).eps))
@@ -145,9 +141,7 @@ def test_detector_scores_every_face_in_one_batch_with_aligned_shapes():
     assert det.step() == 2
     (a_shape, v_shape) = model.calls[0]
     assert v_shape == (2, 25, 112, 112) and a_shape == (2, 100, 13)
-    assert det.score(1, 2.0) == pytest.approx(3.0) and det.score(
-        2, 2.0
-    ) == pytest.approx(7.0)
+    assert det.score(1, 2.0) == pytest.approx(3.0) and det.score(2, 2.0) == pytest.approx(7.0)
     assert det.step() == 0  # nothing new to score
 
 
@@ -163,16 +157,12 @@ def test_detector_waits_for_history_and_audio_and_goes_stale():
     assert det.step() == 1
     t_end = det.faces[1].score_t
     assert det.score(1, t_end + 0.4) is not None
-    assert (
-        det.score(1, t_end + 0.6) is None
-    )  # stale: fusion falls back to the lip score
+    assert det.score(1, t_end + 0.6) is None  # stale: fusion falls back to the lip score
 
 
 def test_detector_skips_windows_with_a_hole_in_the_frames():
     det = ActiveSpeakerDetector(StubModel(), window_s=1.0, max_gap_s=0.2)
-    _feed(
-        det, 2.0, {1: 50}, gap=(1.4, 1.65)
-    )  # a 0.28 s hole (0.25 s of missing frames)
+    _feed(det, 2.0, {1: 50}, gap=(1.4, 1.65))  # a 0.28 s hole (0.25 s of missing frames)
     assert det.step() == 0
     _feed(det, 1.2, {1: 50}, t0=2.0)
     assert det.step() == 1
@@ -223,9 +213,7 @@ def test_a_failing_model_is_reported_and_does_not_kill_the_thread():
 
 # ---------------------------------------------------------------- vision service glue
 def test_service_without_weights_or_disabled_has_no_asd(tmp_path):
-    svc = VisionService(
-        FakeBus(), {"vision": {"asd_model": str(tmp_path / "none.model")}}
-    )
+    svc = VisionService(FakeBus(), {"vision": {"asd_model": str(tmp_path / "none.model")}})
     assert svc._load_asd() is None
     svc = VisionService(FakeBus(), {"vision": {"asd_enabled": False}})
     assert svc._load_asd() is None
@@ -239,20 +227,12 @@ def test_service_feeds_crops_and_16k_audio_and_publishes_the_score():
     image = np.full((720, 1280, 3), 90, np.uint8)
     box = np.array([600.0, 200.0, 700.0, 300.0])
     small = np.array([100.0, 100.0, 130.0, 130.0])
-    big = FaceTrack(
-        7, KalmanBox(box), Detection(box, 0.9, np.zeros((5, 2))), 0.0, 0.0, 0.0
-    )
-    tiny = FaceTrack(
-        8, KalmanBox(small), Detection(small, 0.9, np.zeros((5, 2))), 0.0, 0.0, 0.0
-    )
+    big = FaceTrack(7, KalmanBox(box), Detection(box, 0.9, np.zeros((5, 2))), 0.0, 0.0, 0.0)
+    tiny = FaceTrack(8, KalmanBox(small), Detection(small, 0.9, np.zeros((5, 2))), 0.0, 0.0, 0.0)
     for i in range(60):
         t = i / 30
-        bus.publish(
-            T.AUDIO_BLOCK, {"t": t, "sample_rate": 16000, "samples": np.zeros(533)}
-        )
-        bus.publish(
-            T.AUDIO_BLOCK, {"t": t, "sample_rate": 32000, "samples": np.ones(1066)}
-        )
+        bus.publish(T.AUDIO_BLOCK, {"t": t, "sample_rate": 16000, "samples": np.zeros(533)})
+        bus.publish(T.AUDIO_BLOCK, {"t": t, "sample_rate": 32000, "samples": np.ones(1066)})
         svc._asd_crops(image, [big, tiny], t)
     assert set(svc.asd.faces) == {7}  # the 30 px face is too small
     assert svc.asd.audio.buf.max() == 0.0  # only the 16 kHz stream went in
@@ -322,15 +302,11 @@ def test_asd_talking_face_is_the_speaker_even_with_still_lips():
 
 
 def test_asd_hysteresis_on_at_asd_on_off_below_asd_off():
-    sim = Sim(asd_on=0.0, asd_off=-1.0, hold_s=0.2)
+    sim = Sim(asd_on=0.0, asd_off=-1.0, hold_s=0.2, asd_continuity_s=0.0)  # the gate alone
     assert sim.run(0.5, {1: (500, 0.0, False, 0.5)}).kind == "face"
-    assert (
-        sim.run(0.5, {1: (500, 0.0, False, -0.5)}).kind == "face"
-    )  # between: stays on
+    assert sim.run(0.5, {1: (500, 0.0, False, -0.5)}).kind == "face"  # between: stays on
     assert sim.run(0.5, {1: (500, 0.0, False, -1.5)}).kind == "someone"
-    assert (
-        sim.run(0.5, {1: (500, 0.0, False, -0.5)}).kind == "someone"
-    )  # needs asd_on again
+    assert sim.run(0.5, {1: (500, 0.0, False, -0.5)}).kind == "someone"  # needs asd_on again
 
 
 def test_asd_moves_the_speech_to_the_face_it_says_is_talking():
@@ -382,9 +358,7 @@ def test_asd_silence_sends_a_known_voice_offscreen():
 def test_you_still_wins_over_an_asd_face():
     sim = Sim(you_level_db=40.0)
     for _ in range(30):
-        sim.f.on_sensor_levels(
-            {"t": sim.t, "left": 400, "right": 400, "motor_on": False}
-        )
+        sim.f.on_sensor_levels({"t": sim.t, "left": 400, "right": 400, "motor_on": False})
         sim.step({1: (500, 0.0, False, 3.0)})
     assert sim.f.current.kind == "you"
 
@@ -440,9 +414,7 @@ def test_background_words_go_to_someone_and_the_talkers_words_to_the_face():
         sim.t,
     )
     caps = sim.step(face)[1]  # a known speaker: shown at once
-    assert caps and all(
-        c.speaker.kind == "face" and c.speaker.track_id == 1 for c in caps
-    )
+    assert caps and all(c.speaker.kind == "face" and c.speaker.track_id == 1 for c in caps)
 
 
 def _eval_script():
@@ -450,9 +422,7 @@ def _eval_script():
     import os
     import sys
 
-    path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "scripts", "eval_talker.py"
-    )
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "eval_talker.py")
     spec = importlib.util.spec_from_file_location("eval_talker", path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod  # dataclasses look their module up while it loads
@@ -481,15 +451,12 @@ def test_eval_script_scores_words_against_the_truth(tmp_path):
         return {"type": "caption", "utt_id": uid, "speaker": speaker, "words": words}
 
     msgs = [
-        (t0 + k * 0.1, {"type": "scene", "t": t0 + k * 0.1, "faces": faces})
-        for k in range(100)
+        (t0 + k * 0.1, {"type": "scene", "t": t0 + k * 0.1, "faces": faces}) for k in range(100)
     ]
     msgs += [
         (
             t0 + 1.5,
-            cap(
-                "u1", "face", 1, [["a", t0 + 1.0, t0 + 1.2], ["b", t0 + 1.3, t0 + 1.4]]
-            ),
+            cap("u1", "face", 1, [["a", t0 + 1.0, t0 + 1.2], ["b", t0 + 1.3, t0 + 1.4]]),
         ),
         (
             t0 + 2.6,

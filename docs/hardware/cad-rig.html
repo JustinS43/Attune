@@ -225,7 +225,7 @@ ol.steps li b { font-weight: 600; color: var(--ink); }
       <div class="grp">
         <h3>Worn on the glasses</h3>
         <button type="button" class="row" data-item="1"><span class="num">1</span><span class="name">Logitech C922-type webcam</span><span class="qty">×1</span><span class="where">Camera and microphone, clipped to the centre of the bridge</span></button>
-        <button type="button" class="row" data-item="2"><span class="num">2</span><span class="name">Grove Sound Sensor</span><span class="qty">×2</span><span class="where">Left arm near the hinge on A0, right arm near the hinge on A1, microphones facing outward; left vs right loudness gives the direction of a sound</span></button>
+        <button type="button" class="row" data-item="2"><span class="num">2</span><span class="name">Grove Sound Sensor</span><span class="qty">×2</span><span class="where">Left arm near the hinge on A2, right arm near the hinge on A0, microphones facing outward; left vs right loudness gives the direction of a sound</span></button>
         <button type="button" class="row" data-item="3"><span class="num">3</span><span class="name">Grove LED Socket</span><span class="qty">×2</span><span class="where">Outer front corner of each lens, LED bent to face your eye: left on D5, right on D6. Flashes on the side an alarm came from</span></button>
         <button type="button" class="row" data-item="4"><span class="num">4</span><span class="name">Grove Touch Sensor</span><span class="qty">×1</span><span class="where">Right arm, on D2. Tap = yes, hold = no, double tap = save this person, triple tap = pause</span></button>
         <button type="button" class="row" data-item="5"><span class="num">5</span><span class="name">Tower Pro SG92R micro servo</span><span class="qty">×1</span><span class="where">The buzzer: taped at the right temple tip, with a small taped bump on the horn that taps your head. Signal on D9</span></button>
@@ -264,8 +264,8 @@ ol.steps li b { font-weight: 600; color: var(--ink); }
         <table class="pins">
           <thead><tr><th>Part</th><th>Part pin</th><th>Goes to</th><th>Wire</th></tr></thead>
           <tbody>
-            <tr><td>Sound Sensor, left</td><td>Grove</td><td class="pin">A0 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
-            <tr><td>Sound Sensor, right</td><td>Grove</td><td class="pin">A1 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>Sound Sensor, left</td><td>Grove</td><td class="pin">A2 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
+            <tr><td>Sound Sensor, right</td><td>Grove</td><td class="pin">A0 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
             <tr><td>Touch Sensor, right arm</td><td>Grove</td><td class="pin">D2 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
             <tr><td>LED Socket, left</td><td>Grove</td><td class="pin">D5 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
             <tr><td>LED Socket, right</td><td>Grove</td><td class="pin">D6 port</td><td><span class="w w-y"></span>Grove cable</td></tr>
@@ -312,15 +312,15 @@ ol.steps li b { font-weight: 600; color: var(--ink); }
       <div>
         <h3>Build</h3>
         <ol class="steps">
-          <li><div><b>Label every cable, both ends.</b> Wrap a masking-tape flag near each end and write on it: <span class="tag">L SOUND A0</span> <span class="tag">R SOUND A1</span> <span class="tag">TOUCH D2</span> <span class="tag">L LED D5</span> <span class="tag">R LED D6</span> on the Grove cables, and <span class="tag">SERVO D9</span> <span class="tag">5V</span> <span class="tag">GND</span> on the jumpers. Swapped left and right is the most likely wiring mistake.</div></li>
+          <li><div><b>Label every cable, both ends.</b> Wrap a masking-tape flag near each end and write on it: <span class="tag">L SOUND A2</span> <span class="tag">R SOUND A0</span> <span class="tag">TOUCH D2</span> <span class="tag">L LED D5</span> <span class="tag">R LED D6</span> on the Grove cables, and <span class="tag">SERVO D9</span> <span class="tag">5V</span> <span class="tag">GND</span> on the jumpers. Swapped left and right is the most likely wiring mistake.</div></li>
           <li><div><b>Stack the Base Shield on the UNO.</b> Line up every pin, check none is bent outside a socket, then press both ends down evenly. If the shield has a 3.3 V / 5 V switch, set it to 5 V.</div></li>
           <li><div><b>Webcam [1].</b> Clip it to the centre of the bridge, then wrap two strips of tape around the clip and the frame. You'll aim it in step 19.</div></li>
-          <li><div><b>Sound sensors [2].</b> Tape one to the outside of each arm, just behind the hinge, microphone facing outward. Tape above and below the microphone, never over it. Plug in <span class="tag">L SOUND A0</span> on the left and <span class="tag">R SOUND A1</span> on the right.</div></li>
+          <li><div><b>Sound sensors [2].</b> Tape one to the outside of each arm, just behind the hinge, microphone facing outward. Tape above and below the microphone, never over it. Plug in <span class="tag">L SOUND A2</span> on the left and <span class="tag">R SOUND A0</span> on the right.</div></li>
           <li><div><b>LED sockets [3].</b> Tape one at the outer front corner of each lens and bend the LED so it points back at your eye. <span class="tag">L LED D5</span> on the left, <span class="tag">R LED D6</span> on the right.</div></li>
           <li><div><b>Touch sensor [4].</b> Tape it to the right arm, behind the right sound sensor, where your finger lands naturally. One thin layer of tape over the pad is fine. Plug in <span class="tag">TOUCH D2</span>.</div></li>
           <li><div><b>Servo tapper [5].</b> Push the single-arm horn on loosely (you'll set it in step 18) and fold a small bump of tape onto its tip. Tape the servo body to the outside of the right temple tip, shaft pointing down, so the horn swings under the arm and the bump reaches the skin behind your ear.</div></li>
           <li><div><b>Route the cables.</b> Run every cable along the arms with a strip of tape every few centimetres, then let them drop behind your ears to the chest. Tape the servo lead with the right-side cables.</div></li>
-          <li><div><b>Grove cables into the shield [7, 9].</b> Plug each labelled cable into the shield port with the same name: A0, A1, D2, D5, D6. The plugs only fit one way round.</div></li>
+          <li><div><b>Grove cables into the shield [7, 9].</b> Plug each labelled cable into the shield port with the same name: A2, A0, D2, D5, D6. The plugs only fit one way round.</div></li>
           <li><div><b>Breadboard and servo [8, 10].</b> Jumper the shield's <b>5V</b> pin to the breadboard <b>+</b> rail (red) and a <b>GND</b> pin to the <b>−</b> rail (black). The servo's plug has three holes, so it doesn't go into the breadboard: push one male to male jumper into each hole instead. Run the jumper from the brown hole to <b>−</b>, the one from red to <b>+</b>, and the one from orange to the shield's <b>D9</b> header socket; that's the <span class="tag">SERVO D9</span> jumper. Wrap tape around the plug so the jumpers can't pull out. Keep the optional capacitor [15] ready for step 17.</div></li>
           <li><div><b>Check before power.</b> Read every label against the pin map, and make sure no bare jumper end touches another. Then tape the UNO, shield and breadboard together and tape the pack to your shirt at chest height, leaving slack in the cables so a head turn can't pull them out.</div></li>
         </ol>
@@ -330,7 +330,7 @@ ol.steps li b { font-weight: 600; color: var(--ink); }
         <ol class="steps" style="counter-reset: step 11">
           <li><div><b>USB only.</b> Plug the UNO into the laptop with the USB A-to-B cable, webcam still unplugged. The ON LED lights and the "L" LED (pin 13) shows the firmware status. Nothing lit, or the laptop warns about the USB port: unplug at once and look for a 5V-to-GND short on the breadboard.</div></li>
           <li><div><b>Firmware.</b> If the board is new, upload <code>firmware/attune_rig</code> as described in <code>firmware/README.md</code>. Open the Serial Monitor at 115200: a READY line, then a stream of level lines. Close the Serial Monitor before starting the engine.</div></li>
-          <li><div><b>Sound.</b> Start the engine (<code>docs/hardware/wiring.md</code> has the commands) and clap beside each ear in turn. The left level must jump for a left clap. If it's the other way round, swap the A0 and A1 plugs.</div></li>
+          <li><div><b>Sound.</b> Start the engine (<code>docs/hardware/wiring.md</code> has the commands) and clap beside each ear in turn. The left level must jump for a left clap. If it's the other way round, swap the A2 and A0 plugs.</div></li>
           <li><div><b>Touch.</b> Tap, hold, double tap and triple tap the pad; each gesture should show up in the console.</div></li>
           <li><div><b>LEDs.</b> Send the left test pattern, then the right. Each must light on its own side, visible without dazzling you.</div></li>
           <li><div><b>Servo, last.</b> Send a test pattern and watch the horn move and return. If the board resets or the USB link drops when it moves, put the 100–470 µF capacitor across the rails (stripe to −) and try again.</div></li>
@@ -603,8 +603,8 @@ const P = 2.54;
 const PIN = { D9: AX + 8.1, V5: AX + 14.7, GND: AX + 12.2 };
 const HDR_Y = { dig: -24.6, pwr: 24.6 };
 // Grove ports on the shield (only the ones the rig uses are named; the rest are spares).
-const PORT = { D2: [AX - 20, 12], D5: [AX - 20, 0], D6: [AX - 8, 0], A0: [AX - 20, -12], A1: [AX - 8, -12] };
-const SPARE = [[AX - 8, 12], [AX + 4, 12], [AX + 16, 12], [AX + 4, 0], [AX + 16, 0], [AX + 4, -12], [AX + 16, -12]];
+const PORT = { D2: [AX - 20, 12], D5: [AX - 20, 0], D6: [AX - 8, 0], A0: [AX - 20, -12], A2: [AX + 4, -12] };
+const SPARE = [[AX - 8, 12], [AX + 4, 12], [AX + 16, 12], [AX + 4, 0], [AX + 16, 0], [AX - 8, -12], [AX + 16, -12]];
 const hdrM = () => mat(0x17181b, { r: 0.6 });
 function headers(parent, z, h) {
   const m = hdrM();
@@ -704,11 +704,11 @@ const GC = part('groveCables', [0, 0, 0], { fade: true });
 const gMat = matCache({ r: 0.55 });
 wires(GC, [V(-66.5, 26.2, -9.2), V(-68.3, 19.5, -17), V(-68.2, 15.1, -30), V(-68.2, 15.1, -70), ...drop(-1, 0, intoPort(PORT.D5))], GROVE, gMat);
 wires(GC, [V(66.5, 26.2, -9.2), V(68.3, 19.5, -17), V(68.2, 15.1, -30), V(68.2, 15.1, -70), ...drop(1, 0, intoPort(PORT.D6))], GROVE, gMat);
-wires(GC, [V(-75.4, 10, -59.5), V(-74.4, 6.5, -64), V(-68.8, 3.2, -69), V(-68.6, 3.2, -92), ...drop(-1, 1, intoPort(PORT.A0))], GROVE, gMat);
-wires(GC, [V(75.4, 10, -59.5), V(74.4, 6.5, -64), V(68.8, 3.2, -69), V(68.6, 3.2, -92), ...drop(1, 1, intoPort(PORT.A1))], GROVE, gMat);
+wires(GC, [V(-75.4, 10, -59.5), V(-74.4, 6.5, -64), V(-68.8, 3.2, -69), V(-68.6, 3.2, -92), ...drop(-1, 1, intoPort(PORT.A2))], GROVE, gMat);
+wires(GC, [V(75.4, 10, -59.5), V(74.4, 6.5, -64), V(68.8, 3.2, -69), V(68.6, 3.2, -92), ...drop(1, 1, intoPort(PORT.A0))], GROVE, gMat);
 wires(GC, [V(75.2, 10, -95.2), V(74.4, 11, -100), ...drop(1, 2, intoPort(PORT.D2))], GROVE, gMat);
 const plugM = mat(0xf7f6f0, { r: 0.55 });
-for (const [x, y] of [PORT.D2, PORT.D5, PORT.D6, PORT.A0, PORT.A1]) mesh(GC, box(9.4, 4.6, 6.5), plugM, PW(x, y, SZ + 0.8 + 7.2 + 3.25), packT.quaternion);
+for (const [x, y] of [PORT.D2, PORT.D5, PORT.D6, PORT.A2, PORT.A0]) mesh(GC, box(9.4, 4.6, 6.5), plugM, PW(x, y, SZ + 0.8 + 7.2 + 3.25), packT.quaternion);
 
 // Servo lead: brown / red / orange, down the right arm to its 3-hole (female) plug, which hangs
 // above the breadboard on three jumpers; it can't go into the breadboard itself.
