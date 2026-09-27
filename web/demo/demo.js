@@ -252,6 +252,49 @@ const camBtn = document.querySelector('#cam-toggle');
 const camLabel = camBtn.querySelector('.cam-label');
 const camCards = [...document.querySelectorAll('.cam-off-card')]; // the Glasses view's and the POV's
 let cameraOn = true;
+const soundDirection = document.querySelector('#sound-direction');
+const soundLeft = document.querySelector('#sound-left');
+const soundRight = document.querySelector('#sound-right');
+let soundBaseline = null;
+let soundSamples = 0;
+let lastSoundAt = 0;
+
+function showSound(msg) {
+  const left = Number(msg.left);
+  const right = Number(msg.right);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return;
+  lastSoundAt = performance.now();
+  soundLeft.textContent = String(Math.round(left));
+  soundRight.textContent = String(Math.round(right));
+  if (msg.motor_on) {
+    soundDirection.textContent = 'Sound · rig active';
+    return;
+  }
+  if (!soundBaseline) soundBaseline = [left, right];
+  soundSamples++;
+  const alpha = soundSamples < 20 ? 0.15 : 0.015;
+  soundBaseline[0] += alpha * (left - soundBaseline[0]);
+  soundBaseline[1] += alpha * (right - soundBaseline[1]);
+  if (soundSamples < 20) {
+    soundDirection.textContent = 'Sound · settling';
+    return;
+  }
+  // Compare rises above each sensor's own floor: the two analog boards have different gain.
+  const l = Math.max(0, left - soundBaseline[0]);
+  const r = Math.max(0, right - soundBaseline[1]);
+  const strong = Math.max(l, r) >= Math.max(35, 0.15 * Math.max(...soundBaseline));
+  const ratioDb = 20 * Math.log10((l + 1) / (r + 1));
+  const side = !strong || Math.abs(ratioDb) < 3 ? 'unclear' : ratioDb > 0 ? '← Left' : 'Right →';
+  soundDirection.textContent = `Sound · ${side}`;
+}
+
+setInterval(() => {
+  if (performance.now() - lastSoundAt > 1500) {
+    soundDirection.textContent = 'Sound · no sensor';
+    soundBaseline = null;
+    soundSamples = 0;
+  }
+}, 500);
 
 function showCamera(on) {
   cameraOn = on;
@@ -269,6 +312,7 @@ const link = connect({
   onMessage: (msg) => {
     if (msg.type === 'welcome' && typeof msg.camera_on === 'boolean') showCamera(msg.camera_on);
     else if (msg.type === 'camera') showCamera(Boolean(msg.on));
+    else if (msg.type === 'sensor_levels') showSound(msg);
   },
 });
 
