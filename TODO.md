@@ -47,6 +47,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-29 A voice match that still hears the last turn never vetoes the face Light-ASD hears talking; a voice whose face is in view is never shown off screen (#87)
 - [x] V-30 A speaker change moves back to the pause before the reply, so a reply's first words no longer end the previous bubble (#91)
 - [x] V-31 A visible talker with a hand by the mouth keeps their words through a Light-ASD dip, and their own automatic, earlier-track or off-screen voice print no longer vetoes their face; two people taking turns each get bubbles (a short reply keeps its own, Light-ASD switches dated back 0.3 s); simulated two-person bench 0.87 → 0.93 words on the right face — live check with two people still to do (#102)
+- [x] V-32 Cloud captions in who's talking: Google's per-word speaker tags bind to the face talking with them, a new tag gets its own bubble at once (even a short reply inside a shown caption), a voice with no face its own dock bubble; tags carried across stream restarts; a final waits up to 1.2 s for its tags only while cloud captions are on (#101)
 
 ## Section 2 – Audio & Language
 

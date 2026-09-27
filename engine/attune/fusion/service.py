@@ -7,6 +7,9 @@ and publishes `scene` (every tick and immediately when the speaker changes),
 `caption` (transcripts with their speaker), `caption.retract` (segment ids a later
 draft dropped) and `voice.harvest`.
 
+V-32: with cloud captions, `speaker.cloud` tags and `cloud.state` feed the fusion's
+CloudTags ([cloud] settings); without them nothing changes.
+
 A-21: every tick notes how many visible faces are talking; a harvest waits
 `[voice] harvest_lag_s` (so its audio has reached the audio side) and leaves with
 `talkers`, the most faces talking at once over its span (see fusion/harvest.py).
@@ -22,6 +25,7 @@ from typing import Any
 
 from ..vision import types as T
 from ..vision.settings import load_settings
+from .cloud_tags import CloudTags, CloudTagSettings
 from .harvest import DelayedHarvests, TalkerLog
 from .speaker import SpeakerFusion
 
@@ -38,7 +42,8 @@ class FusionService:
         self.bus = bus
         self.clock = clock
         _, self.settings = load_settings(config)
-        self.fusion = SpeakerFusion(self.settings)
+        cloud = CloudTags(CloudTagSettings.from_config((config or {}).get("cloud")))
+        self.fusion = SpeakerFusion(self.settings, cloud)  # V-32: cloud tags, used only when on
         voice = (config or {}).get("voice") or {}
         self.talkers = TalkerLog()
         self.harvests = DelayedHarvests(float(voice.get("harvest_lag_s", 0.4)))
@@ -64,6 +69,8 @@ class FusionService:
         for topic, handler in subs.items():
             self.bus.subscribe(topic, self._locked(handler))
         self.bus.subscribe(T.AUDIO_TRANSCRIPT, self._on_transcript)
+        self.bus.subscribe(T.SPEAKER_CLOUD, self._on_cloud_words)
+        self.bus.subscribe(T.CLOUD_STATE, self._locked(f.on_cloud_state))
         self.bus.subscribe(T.SESSION_FORGET, self._locked(self._on_forget))
         self.bus.subscribe(T.PAUSED, self._on_paused)
         self._stop.clear()
@@ -85,6 +92,10 @@ class FusionService:
     def _on_transcript(self, ev) -> None:
         with self._lock:
             self.fusion.on_transcript(ev, self.clock())
+
+    def _on_cloud_words(self, ev) -> None:
+        with self._lock:
+            self.fusion.on_cloud_words(ev, self.clock())
 
     def _on_forget(self, ev) -> None:
         self.fusion.forget_session()

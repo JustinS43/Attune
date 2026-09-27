@@ -74,6 +74,11 @@ its words and speaker unless the evidence over most of it changes (see
 `_redraft`); a face leaving never re-labels what it already said, and segment
 ids that drop out are retracted (`caption.retract`).
 
+Cloud captions (V-32, cloud_tags.py). While the wearer has them on, Google's per-word
+speaker tags are one more input: each caption word's evidence comes from the tag's
+face, a new voice gets its own bubble at once, and a final waits a moment for its tags.
+Without them (`cloud=None`, or no tags) nothing here changes.
+
 This class is pure logic with an explicit `now`, so tests can drive it with
 simulated events; FusionService (service.py) runs it on the bus.
 """
@@ -100,6 +105,7 @@ from ..vision.types import (
     get,
 )
 from .asd_gate import AsdGate
+from .cloud_tags import CloudTags
 from .harvest import Harvester, voice_id
 from .sync import Envelope, in_time_score
 
@@ -280,8 +286,9 @@ def _merge_neighbours(groups: list[_Group]) -> list[_Group]:
 
 
 class SpeakerFusion:
-    def __init__(self, settings: FusionSettings | None = None):
+    def __init__(self, settings: FusionSettings | None = None, cloud: CloudTags | None = None):
         self.s = settings or FusionSettings()
+        self.cloud = cloud  # V-32: cloud captions' speaker tags (None: not used)
         self.asd_gate = AsdGate(self.s)  # V-22: Light-ASD decides for the faces it scores
         self.tracks: dict[int, _TrackInfo] = {}
         self.frame_no = 0
@@ -417,6 +424,16 @@ class SpeakerFusion:
         prev = self.pending.get(utt)
         self.pending[utt] = _Pending(ev, prev.first_seen if prev else now)
 
+    def on_cloud_words(self, ev, now: float) -> None:
+        """V-32: `speaker.cloud`, per-word speaker tags from cloud captions."""
+        if self.cloud is not None:
+            self.cloud.on_words(ev, now)
+
+    def on_cloud_state(self, ev) -> None:
+        """V-32: `cloud.state` (a final waits for tags only while it is "on")."""
+        if self.cloud is not None:
+            self.cloud.on_state(ev)
+
     def on_appearance(self, ev) -> None:
         self.colors[int(get(ev, "track_id"))] = get(ev, "color")
 
@@ -447,6 +464,8 @@ class SpeakerFusion:
         self._offscreen_n = 0
         self._offscreen_run = None
         self.claimed.clear()
+        if self.cloud is not None:
+            self.cloud.forget()
 
     # ---------------- labels ----------------
     def label_for(self, info: _TrackInfo) -> str:
@@ -919,6 +938,8 @@ class SpeakerFusion:
         the new words at the end are split again. Segment ids that are no longer part of
         the utterance are queued in `retractions`.
         """
+        if self.cloud is not None and self.cloud.wait(ev, now):
+            return None  # V-32: a final waits a moment for the cloud's tags on its words
         words = [tuple(w) for w in (get(ev, "words") or [])]
         t_start = float(get(ev, "t_start", now))
         t_end = float(get(ev, "t_end", now))
@@ -935,6 +956,8 @@ class SpeakerFusion:
         ):
             return None  # wait a little for a speaker (only before anything is shown)
         evidence = [self.speaker_at(_mid(w)) or _someone() for w in words]
+        if self.cloud is not None:
+            evidence = self.cloud.evidence(self, words, evidence, now)  # V-32
         # V-31: each change moves back to its pause before smoothing too, so a short reply
         # whose evidence came late is long enough to keep its own bubble
         if mem is None:
@@ -1110,6 +1133,8 @@ class SpeakerFusion:
                 return 2, max(nbrs, key=lambda k: span(gs[k].words))
             return 9, None
 
+        if self.cloud is not None:
+            groups = self.cloud.protect(groups)  # V-32: a turn the cloud heard stays split
         gs = _merge_neighbours(groups)
         while len(gs) > 1:
             # sandwiched flickers, then unknown words, then the shortest other piece
@@ -1137,6 +1162,8 @@ class SpeakerFusion:
         for a, b in pairwise(groups):
             if b.speaker.kind == "someone" or _who(a.speaker) == _who(b.speaker):
                 continue
+            if self.cloud is not None and self.cloud.placed(a.words, b.words):
+                continue  # V-32: the cloud's tags put the change here
             change = float(b.words[0][1])
             best_k, best_gap = None, change - _end(a.words[-1], s.max_word_s)
             best_gap = max(best_gap, s.snap_gap_s - 1e-9)
@@ -1193,6 +1220,8 @@ class SpeakerFusion:
             self.timeline.append((self._change_time(spk, now), spk))
         while self.timeline and now - self.timeline[0][0] > 30:
             self.timeline.popleft()
+        if self.cloud is not None:
+            self.cloud.note(self, now, spk)  # V-32: faces talking, for binding cloud tags
 
         captions = []
         for utt in list(self.pending):
