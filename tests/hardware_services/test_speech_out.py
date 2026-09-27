@@ -11,6 +11,16 @@ from attune.speech_out.service import SpeechOutService
 from conftest import wait_for
 
 
+@pytest.fixture(autouse=True)
+def isolated_credentials(monkeypatch, tmp_path):
+    """Keep credential discovery inside the test, including an in-repo temp directory."""
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+    monkeypatch.chdir(tmp_path)
+    # find_dotenv searches parents: an empty file prevents reading a developer's key.
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+
+
 class FakeTTS:
     def __init__(
         self, name, delay=0.0, fail=False, chunks=3, block=None, fail_after=None
@@ -218,7 +228,7 @@ def test_no_voice_at_all(bus, make):
 
 def test_credentials_never_required(monkeypatch, tmp_path):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
-    monkeypatch.chdir(tmp_path)  # no .env here
+    monkeypatch.chdir(tmp_path)  # isolated empty .env
     assert elevenlabs_tts.load_credentials()[0] is None
     assert elevenlabs_tts.ElevenLabsTTS.from_env({}) is None
 
