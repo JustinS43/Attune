@@ -7,13 +7,20 @@ While speech is detected, each tick (15 per second) checks, in order:
    within 3 dB of each other.
 2. A visible speaker: a face that is talking (see below), or whose voice print
    matches this utterance while its lips move at least in the probable band.
-   Held at least 0.5 s; only switches to someone scoring 1.5x higher.
+   Held at least 0.5 s; only switches to someone scoring 1.5x higher. Continuity:
+   while speech runs on without a pause and no other face talks, the face keeps
+   the speech for up to `continuity_s` after its last own evidence, unless its
+   voice is vetoed or Light-ASD scores it (`_continues`).
 3. A probable visible speaker: exactly one face that passes the talking checks
    only in the probable band (`lip_uncertain`), while everyone else is still.
    Dashed tail.
 4. Off-screen: after ~1 s of speech, a voice match >= 0.5 names the speaker;
    the side comes from where they left the frame (< 30 s ago), otherwise
-   from the louder sound sensor (>= 3 dB). Until then: "Someone".
+   from the louder sound sensor (>= 3 dB). Until then: "Someone". A voice
+   whose face is in view is never off screen: it goes to that face, dashed,
+   or to "Someone" when Light-ASD calls that face silent (a match that still
+   hears an earlier turn, `_stale_voice`, which also never vetoes the face
+   Light-ASD hears talking now).
 
 Talking (V-19). A live face is never perfectly still: landmark jitter, lips
 parting, a yawn, a head turn. So, while speech is heard, a face is talking
@@ -298,6 +305,8 @@ class SpeakerFusion:
         self.harvester = Harvester(self.s.harvest_after_s)
         self.harvested: set[str] = set()  # voice ids given a session print (voice.harvest)
         self._decided_by: str | None = None  # why decide() chose a face; gates harvesting
+        self._evidence: tuple[int | None, float] = (None, -1e9)  # last face chosen on evidence
+        self._earned: tuple[float | None, dict[int, float]] = (None, {})  # speech run -> s talked
         self._stopped: dict[int, float] = {}  # track -> when it last stopped talking (5 s)
         self.last_seen: dict[int, float] = {}  # track -> when it was last on screen
         self._offscreen_n = 0  # "offscreen-N" voices learnt this session
@@ -632,6 +641,8 @@ class SpeakerFusion:
         if pid is not None:
             if pid == vid or self.claimed.get(pid) == vid:
                 return "support"
+            if self._stale_voice(pid, now):
+                return None
             # Another voice matched. It vetoes this face when it is clearly someone else: a
             # known person, a voice learnt off screen, or a stranger who was on screen at the
             # same time as this face. (A stranger last seen before this face appeared may be
@@ -646,6 +657,28 @@ class SpeakerFusion:
         # Nobody matched. A low score against a session print is inconclusive in
         # background noise, so it must not overrule positive lip and sound evidence.
         return None
+
+    def _visible_track(self, vid: str, now: float) -> _TrackInfo | None:
+        """The face in view right now that voice id `vid` belongs to, if any."""
+        vid = self.claimed.get(vid, vid)
+        for tr in self.tracks.values():
+            if now - tr.t <= 0.5 and voice_id(tr.person_id, tr.track_id) == vid:
+                return tr
+        return None
+
+    def _stale_voice(self, vid: str, now: float) -> bool:
+        """Does this voice match belong to a face in view that Light-ASD says is silent now?
+
+        The match is made over the newest `voice_match_max_s` of speech, so just after a
+        turn it still hears mostly the previous talker. When that talker is on screen and
+        Light-ASD (lips and sound together, the last 0.4 s) calls them silent, the match
+        is about earlier speech: it must not veto the face that is talking now.
+        """
+        tr = self._visible_track(vid, now)
+        if tr is None:
+            return False
+        asd = self.asd_gate.covered(self, now).get(tr.track_id)
+        return asd is not None and asd.score < self.s.asd_off
 
     def _claim(self, now: float) -> None:
         """Let a face that clearly talks with an off-screen voice claim it (offscreen_claim_s)."""
@@ -664,6 +697,32 @@ class SpeakerFusion:
             share = sum(c == pid for _, c in tr.claims) / len(tr.claims)
             if share >= s.talk_cover_share:
                 self.claimed[pid] = voice_id(tr.person_id, tr.track_id)
+
+    def _continues(self, track_id: int, now: float) -> bool:
+        """Is this face still talking in the same unbroken stretch of speech? (continuity)
+
+        A talker's evidence dips mid-sentence: a hand or a cup over the mouth, a head turn,
+        a Light-ASD window that lands on a breath. Nobody else started talking (no other
+        face is a candidate, or `decide` would have taken it), speech has not paused since
+        this face last talked on its own evidence (a pause is `speech_hangover_s`: a turn
+        can start there), that was under `continuity_s` ago, the face has earned it (see
+        below), and the voice has not vetoed it. Only while Light-ASD has no fresh score for the face (vision too slow, face
+        turned away): Light-ASD's own verdict, when it has one, is never overruled.
+        """
+        s = self.s
+        tid, t = self._evidence
+        if s.continuity_s <= 0 or tid != track_id or now - t > s.continuity_s:
+            return False
+        run = self.speech_start if self.speech_start is not None else t
+        if run > t:
+            return False  # speech paused and started again since: maybe another voice
+        # Trust is earned: a listener whose lips lined up with someone else's speech for a
+        # moment must not keep that speech. The face talked on its own evidence for at least
+        # continuity_min_s, and for continuity_share of this stretch of speech so far.
+        earned = self._earned[1].get(track_id, 0.0) if self._earned[0] == run else 0.0
+        if earned < s.continuity_min_s or earned < s.continuity_share * (now - run):
+            return False
+        return track_id not in self.asd_gate.covered(self, now)
 
     def decide(self, now: float) -> tuple[Speaker | None, float | None]:
         """The speaker right now, and the in-time score behind it (face cases only)."""
@@ -698,11 +757,17 @@ class SpeakerFusion:
                 ):
                     score, best, r, why = held
             self._decided_by = why
+            self._evidence = (best.track_id, now)
+            run = self.speech_start if self.speech_start is not None else now
+            if self._earned[0] != run:
+                self._earned = (run, {})
+            earned = self._earned[1]
+            earned[best.track_id] = earned.get(best.track_id, 0.0) + 1.0 / s.rate_hz
             return Speaker("face", best.track_id, best.person_id, labels[best.track_id]), r
         if (
             cur is not None
             and cur.kind == "face"
-            and now - self._current_since < s.hold_s
+            and (now - self._current_since < s.hold_s or self._continues(cur.track_id, now))
             and any(tr.track_id == cur.track_id and verdict[tr.track_id] != "veto" for tr in fresh)
         ):
             tr = self.tracks[cur.track_id]
@@ -728,6 +793,17 @@ class SpeakerFusion:
                     vid = self.claimed[vid]
                 elif vid.startswith("offscreen-"):  # a voice only ever heard off screen
                     return Speaker("someone", label="Someone", side=side), None
+                seen = self._visible_track(vid, now)
+                if seen is not None:
+                    # the voice of a face in view is never shown as off screen: that face,
+                    # dashed (the voice says so, the lips don't), unless Light-ASD calls it
+                    # silent (a match that still hears an earlier turn: "Someone")
+                    if self._stale_voice(vid, now):
+                        return Speaker("someone", label="Someone", side=side), None
+                    self._decided_by = "voice-in-view"
+                    return Speaker(
+                        "probable_face", seen.track_id, seen.person_id, labels[seen.track_id]
+                    ), seen.r
                 exit_side, exit_t = self.exits.get(vid, ("none", -1e9))
                 if now - exit_t <= s.offscreen_exit_memory_s and exit_side != "none":
                     side = exit_side

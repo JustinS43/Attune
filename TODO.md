@@ -134,8 +134,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 - [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
 - [x] P-36 Captions on the lens and phone survive a reconnect (the hub replays recent captions on hello) and the phone drops retracted segments (#62)
-
-- [x] P-37 End-to-end suite (tests/e2e): real engines in replay mode, every page in headless Edge; captions, alerts, camera/pause, reconnect, privacy, robustness, station screens, soak (#61)
+- [x] P-37 End-to-end suite (tests/e2e): real engines in replay mode, every page in headless Edge; captions, alerts, camera/pause, reconnect, privacy, robustness, soak (#61)
 - [x] P-38 Only the laptop's own pages reach the engine: WebSocket origin check, Host guard (DNS rebinding), no API schema (#61)
 - [x] P-39 Phone and demo fixes from the e2e run: tab bar indicator, camera switch and state, no "UND" tag, hidden demo panes out of the tab order, Apricot eyebrow contrast (#61)
 - [x] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)

@@ -30,7 +30,7 @@ asd_device = "cuda"             # ~25-80 ms a round; "cpu" is ~150 ms idle but ~
 asd_rate_hz = 5                 # scoring rounds per second, all faces in one batch
 asd_window_s = 1.5
 asd_min_face_px = 40
-asd_min_fps = 12                # vision slower than this: no score, the lip score decides
+asd_min_fps = 8                 # vision slower than this: no score, the lip score decides
 asd_av_offset_s = 0.0           # audio lags video by this much
 
 [fusion]
