@@ -114,9 +114,14 @@ function el(tag, className, value) {
 
 function brand() {
   const row = el('div', 'brand');
-  const mark = el('span', 'brand-mark');
-  mark.append(el('i'), el('i'));
-  row.append(mark, el('span', '', 'attune'));
+  const wordmark = el('img', 'brand-wordmark');
+  wordmark.src = state.theme === 'dark'
+    ? '../shared/brand/attune-wordmark-dark.svg'
+    : '../shared/brand/attune-wordmark-light.svg';
+  wordmark.alt = 'Attune';
+  wordmark.width = 149;
+  wordmark.height = 40;
+  row.append(wordmark);
   return row;
 }
 

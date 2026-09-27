@@ -69,7 +69,13 @@ export function mountPanels({ docked = false, root = document.body, open: initia
   const pausedPill = h('span', { class: 'atp-paused-pill', hidden: true, text: 'Paused' });
   const tabs = VIEWS.map(([name, label, key]) => h('button', { class: 'atp-tab', type: 'button', role: 'tab', 'aria-selected': 'false', onclick: () => openView(name) }, label, keycap(key)));
   const closeBtn = h('button', { class: 'atp-close', type: 'button', 'aria-label': 'Close panel (Esc)', title: 'Close (Esc)', text: '✕', onclick: () => closeView() });
-  const brand = h('div', { class: 'atp-brand' }, h('span', { class: 'atp-logo', 'aria-hidden': 'true' }, h('i'), h('i')), h('span', { text: 'attune' }));
+  const brand = h('div', { class: 'atp-brand' }, h('img', {
+    class: 'atp-wordmark',
+    src: '../shared/brand/attune-wordmark-dark.svg',
+    alt: 'Attune',
+    width: '112',
+    height: '30',
+  }));
 
   if (docked) {
     const header = h('header', { class: 'atp-topbar' }, brand, connPill, pausedPill,

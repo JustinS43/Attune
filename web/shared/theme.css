@@ -11,6 +11,10 @@
   --attune-sky: #6ab8ff;
   --attune-accent: #8ff3e0;
   --attune-brand: linear-gradient(135deg, var(--attune-mint), var(--attune-sky));
+  --attune-logo-ink: #173c45;
+  --attune-logo-primary: #159b9e;
+  --attune-logo-secondary: #97dcd0;
+  --attune-logo-warm: #f4bc88;
 
   /* signal colours */
   --attune-amber: #ffc857;

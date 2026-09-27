@@ -34,10 +34,11 @@ const ZOOM_STORE = 'attune.demo.pov.zoom';
 
 const MODE_ALIASES = {
   color: 'color', colour: 'color', full: 'color', ar: 'color',
+  focused: 'focused', focus: 'focused',
   mono: 'mono', green: 'mono', waveguide: 'mono',
   'mono-corner': 'corner', corner: 'corner', monocular: 'corner',
 };
-const MODE_URL = { color: 'color', mono: 'mono', corner: 'mono-corner' };
+const MODE_URL = { color: 'color', focused: 'focused', mono: 'mono', corner: 'mono-corner' };
 
 // Display geometry in lens pixels. Read from the lens's own modes when they load, so a change
 // there follows automatically; these copies are only the fallback.
@@ -117,6 +118,7 @@ export function mountPov(root, { mainLens, params, onFrameLoad, onPointer }) {
       const h = Number.parseInt(q.get('height'), 10);
       return {
         mode: MODE_ALIASES[q.get('mode')] ?? 'color',
+        labels: q.get('labels') !== '0',
         source: q.get('source') === 'film' ? 'film' : 'live',
         height: Number.isFinite(h) ? h : geo.monoDefault,
         variant: a.modes?.corner?.variant === 'glass' ? 'glass' : 'rayban',
@@ -130,6 +132,7 @@ export function mountPov(root, { mainLens, params, onFrameLoad, onPointer }) {
     const a = api(frame);
     if (!a) return false;
     if (key === 'mode') a.setMode(value);
+    else if (key === 'labels') a.setLabels(value);
     else if (key === 'source') {
       a.setSource(value);
       sourceHoldUntil = performance.now() + 6000;
@@ -156,7 +159,7 @@ export function mountPov(root, { mainLens, params, onFrameLoad, onPointer }) {
     if (m && p) {
       // the POV lens starts on the main lens's settings: until one of them changes, main leads
       last ??= { ...p };
-      for (const key of ['source', 'mode', 'variant', 'height']) {
+      for (const key of ['source', 'mode', 'labels', 'variant', 'height']) {
         if (key === 'source' && performance.now() < sourceHoldUntil) continue;
         if (m[key] === p[key]) {
           last[key] = m[key];
@@ -190,11 +193,12 @@ export function mountPov(root, { mainLens, params, onFrameLoad, onPointer }) {
     if (m) {
       q.set('source', m.source);
       q.set('mode', MODE_URL[m.mode]);
+      if (!m.labels) q.set('labels', '0');
       if (m.height !== geo.monoDefault) q.set('height', String(m.height));
       if (m.variant === 'glass') q.set('variant', 'glass');
     } else {
       // the main lens hasn't started yet: give the POV lens the same URL settings it got
-      for (const k of ['source', 'mode', 'height', 'variant']) if (params.has(k)) q.set(k, params.get(k));
+      for (const k of ['source', 'mode', 'labels', 'height', 'variant']) if (params.has(k)) q.set(k, params.get(k));
     }
     for (const k of ['engine', 'assets']) if (params.has(k)) q.set(k, params.get(k));
     const t = api(mainLens)?.film?.info?.t;

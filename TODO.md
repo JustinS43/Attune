@@ -161,6 +161,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-46 Live demo sound meter: show both Arduino amplitudes and a baseline-adjusted left/right direction estimate at the top-right of the glasses pane (#96)
 - [x] P-48 Cloud captions (Google) in the pages: Settings toggle, Google API key field saved to the laptop's .env (like P-41), language, status; "Cloud captions on" badge on the lens (all three modes) and phone; console status and latency; setup steps (#105)
 - [ ] P-49 Keep off-frame speech in one bottom caption with a direction arrow; keep visible speakers' captions attached to their faces — implementation in draft PR #108, review pending
+- [x] P-50 Focused lens style: centered visible talker in a bottom middle bubble, smaller directional corner bubbles for other speakers, face labels above visible people or inside bubbles when labels are off (#109)
 
 ## Gates and end-to-end checks (whole team)
 

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1000" role="img" aria-labelledby="title description">
+  <title id="title">Attune project cover</title>
+  <desc id="description">A warm, minimal project cover featuring the Attune Conversation logo and wordmark.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFDF9"/>
+      <stop offset=".58" stop-color="#F9F3EC"/>
+      <stop offset="1" stop-color="#F1E6DB"/>
+    </linearGradient>
+    <linearGradient id="deep" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#173C45"/>
+      <stop offset="1" stop-color="#102F3A"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#CDEFE6"/>
+      <stop offset="1" stop-color="#97DCD0"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22AAA9"/>
+      <stop offset="1" stop-color="#159B9E"/>
+    </linearGradient>
+    <filter id="card-shadow" x="-40%" y="-40%" width="180%" height="190%">
+      <feDropShadow dx="0" dy="38" stdDeviation="34" flood-color="#173C45" flood-opacity=".22"/>
+    </filter>
+    <filter id="float-shadow" x="-50%" y="-50%" width="200%" height="220%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#173C45" flood-opacity=".14"/>
+    </filter>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#canvas)"/>
+  <circle cx="1440" cy="50" r="330" fill="#97DCD0" opacity=".18"/>
+  <circle cx="70" cy="1010" r="300" fill="#F4BC88" opacity=".17"/>
+  <path d="M0 790C280 700 455 936 705 860s383-257 795-179v319H0Z" fill="#FFFFFF" opacity=".38"/>
+  <rect x="34" y="34" width="1432" height="932" rx="52" fill="none" stroke="#173C45" stroke-opacity=".08" stroke-width="3"/>
+
+  <g transform="translate(92 86)">
+    <svg width="520" height="140" viewBox="0 0 670 180"><g transform="translate(0 0) scale(.7)"><circle cx="128" cy="62" r="19" fill="#F4BC88"/>
+<g transform="rotate(-8 90 130)"><path d="M65 87h35c16 0 27 11 27 27v23c0 17-11 28-28 28H83l-24 15v-20c-12-5-19-14-19-28v-18c0-16 10-27 25-27Z" fill="#159B9E"/><path d="M63 112h40m-40 18h26" stroke="#E0F7EE" stroke-width="7" stroke-linecap="round"/></g>
+<g transform="rotate(8 167 137)"><path d="M151 97h36c16 0 27 11 27 27v18c0 14-7 23-19 28v20l-24-15h-17c-16 0-27-11-27-28v-23c0-16 9-27 24-27Z" fill="#97DCD0"/><path d="M150 123h40m-40 18h26" stroke="#17656C" stroke-width="7" stroke-linecap="round"/></g></g><g transform="translate(196 44) scale(1.5)"><g fill="none" stroke="#173C45" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="22" cy="40" r="18"/><path d="M40 22v36"/>
+<path d="M66 6v39q0 13 12 13h5M54 23h29"/>
+<path d="M106 6v39q0 13 12 13h5M94 23h29"/>
+<path d="M143 23v19q0 16 17 16t17-16V23"/>
+<path d="M198 58V23m0 17q0-18 17-18t17 18v18"/>
+<path d="M291 49c-9 15-36 12-36-9 0-24 37-25 37-3h-36"/>
+</g></g></svg>
+  </g>
+
+  <g opacity=".9">
+    <path d="M107 318h290" stroke="#159B9E" stroke-width="12" stroke-linecap="round"/>
+    <path d="M107 355h188" stroke="#97DCD0" stroke-width="12" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(103 490)" filter="url(#float-shadow)">
+    <g transform="rotate(-5 170 82)">
+      <rect width="340" height="164" rx="49" fill="#FFFFFF"/>
+      <circle cx="66" cy="73" r="27" fill="#F4BC88"/>
+      <path d="M116 59h154M116 91h105" stroke="#159B9E" stroke-width="15" stroke-linecap="round"/>
+      <path d="m87 142-11 52 58-47" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(245 154) rotate(7 134 70)">
+      <rect width="268" height="140" rx="44" fill="#DDF2EC"/>
+      <path d="M50 55h164M50 86h112" stroke="#17656C" stroke-width="14" stroke-linecap="round"/>
+      <path d="m195 122 36 48 4-58" fill="#DDF2EC"/>
+    </g>
+  </g>
+
+  <g transform="rotate(5 1060 500)" filter="url(#card-shadow)">
+    <rect x="770" y="185" width="580" height="630" rx="126" fill="url(#deep)"/>
+    <circle cx="1262" cy="292" r="132" fill="#97DCD0" opacity=".12"/>
+    <circle cx="864" cy="736" r="156" fill="#159B9E" opacity=".12"/>
+    <svg x="815" y="238" width="490" height="490" viewBox="0 0 256 256">
+      <circle cx="128" cy="62" r="19" fill="#F4BC88"/>
+<g transform="rotate(-8 90 130)"><path d="M65 87h35c16 0 27 11 27 27v23c0 17-11 28-28 28H83l-24 15v-20c-12-5-19-14-19-28v-18c0-16 10-27 25-27Z" fill="#159B9E"/><path d="M63 112h40m-40 18h26" stroke="#E0F7EE" stroke-width="7" stroke-linecap="round"/></g>
+<g transform="rotate(8 167 137)"><path d="M151 97h36c16 0 27 11 27 27v18c0 14-7 23-19 28v20l-24-15h-17c-16 0-27-11-27-28v-23c0-16 9-27 24-27Z" fill="#97DCD0"/><path d="M150 123h40m-40 18h26" stroke="#17656C" stroke-width="7" stroke-linecap="round"/></g>
+    </svg>
+  </g>
+
+  <g fill="none" stroke="#F4BC88" stroke-width="18" stroke-linecap="round">
+    <path d="m1312 128 34-42"/>
+    <path d="m1366 170 58-14"/>
+    <path d="m1261 105 5-56"/>
+  </g>
+
+  <g transform="translate(650 754) rotate(-5)" filter="url(#float-shadow)">
+    <rect width="270" height="112" rx="38" fill="#FFFFFF"/>
+    <circle cx="54" cy="56" r="20" fill="#97DCD0"/>
+    <path d="M91 46h130M91 72h86" stroke="#159B9E" stroke-width="12" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(104 876)">
+    <circle cx="8" cy="8" r="8" fill="#F4BC88"/>
+    <text x="34" y="17" fill="#789096" font-family="Avenir Next, Nunito Sans, Segoe UI, system-ui, sans-serif" font-size="22" font-weight="700" letter-spacing="4">A MORE CONNECTED EVERYDAY</text>
+  </g>
+</svg>
