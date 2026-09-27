@@ -115,6 +115,10 @@ class FusionSettings:
     # with an off-camera voice for a moment (tests/vision/test_live_talker.py) never gets it.
     continuity_min_s: float = 1.0
     continuity_share: float = 0.5
+    # V-31: when Light-ASD scores the face and calls it silent, continuity holds only this
+    # long after its last own evidence (a hand by the mouth dips Light-ASD's score while the
+    # person talks on); longer, Light-ASD's verdict stands. 0: never against Light-ASD.
+    asd_continuity_s: float = 1.5
     switch_ratio: float = 1.5
     voice_match: float = 0.5
     offscreen_after_s: float = 1.0
