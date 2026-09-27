@@ -32,6 +32,14 @@ const params = new URLSearchParams(location.search);
 
 const DEFAULT_PRESETS = ['Nice to meet you', 'Can you repeat that?', 'One moment', 'Thank you', 'I read captions, go ahead'];
 const ALERT_TEXT = { smoke: 'Smoke alarm', co: 'Carbon monoxide alarm', doorbell: 'Doorbell', knock: 'Door knock' };
+// A-40 everyday sounds: name, icon and banner colour (the lens's colours, deepened for white text)
+const SOUND_LOOK = {
+  siren: ['Siren', '🚨', '#E5452A'], horn: ['Car horn', '🚗', '#E07A1F'],
+  scream: ['Someone screamed', '😱', '#E03A78'], glass: ['Glass breaking', '💥', '#8A5CF0'],
+  baby: ['Baby crying', '👶', '#E0609C'], dog: ['Dog barking', '🐕', '#B97A30'],
+  phone: ['Phone ringing', '📱', '#249B5E'], timer: ['Timer or beeping', '⏲️', '#3A85E0'],
+  water: ['Water running', '🚰', '#1B97C2'],
+};
 const VOICE_NAME = { elevenlabs: 'ElevenLabs', kokoro: 'offline voice' };
 
 // Optional Apricot Studio palette (Ryan's colorway); the default keeps the original palette.
@@ -815,7 +823,7 @@ function renderSettings() {
   features.append(
     settingToggle('Captions', state.live ? 'On this phone' : '', 'captions', 'wave'),
     settingToggle('Name labels', state.live ? 'On this phone' : '', 'names', 'people'),
-    settingToggle('Sound alerts', state.live ? 'Smoke, CO, doorbell and knocks, on every screen' : '', 'alerts', 'volume'),
+    settingToggle('Sound alerts', state.live ? 'Alarms, the door, sirens, horns, babies, pets and more, on every screen' : '', 'alerts', 'volume'),
     settingToggle('Translation', state.live ? 'English under Spanish, on every screen' : '', 'translation', 'wave'));
   content.append(features, el('h2', 'setting-label', 'Privacy'));
   const privacy = el('div', 'card setting-group');
@@ -1014,9 +1022,14 @@ function showAlert() {
   if (!a) return;
   const side = a.side === 'left' ? 'on your left' : a.side === 'right' ? 'on your right' : 'nearby';
   const copy = el('div', 'grow');
-  copy.append(el('strong', '', ALERT_TEXT[a.kind] || 'Sound alert'), el('span', '', `${side}${a.state === 'watch' ? ' · watching' : ''}`));
+  const look = SOUND_LOOK[a.kind];
+  alertBanner.style.setProperty('--alert-bg', look ? look[2] : '');
+  alertBanner.classList.toggle('everyday', !!look);
+  copy.append(el('strong', '', ALERT_TEXT[a.kind] || look?.[0] || 'Sound alert'), el('span', '', `${side}${a.state === 'watch' ? ' · watching' : ''}`));
   const ack = button('Got it', 'alert-ack', 'alert-ack');
-  alertBanner.append(el('span', `alert-icon ${a.kind === 'doorbell' || a.kind === 'knock' ? 'bell' : ''}`, a.kind === 'doorbell' ? '🔔' : a.kind === 'knock' ? '🚪' : '!'), copy, ack);
+  const mute = button('Mute 1 h', 'alert-mute', 'alert-mute'); // A-41: like a hold on the glasses
+  const mark = look ? look[1] : a.kind === 'doorbell' ? '🔔' : a.kind === 'knock' ? '🚪' : '!';
+  alertBanner.append(el('span', `alert-icon ${a.kind === 'doorbell' || a.kind === 'knock' ? 'bell' : ''}`, mark), copy, mute, ack);
 }
 
 // ------------------------------------------------------------------ engine link
@@ -1417,6 +1430,10 @@ document.addEventListener('click', async event => {
     state.draft = control.textContent; document.querySelector('#speak-text').value = state.draft; document.querySelector('#speak-text').focus(); return;
   }
   if (action === 'speak-now') speak();
+  if (action === 'alert-mute') {
+    if (state.alert && state.live) link.send('alert.snooze', {alert_id: state.alert.alert_id});
+    state.alert = null; showAlert();
+  }
   if (action === 'alert-ack') {
     if (state.alert && state.live) link.send('alert.ack', {alert_id: state.alert.alert_id});
     state.alert = null; showAlert();

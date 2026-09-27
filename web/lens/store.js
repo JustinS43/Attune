@@ -9,7 +9,7 @@
 
 import { W, H, K, clamp, follow, wrapChars, nowS } from './hud.js';
 
-export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 4 };
+export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 2.5 };
 
 const PALETTE = ['#FF8FA3', '#FFB86B', '#C4A7FF', '#7CC8FF', '#86E3B0', '#FFD36E', '#5FE0D8', '#B8F07A'];
 export const NEUTRAL = '#E6EAF0';
@@ -240,8 +240,25 @@ const ALERT_META = {
   knock: { label: 'Door knock', icon: 'door', level: 'attention' },
   bike: { label: 'Bike bell', icon: 'bike', level: 'info' },
   name: { label: 'Someone called you', icon: 'voice', level: 'attention' },
-  vehicle: { label: 'Vehicle', icon: 'truck', level: 'attention' },
+  vehicle: { label: 'Vehicle', icon: 'truck', level: 'attention', color: '#FF9F43' },
+  // A-40 everyday sounds: each has its own colour and icon so it reads before the words do
+  siren: { label: 'Siren', icon: 'siren', level: 'attention', color: '#FF5A36' },
+  horn: { label: 'Car horn', icon: 'car', level: 'attention', color: '#FF9F43' },
+  scream: { label: 'Someone screamed', icon: 'scream', level: 'attention', color: '#FF4D8D' },
+  glass: { label: 'Glass breaking', icon: 'glass', level: 'attention', color: '#B48CFF' },
+  baby: { label: 'Baby crying', icon: 'baby', level: 'attention', color: '#FF9EC7' },
+  dog: { label: 'Dog barking', icon: 'dog', level: 'info', color: '#E8B070' },
+  phone: { label: 'Phone ringing', icon: 'phone', level: 'info', color: '#6EE7A8' },
+  timer: { label: 'Timer or beeping', icon: 'timer', level: 'info', color: '#7CC8FF' },
+  water: { label: 'Water running', icon: 'water', level: 'info', color: '#5ED4F5' },
 };
+/** 3600 -> "1 hour", 600 -> "10 minutes": how long a held alert stays muted. */
+export function muteSpan(s) {
+  const h = s / 3600;
+  if (h >= 1 && Number.isInteger(h)) return h === 1 ? '1 hour' : `${h} hours`;
+  const m = Math.max(1, Math.round(s / 60));
+  return m === 1 ? '1 minute' : `${m} minutes`;
+}
 export const SIDE_TEXT = { left: 'On your left', right: 'On your right', behind: 'Behind you', none: 'Nearby' };
 
 // ---------------------------------------------------------------- caption timing and stability
@@ -252,7 +269,20 @@ const READ_BASE_S = 0.8;
 /** Seconds needed to read `words` words (only what fits on screen counts). */
 export const readTime = (words) => READ_BASE_S + Math.min(words, 18) / (READ_WPM / 60);
 const FLIP_HOLD_S = 0.6; // a new speaker for an utterance must persist this long before its text moves
-const TRACK_HOLD_S = 1.5; // a face the tracker lost keeps its place (and its bubble) this long
+const TRACK_HOLD_S = 3; // a face the tracker lost keeps its place (and its bubble) this long
+// Once a caption has moved to the bottom (its face left), it stays there this long even if the
+// face flickers back, so a side talker's caption never hops face <-> bottom over and over.
+const PLACE_HOLD_S = 3;
+const FADE_OUT_S = 0.9; // words ease out over this long once they have been read
+// The bottom "Someone · from left" caption (a voice with no face in view) stays this long after
+// its last word (or its reading time, if longer), then eases out.
+const OFF_HOLD_S = 3;
+const OFF_FADE_OUT_S = 0.9;
+/** 1 -> 0 over `span` seconds with an eased (smoothstep) curve, starting `over` seconds past the hold. */
+const fadeOut = (over, span = FADE_OUT_S) => {
+  const t = clamp(over / span);
+  return 1 - t * t * (3 - 2 * t);
+};
 const MAX_BUBBLES = 3; // more than this and the oldest fade once they have been read
 const SEG_RE = /^(.*)\.(\d+)$/; // "<utt_id>.<n>": the n-th speaker segment of one utterance
 // A line in another language waits for its translation (contracts: 0.5-1.2 s after its final)
@@ -560,13 +590,16 @@ export function createViewBuilder(store) {
       if (!tokens.length && !pendingText) continue;
       const age = clock - th.tLast;
       const read = readTime(tokens.length + (pendingText ? pendingText.split(/\s+/).length : 0));
-      const hold = Math.max(fade, read);
-      alive.push({ key, th, utts, latest, lastResolved, pendingText, tokens, age, read, alpha: age < hold ? 1 : clamp(1 - (age - hold) / 0.5) });
+      // a voice with no face in view (bottom caption): an off-screen speaker, one that left the
+      // frame, or a voice nobody could place
+      const offFrame = key !== 'you' && (!key.startsWith('t') || th.offAt != null || !th.face);
+      const hold = Math.max(offFrame ? OFF_HOLD_S : fade, read);
+      alive.push({ key, th, utts, latest, lastResolved, pendingText, tokens, age, read, alpha: age < hold ? 1 : fadeOut(age - hold, offFrame ? OFF_FADE_OUT_S : FADE_OUT_S) });
     }
     // no more than MAX_BUBBLES at once: the oldest ones leave early, once they have been read
     const ranked = alive.filter((x) => x.key !== 'you').sort((a, b) => b.th.tLast - a.th.tLast);
     ranked.forEach((x, i) => {
-      if (i >= MAX_BUBBLES) x.alpha = Math.min(x.alpha, clamp(1 - (x.age - x.read) / 0.5));
+      if (i >= MAX_BUBBLES) x.alpha = Math.min(x.alpha, x.age < x.read ? 1 : fadeOut(x.age - x.read));
     });
     const current = ranked.find((x) => x.alpha > 0)?.th.id ?? null;
     for (const x of alive) {
@@ -601,9 +634,14 @@ export function createViewBuilder(store) {
         if (face && !face.ghost) {
           th.face = face;
           th.faceSeen = clock;
-        } else if (!face && th.face) {
-          if (clock - (th.faceSeen ?? clock) <= TRACK_HOLD_S) face = { ...th.face, ghost: true, isSpeaker: false, lip: 0, proposal: null }; // hold its place
+        }
+        // moved to the bottom a moment ago: stay there through a face that flickers back
+        const heldBelow = th.offAt != null && clock - th.offAt < PLACE_HOLD_S;
+        if (face && !face.ghost && !heldBelow) th.offAt = null;
+        if ((!face || heldBelow) && th.face) {
+          if (!heldBelow && clock - (th.faceSeen ?? clock) <= TRACK_HOLD_S) face = { ...th.face, ghost: true, isSpeaker: false, lip: 0, proposal: null }; // hold its place
           else {
+            th.offAt ??= clock;
             // Their face has left the view: keep its identity and exit direction for the
             // bottom caption, instead of leaving text over another person.
             const lk = `o~${key}`;
@@ -678,7 +716,7 @@ export function createViewBuilder(store) {
       const pending = segs.map((g) => g.pending).filter(Boolean).join(' ');
       const age = clock - f.tUpdate;
       const hold = Math.max(fade, readTime(tokens.length + (pending ? pending.split(/\s+/).length : 0)));
-      const alpha = age < hold ? 1 : clamp(1 - (age - hold) / 0.5);
+      const alpha = age < hold ? 1 : fadeOut(age - hold);
       if ((!tokens.length && !pending) || alpha <= 0 || clock < f.tFirst - 1) {
         famMem.delete(id);
         retired.add(id);
@@ -723,8 +761,10 @@ export function createViewBuilder(store) {
       alerts.push({
         id: a.alert_id, kind: a.kind, icon: meta.icon, level,
         label: a.label || meta.label, detail: a.detail || SIDE_TEXT[a.side], side: a.side,
-        color: level === 'urgent' ? '#FF4D4F' : level === 'info' ? '#7CC8FF' : a.kind === 'vehicle' ? '#FF9F43' : '#FFC857',
+        color: level === 'urgent' ? '#FF4D4F' : meta.color ?? (level === 'info' ? '#7CC8FF' : '#FFC857'),
         state: a.state, acked: a.tAck != null, watch: a.state === 'watch', count: Math.max(1, a.count),
+        // A-41: a hold on the touch sensor stops the alert and mutes that sound for snooze_s
+        ackText: a.snooze_s ? `Muted for ${muteSpan(a.snooze_s)}` : 'Acknowledged',
         tStart: a.tStart, tAck: a.tAck, tUpdate: a.tUpdate, alpha, age: anim - a.wStart,
       });
     }

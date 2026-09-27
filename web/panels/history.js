@@ -11,7 +11,10 @@
 import { h, section, clockText, speakerColor, engineHttpBase } from './ui.js';
 
 const KIND_BADGE = { reply: 'Reply', alert: 'Alert', name_confirmed: 'Name', translation: 'Translation' };
-const ALERT_ICON = { smoke: '🔥', co: '☁', doorbell: '🔔', knock: '🚪' };
+const ALERT_ICON = {
+  smoke: '🔥', co: '☁', doorbell: '🔔', knock: '🚪', siren: '🚨', horn: '🚗', scream: '😱', glass: '💥',
+  baby: '👶', dog: '🐕', phone: '📱', timer: '⏲️', water: '🚰',
+};
 
 /** GET /api/history/<path>; resolves null on 404 / network errors so callers show the empty state. */
 export async function historyGet(path) {
@@ -134,7 +137,7 @@ export function createHistory(ctx) {
   function renderMissed(rows) {
     missedList.replaceChildren();
     if (!rows?.length) {
-      missedList.append(h('li', { class: 'atp-empty', text: 'No alarms, doorbells or knocks in this session.' }));
+      missedList.append(h('li', { class: 'atp-empty', text: 'No sound alerts in this session.' }));
       return;
     }
     for (const r of rows) {

@@ -29,7 +29,12 @@ const SIDE_WORD = { left: 'Left', right: 'Right', behind: 'Behind', none: 'Nearb
 const SIDE_ANGLE = { left: Math.PI, right: 0, behind: Math.PI / 2, none: -Math.PI / 2 };
 const MOVE_W = 16; // stack glide stiffness (rad/s): about 0.25 s
 /** Semantic colours on paper: the lens model's alert colours mapped to the Daylight accents. */
-const TONE = { '#FF4D4F': CORAL, '#FFC857': SUN, '#FF9F43': '#F28A2E', '#7CC8FF': '#3A95F0', '#8FF3E0': TEAL, '#7CF5D6': TEAL };
+const TONE = {
+  '#FF4D4F': CORAL, '#FFC857': SUN, '#FF9F43': '#F28A2E', '#7CC8FF': '#3A95F0', '#8FF3E0': TEAL, '#7CF5D6': TEAL,
+  // A-40 everyday sounds, deepened so a white icon reads on paper
+  '#FF5A36': '#E5452A', '#FF4D8D': '#E03A78', '#B48CFF': '#8A5CF0', '#FF9EC7': '#EC6FA8',
+  '#E8B070': '#C98A3E', '#6EE7A8': '#2FB36E', '#5ED4F5': '#1FA9D6',
+};
 const tone = (c) => TONE[c] ?? c;
 /** White reads on the deeper accents; ink reads better on sunny yellow. */
 const iconOn = (c) => (c === SUN ? INK : '#FFFFFF');
@@ -223,7 +228,7 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
   ctx.fillText(al.label, x + 150, yy + 56);
   ctx.font = font(520, 25, FT);
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.fillText(al.acked ? 'Acknowledged' : al.detail, x + 152, yy + 102);
+  ctx.fillText(al.acked ? al.ackText : al.detail, x + 152, yy + 102);
   // direction block
   directionChip(ctx, x + w - 78, yy + h / 2 - 12, 32, al.side, color, anim, 1, !al.acked, true); // safety: keeps moving
   ctx.font = font(650, 18, FT);
@@ -234,7 +239,7 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
   ctx.restore();
   // haptic + acknowledge chip
   const parts = al.acked
-    ? [{ icon: 'check', color: '#FFFFFF', bg: LEAF }, { text: 'Acknowledged', font: font(600, 20, FT), color: INK }]
+    ? [{ icon: 'check', color: '#FFFFFF', bg: LEAF }, { text: al.ackText, font: font(600, 20, FT), color: INK }]
     : [
       { icon: 'wave', color: '#FFFFFF', bg: CORAL },
       { text: 'Haptic alert on', font: font(600, 20, FT), color: INK, gap: 18 },
@@ -254,7 +259,7 @@ function chipAlert(ctx, blur, al, y, anim, dim) {
     { icon: al.acked ? 'check' : al.icon, color: al.acked ? '#FFFFFF' : iconOn(color), bg: color },
     { text: al.watch ? `Watching for ${al.label.toLowerCase()}` : al.label, font: font(680, al.watch ? 24 : 30, FD), color: INK },
   ];
-  if (!al.watch) parts.push({ text: al.acked ? 'Acknowledged' : al.detail, font: font(480, 24, FT), color: INK_2 });
+  if (!al.watch) parts.push({ text: al.acked ? al.ackText : al.detail, font: font(480, 24, FT), color: INK_2 });
   if (al.count > 1 && !al.acked) parts.push({ text: `×${al.count}`, font: font(720, 24, FT), color: deepen(color, 0.3) });
   let slot = -1;
   if (!al.acked && !al.watch) {

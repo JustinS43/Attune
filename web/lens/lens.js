@@ -335,6 +335,12 @@ function acknowledge() {
   if (al) send('alert.ack', { alert_id: al.id });
 }
 
+/** A-41: what holding the touch sensor does: stop the alert and mute that sound for an hour. */
+function snooze() {
+  const al = lastView?.alerts.find((a) => !a.acked && a.state !== 'clear' && !a.watch);
+  if (al) send('alert.snooze', { alert_id: al.id });
+}
+
 function forget() {
   send('session.forget');
   store.reset();
@@ -379,6 +385,7 @@ onKey('H', () => {
 onKey('Y', () => answer(true), 'Yes, that\'s their name', { priority: 10 });
 onKey('N', () => answer(false), 'No, wrong name', { priority: 10 });
 onKey('A', acknowledge, 'Acknowledge the sound alert');
+onKey('Z', snooze, 'Stop the sound alert and mute that sound for an hour (a hold on the glasses)');
 onKey('P', () => send('pause.toggle'), 'Pause or resume recognition');
 // P-29: D (or Y twice) is the double tap on the glasses: save this person (save.js)
 const saveFlow = createSaveFlow(store, { send, source: () => sourceKind });

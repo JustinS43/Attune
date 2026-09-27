@@ -206,6 +206,7 @@ COMMAND_NAMES = frozenset(
         "speak",
         "name.answer",
         "alert.ack",
+        "alert.snooze",  # {alert_id}: stop it and mute that kind for [alerts] snooze_s (A-41)
         "mark",
         "camera.set",
         "save.start",
@@ -446,10 +447,12 @@ class NameProposal:
 @dataclass
 class Alert:
     alert_id: str
-    kind: str  # smoke, co, doorbell, knock
+    kind: str  # smoke, co, doorbell, knock, and the A-40 everyday sounds (alerts/rules.py SOUNDS)
     side: str
     confidence: float
     state: str  # start, update, watch, acknowledged, clear
+    # acknowledged by a hold / alert.snooze: that kind is muted this many seconds (A-41)
+    snooze_s: float | None = None
 
 
 @dataclass

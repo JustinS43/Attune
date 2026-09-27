@@ -85,11 +85,15 @@ class AlertService:
         elif topic == "sensors.levels":
             self.levels.append(e)
         elif topic == "touch.action" and e["target"] == "alert":
-            self._emit(self.rules.acknowledge(e["id"], self.clock()))
+            # a tap acknowledges; a hold (accept false) stops it and mutes that sound (A-41)
+            answer = self.rules.acknowledge if e.get("accept", True) else self.rules.snooze
+            self._emit(answer(e["id"], self.clock()))
         elif topic == "command":
             args = e.get("args", {})
             if e["name"] == "alert.ack":
                 self._emit(self.rules.acknowledge(args["alert_id"], self.clock()))
+            elif e["name"] == "alert.snooze":
+                self._emit(self.rules.snooze(args["alert_id"], self.clock()))
             elif e["name"] == "switch.set" and args["key"] == "alerts":
                 self.enabled = bool(args["value"])
                 self._reset()
@@ -125,7 +129,9 @@ class AlertService:
                 else:
                     # Score tone direction on the same 10 ms frames, not the whole window.
                     frame_size = self.rhythm.size
-                    start = 0 if self.rhythm_end is None else round((self.rhythm_end - end + 1) * 32000)
+                    start = (
+                        0 if self.rhythm_end is None else round((self.rhythm_end - end + 1) * 32000)
+                    )
                     for offset in range(start, 32000, frame_size):
                         evidence = self.rhythm.feed(window[offset : offset + frame_size])
                         t = end - 1 + offset / 32000
@@ -143,22 +149,22 @@ class AlertService:
                             context = self.recent[: len(self.recent) - ahead]
                             scores = self.model.score(context[-CLIP_SAMPLES:])
                         except Exception:
-                            self.worker.error = "sound model failed; rhythm-only alerts remain active"
-                            logger.exception("Sound classification failed; preserving rhythm evidence")
+                            self.worker.error = (
+                                "sound model failed; rhythm-only alerts remain active"
+                            )
+                            logger.exception(
+                                "Sound classification failed; preserving rhythm evidence"
+                            )
                         else:
                             if self.worker.error.startswith("sound model"):
                                 self.worker.error = ""
-                    # Doorbells and knocks are broadband; use the event window's sensor balance.
-                    cfg = self.config["alerts"]
-                    bell = max(scores.get("Doorbell", 0), scores.get("Ding-dong", 0))
-                    if not pairs and (
-                        bell >= cfg["doorbell_score"]
-                        or scores.get("Knock", 0) >= cfg["knock_score"]
-                    ):
+                    # Doorbells, knocks and the everyday sounds are broadband: use the event
+                    # window's sensor balance.
+                    if not pairs and self.rules.heard(scores):
                         pairs = [(v["left"], v["right"]) for v in levels]
                     direction = tuple(np.mean(pairs, axis=0)) if pairs else None
                 self._emit(self.rules.evaluate(end, scores, evidence, direction, motor), generation)
-                self.audio = self.audio[self.hop:]
+                self.audio = self.audio[self.hop :]
 
     def stop(self) -> None:
         """Cancel inference output and request patterns to stop."""

@@ -191,10 +191,10 @@ export function createCornerMode() {
         if (compact) {
           const tx = icx + r + 12 * k;
           lit(ctx, label, tx, icy - 12 * k, F.big);
-          lit(ctx, al.acked ? 'Acknowledged' : al.detail, tx, icy + 16 * k, F.mid, WHITE, 0.8);
+          lit(ctx, al.acked ? al.ackText : al.detail, tx, icy + 16 * k, F.mid, WHITE, 0.8);
         } else {
           lit(ctx, label, cx, icy + r + 26 * k, F.big, WHITE, 1, 'center');
-          lit(ctx, al.acked ? 'Acknowledged' : al.detail, cx, icy + r + 54 * k, F.mid, WHITE, 0.8, 'center');
+          lit(ctx, al.acked ? al.ackText : al.detail, cx, icy + r + 54 * k, F.mid, WHITE, 0.8, 'center');
         }
         const ang = sideAngle(al.side);
         if (!al.acked) {

@@ -353,6 +353,25 @@ const ICONS = {
   // a door with its handle and two knock arcs beside it
   door: [P('M4.5 20.5V4.8a1.3 1.3 0 0 1 1.3-1.3h7.4a1.3 1.3 0 0 1 1.3 1.3v15.7M2.8 20.5h13.4'), P('M11.2 12.2v.3'), P('M18 9.2a4 4 0 0 1 0 5.6M20.6 7a7.2 7.2 0 0 1 0 10')],
   user: [P('M12 8.2m-3.6 0a3.6 3.6 0 1 0 7.2 0a3.6 3.6 0 1 0-7.2 0'), P('M5.2 20c0-3.8 3-6.6 6.8-6.6s6.8 2.8 6.8 6.6')],
+  // A-40 everyday sounds
+  // an emergency light on its base, with rays
+  siren: [P('M7 17.5v-4.5a5 5 0 0 1 10 0v4.5'), P('M4.8 17.5h14.4v3H4.8z'), P('M12 2.8v2.2M4.9 5.8l1.5 1.5M19.1 5.8l-1.5 1.5')],
+  // a car with a honk above its bonnet
+  car: [P('M2.5 16v-3l2.3-4.6h8.4l2.9 4.6h2.9a1.5 1.5 0 0 1 1.5 1.5V16z'), P('M6.8 16.8m-1.8 0a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0'), P('M16.2 16.8m-1.8 0a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0'), P('M18.2 7.6l2.2-2M19.4 10.2h2.6')],
+  // a face with its mouth wide open
+  scream: [P('M12 12m-8.8 0a8.8 8.8 0 1 0 17.6 0a8.8 8.8 0 1 0-17.6 0'), P('M8.8 9.4v.4M15.2 9.4v.4'), P('M12 15.4m-1.9 0a1.9 2.5 0 1 0 3.8 0a1.9 2.5 0 1 0-3.8 0')],
+  // a wine glass with a crack through its bowl
+  glass: [P('M7.2 3h9.6l-.8 6.4a4 4 0 0 1-8 0z'), P('M12 13.4v6.8M8.4 20.6h7.2'), P('M10.6 3.4l1.8 2.4-1.6 1.9 1.4 2')],
+  // a baby's face with its curl of hair
+  baby: [P('M12 13.2m-7.6 0a7.6 7.6 0 1 0 15.2 0a7.6 7.6 0 1 0-15.2 0'), P('M12 5.6c-1.9-1.3-1.2-3.4.9-3.2'), P('M9.2 12.2v.3M14.8 12.2v.3'), P('M9.8 16.4a3 3 0 0 0 4.4 0')],
+  // a dog's head with floppy ears
+  dog: [P('M7 9.5c0-2.6 2.2-4.6 5-4.6s5 2 5 4.6v5a5 5 0 0 1-10 0z'), P('M7.2 7.8L3.8 6.4l.6 6.4H7M16.8 7.8l3.4-1.4-.6 6.4H17'), P('M10.9 15.2h2.2L12 16.5z'), P('M10 11v.3M14 11v.3')],
+  // a handset with ring waves
+  phone: [P('M6.4 3.4h3l1.5 4-2 1.4a11 11 0 0 0 6.3 6.3l1.4-2 4 1.5v3a2 2 0 0 1-2.2 2A16.6 16.6 0 0 1 4.4 5.6a2 2 0 0 1 2-2.2z'), P('M15 3.6a5.6 5.6 0 0 1 5.4 5.4M15 6.8a2.4 2.4 0 0 1 2.2 2.2')],
+  // a stopwatch
+  timer: [P('M12 13.6m-7.2 0a7.2 7.2 0 1 0 14.4 0a7.2 7.2 0 1 0-14.4 0'), P('M12 13.6V9.8M9.8 2.8h4.4M12 2.8v3.6'), P('M18.1 6.9l1.4-1.4')],
+  // a tap with a drop falling from it
+  water: [P('M3.5 4.5h9.2a3.3 3.3 0 0 1 3.3 3.3V9.4'), P('M8.2 4.5V2.4M6 2.4h4.4'), P('M16 21a3.4 3.4 0 0 1-3.4-3.4c0-2.2 3.4-5.8 3.4-5.8s3.4 3.6 3.4 5.8A3.4 3.4 0 0 1 16 21z')],
 };
 export function icon(ctx, name, x, y, size, color, lw = 2) {
   const paths = ICONS[name] ?? ICONS.sound;

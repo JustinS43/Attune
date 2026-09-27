@@ -28,7 +28,21 @@ from . import db as dbm
 
 logger = logging.getLogger(__name__)
 
-ALERT_NAMES = {"smoke": "Smoke alarm", "co": "Carbon monoxide alarm", "doorbell": "Doorbell"}
+ALERT_NAMES = {
+    "smoke": "Smoke alarm",
+    "co": "Carbon monoxide alarm",
+    "doorbell": "Doorbell",
+    "knock": "Door knock",
+    "siren": "Siren",
+    "horn": "Car horn",
+    "scream": "Someone screamed",
+    "glass": "Glass breaking",
+    "baby": "Baby crying",
+    "dog": "Dog barking",
+    "phone": "Phone ringing",
+    "timer": "Timer or beeping",
+    "water": "Water running",
+}
 SECONDS_PER_WORD = 0.4  # talk-time estimate when a caption has no word times
 
 

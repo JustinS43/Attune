@@ -115,6 +115,12 @@ realert_s = 30
 clear_quiet_s = 15
 watch_s = 10
 speech_music_block = 0.5
+snooze_s = 3600                  # A-41: holding the touch sensor on an alert mutes that sound this long
+# A-40 everyday sounds (siren horn scream glass baby dog phone timer water): the defaults live in
+# engine/attune/alerts/rules.py SOUNDS. Override one with <kind>_score / <kind>_rest_s, set a
+# score above 1 to turn that sound off, or tune them all on recordings with scripts/train_sounds.py.
+# siren_score = 0.3
+# dog_rest_s = 20
 
 [llm]
 model = "qwen3.5:4b"
@@ -168,7 +174,7 @@ frame_height = 720
 jpeg_quality = 80
 bubble_chars = 42
 bubble_lines = 2
-bubble_fade_s = 4
+bubble_fade_s = 2.5              # a bubble with no new words starts fading after this (or its reading time, if longer)
 
 # Save a person with a double tap (P-29, engine/attune/core/save_flow.py)
 [save]
@@ -191,6 +197,7 @@ word_settle_s = 1.5             # a split mid-talk keeps the last word for the n
                                 # (it may be half decoded) unless this much audio came after it
 
 [whisper]
+enabled = true                  # false: no Whisper fallback; an utterance Nemotron can't decode is dropped
 model_path = "models/faster-whisper-large-v3-turbo"
 device = "cpu"
 compute_type = "int8"

@@ -294,7 +294,7 @@ export function createMonoMode() {
         } else if (chip) {
           // nobody talking: the band has room to spell the sound out, large and heavy
           const more = view.alerts.filter((x) => x !== chip && !x.watch && x.level !== 'urgent');
-          strong(ctx, chip.acked ? 'Acknowledged' : chip.detail, LINE_X, BODY_Y + 6, F.alertLine, 1, 'left', 0.5, 1.4);
+          strong(ctx, chip.acked ? chip.ackText : chip.detail, LINE_X, BODY_Y + 6, F.alertLine, 1, 'left', 0.5, 1.4);
           if (more[0]) strong(ctx, `+ ${more[0].label} · ${more[0].detail}`, LINE_X, BODY_Y + LH + 14, F.alertMid, 0.9, 'left', 0, 1);
           if (!chip.acked && !footer) strong(ctx, 'A  ACKNOWLEDGE', VW - LINE_X, footY, F.alertSmall, 0.85, 'right', 2.5, 0.8);
         }

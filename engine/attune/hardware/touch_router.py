@@ -2,7 +2,8 @@
 
 Gesture map (TODO H-06, P-29):
 - tap = yes: acknowledge the active alert, else confirm the newest pending name proposal.
-- hold = no: the same targets, answered no (dismiss / reject).
+- hold = no: the same targets, answered no (reject a name; on an alert, stop it and mute that
+  sound for an hour, A-41).
 - double tap = save this person: ``touch.action`` {target: save, id: <proposal_id or None>}.
   The engine's save flow (core/save_flow.py) picks who: that proposal's face, else the named
   speaker, else the most prominent named face, and asks them for consent on the phone.

@@ -471,7 +471,7 @@ export async function createFilmSource({ assets, layer, emit, reset, setClock })
     /** Same commands as the engine link (docs/contracts.md section 4). */
     send(name, args = {}) {
       if (name === 'name.answer' && args.proposal_id != null) answers.set(args.proposal_id, { accept: !!args.accept, t: filmT });
-      else if (name === 'alert.ack' && args.alert_id != null) acks.set(args.alert_id, filmT);
+      else if ((name === 'alert.ack' || name === 'alert.snooze') && args.alert_id != null) acks.set(args.alert_id, filmT);
       else if (name === 'pause.toggle') {
         recogPaused = !recogPaused;
         emit({ type: 'paused', paused: recogPaused });

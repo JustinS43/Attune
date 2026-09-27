@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from attune.alerts.rhythm import RhythmDetector, RhythmEvidence
-from attune.alerts.rules import AlertRules
+from attune.alerts.rules import SOUNDS, AlertRules
 
 spec = importlib.util.spec_from_file_location(
     "tones", Path(__file__).parents[2] / "scripts/make_test_tones.py"
@@ -46,7 +46,9 @@ def test_smoke_needs_two_windows_and_beeps(config):
 def test_watch_is_only_status_and_motor_is_ignored(config):
     r = AlertRules(config["alerts"], 3)
     assert r.evaluate(0, {"Fire alarm": 0.4}, RhythmEvidence())[0][0] == "status.part"
-    assert not r.evaluate(1, {"Fire alarm": 1}, RhythmEvidence(t3_cycles=2), motor_on=True)
+    assert not r.evaluate(
+        1, {"Fire alarm": 1}, RhythmEvidence(t3_cycles=2), motor_on=True
+    )
 
 
 def test_acknowledge_realert_and_clear(config):
@@ -81,19 +83,25 @@ def test_alert_service_replayed_pcm_and_motor_suppression(config, bus):
     audio = np.asarray(tones.samples("T3", cycles=3), np.float32)
     for offset in range(0, len(audio), 1600):
         t = offset / 32000
-        service._handle("sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": False}, 0)
+        service._handle(
+            "sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": False}, 0
+        )
         service._handle(
             "audio.block",
             {"t": t, "sample_rate": 32000, "samples": audio[offset : offset + 1600]},
             0,
         )
-    alerts = [e for topic, e in bus.events if topic == "alert" and e["state"] == "start"]
+    alerts = [
+        e for topic, e in bus.events if topic == "alert" and e["state"] == "start"
+    ]
     assert alerts and alerts[0]["kind"] == "smoke"
     service._handle("session.forget", {}, 0)
     bus.events.clear()
     for offset in range(0, len(audio), 1600):
         t = offset / 32000
-        service._handle("sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": True}, 0)
+        service._handle(
+            "sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": True}, 0
+        )
         service._handle(
             "audio.block",
             {"t": t, "sample_rate": 32000, "samples": audio[offset : offset + 1600]},
@@ -167,13 +175,17 @@ def test_rhythm_only_service_confirms_by_seven_seconds(config, bus, kind):
     data = np.asarray(tones.samples(kind), np.float32)
     for offset in range(0, 7 * 32000, 1600):
         t = offset / 32000
-        service._handle("sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": False}, 0)
+        service._handle(
+            "sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": False}, 0
+        )
         service._handle(
             "audio.block",
             {"t": t, "sample_rate": 32000, "samples": data[offset : offset + 1600]},
             0,
         )
-    starts = [e for topic, e in bus.events if topic == "alert" and e["state"] == "start"]
+    starts = [
+        e for topic, e in bus.events if topic == "alert" and e["state"] == "start"
+    ]
     assert len(starts) == 1
     assert starts[0]["kind"] == ("smoke" if kind == "T3" else "co")
     assert starts[0]["side"] == "left"
@@ -195,12 +207,16 @@ def test_classifier_failure_consumes_window_and_recovers(config, bus):
     service = AlertService(bus, config, model=model)
     service.clock = lambda: 0.0
     service._handle(
-        "audio.block", {"t": 0, "sample_rate": 32000, "samples": np.zeros(32000, np.float32)}, 0
+        "audio.block",
+        {"t": 0, "sample_rate": 32000, "samples": np.zeros(32000, np.float32)},
+        0,
     )
     assert len(service.audio) == 16000
     assert "rhythm-only" in service.worker.error
     service._handle(
-        "audio.block", {"t": 1, "sample_rate": 32000, "samples": np.zeros(16000, np.float32)}, 0
+        "audio.block",
+        {"t": 1, "sample_rate": 32000, "samples": np.zeros(16000, np.float32)},
+        0,
     )
     assert model.calls == 2
     assert service.worker.error == ""
@@ -252,7 +268,11 @@ def test_sound_model_gets_up_to_ten_seconds_of_context(config, bus):
     for offset in range(0, len(audio), 1600):
         service._handle(
             "audio.block",
-            {"t": offset / 32000, "sample_rate": 32000, "samples": audio[offset : offset + 1600]},
+            {
+                "t": offset / 32000,
+                "sample_rate": 32000,
+                "samples": audio[offset : offset + 1600],
+            },
             0,
         )
     assert model.lengths[0] == 32000
@@ -264,7 +284,10 @@ def test_taps_cannot_clear_a_sounding_alarm(config):
     """A-28: the rig's own taps hide the room, so tapped windows can't show that an alarm
     stopped. The alert holds through them and clears only after heard quiet."""
     r = AlertRules(config["alerts"], 3)
-    assert r.evaluate(0, {}, RhythmEvidence(t3_cycles=2), (10, 1))[0][1]["state"] == "start"
+    assert (
+        r.evaluate(0, {}, RhythmEvidence(t3_cycles=2), (10, 1))[0][1]["state"]
+        == "start"
+    )
     for i in range(1, 121):  # a minute of tapping, a window every 0.5 s
         assert not r.evaluate(i / 2, {}, RhythmEvidence(), motor_on=True)
     assert r.active["smoke"]["side"] == "left"
@@ -289,15 +312,24 @@ def test_alarm_holds_while_the_rig_taps_until_got_it(config, bus):
     service = AlertService(bus, config, model=Model())
     service.clock = lambda: now[0]
     audio = np.concatenate(
-        (np.asarray(tones.samples("T3", cycles=15), np.float32), np.zeros(40 * 32000, np.float32))
+        (
+            np.asarray(tones.samples("T3", cycles=15), np.float32),
+            np.zeros(40 * 32000, np.float32),
+        )
     )
     seen: list[tuple[float, str, dict]] = []
     tapping = acked = False
     for offset in range(0, len(audio), 1600):
         t = now[0] = offset / 32000
-        if not acked and t >= 70:  # the wearer taps "Got it" 10 s after the alarm stopped
-            alert_id = next(e["alert_id"] for topic, e in bus.events if topic == "alert")
-            service._handle("command", {"name": "alert.ack", "args": {"alert_id": alert_id}}, 0)
+        if (
+            not acked and t >= 70
+        ):  # the wearer taps "Got it" 10 s after the alarm stopped
+            alert_id = next(
+                e["alert_id"] for topic, e in bus.events if topic == "alert"
+            )
+            service._handle(
+                "command", {"name": "alert.ack", "args": {"alert_id": alert_id}}, 0
+            )
             acked = True
         service._handle(
             "sensors.levels", {"t": t, "left": 100, "right": 10, "motor_on": tapping}, 0
@@ -324,7 +356,10 @@ def test_knock_fires_through_speech_with_the_bell_pattern(config):
     r = AlertRules(config["alerts"], 3)
     assert not r.evaluate(0, {"Knock": 0.09}, RhythmEvidence(), (10, 1))
     e = r.evaluate(0.5, {"Knock": 0.3, "Speech": 0.8}, RhythmEvidence(), (10, 1))
-    assert e[0] == ("alert", {**e[0][1], "kind": "knock", "side": "left", "state": "start"})
+    assert e[0] == (
+        "alert",
+        {**e[0][1], "kind": "knock", "side": "left", "state": "start"},
+    )
     assert e[0][1]["confidence"] == 0.3
     assert e[1] == ("hw.pattern", {"name": "BELL", "side": "L"})
 
@@ -336,7 +371,9 @@ def test_music_blocks_a_knock(config):
 
 
 def test_knock_rest_period_and_quiet_clear(config):
-    config["alerts"]["clear_quiet_s"] = 2.0  # shorter than the rest, so the rest is what holds
+    config["alerts"]["clear_quiet_s"] = (
+        2.0  # shorter than the rest, so the rest is what holds
+    )
     r = AlertRules(config["alerts"], 3)
     assert r.evaluate(0, {"Knock": 0.3}, RhythmEvidence())[0][1]["state"] == "start"
     assert not r.tick(1.9)
@@ -347,14 +384,18 @@ def test_knock_rest_period_and_quiet_clear(config):
     assert not r.evaluate(5, {"Knock": 0.3}, RhythmEvidence())
     assert "knock" not in r.active
     # ...while a doorbell has its own rest and still fires.
-    assert r.evaluate(5, {"Doorbell": 0.8}, RhythmEvidence())[0][1]["kind"] == "doorbell"
+    assert (
+        r.evaluate(5, {"Doorbell": 0.8}, RhythmEvidence())[0][1]["kind"] == "doorbell"
+    )
     assert r.evaluate(10, {"Knock": 0.3}, RhythmEvidence())[0][1]["kind"] == "knock"
 
 
 def test_knock_stays_up_while_heard_and_clears_after_quiet(config):
     r = AlertRules(config["alerts"], 3)
     r.evaluate(0, {"Knock": 0.3}, RhythmEvidence())
-    assert not r.evaluate(4, {"Knock": 0.2}, RhythmEvidence())  # still knocking: no repeat
+    assert not r.evaluate(
+        4, {"Knock": 0.2}, RhythmEvidence()
+    )  # still knocking: no repeat
     assert not r.tick(18.9)
     assert [e["state"] for topic, e in r.tick(19) if topic == "alert"] == ["clear"]
 
@@ -364,7 +405,9 @@ def test_knock_and_doorbell_fire_side_by_side(config):
     e = r.evaluate(0, {"Doorbell": 0.8, "Knock": 0.3}, RhythmEvidence(), (1, 10))
     starts = [ev["kind"] for topic, ev in e if topic == "alert"]
     assert starts == ["doorbell", "knock"]
-    assert [ev for topic, ev in e if topic == "hw.pattern"] == [{"name": "BELL", "side": "R"}] * 2
+    assert [ev for topic, ev in e if topic == "hw.pattern"] == [
+        {"name": "BELL", "side": "R"}
+    ] * 2
 
 
 def test_knock_side_comes_from_the_event_window_levels(config, bus):
@@ -379,14 +422,153 @@ def test_knock_side_comes_from_the_event_window_levels(config, bus):
     service.clock = lambda: 0.0
     for offset in range(0, 32000, 1600):
         t = offset / 32000
-        service._handle("sensors.levels", {"t": t, "left": 10, "right": 100, "motor_on": False}, 0)
+        service._handle(
+            "sensors.levels", {"t": t, "left": 10, "right": 100, "motor_on": False}, 0
+        )
         service._handle(
             "audio.block",
             {"t": t, "sample_rate": 32000, "samples": np.zeros(1600, np.float32)},
             0,
         )
     alerts = [e for topic, e in bus.events if topic == "alert"]
-    assert [(e["kind"], e["side"], e["state"]) for e in alerts] == [("knock", "right", "start")]
+    assert [(e["kind"], e["side"], e["state"]) for e in alerts] == [
+        ("knock", "right", "start")
+    ]
     assert ("hw.pattern", {"name": "BELL", "side": "R"}) in [
         (topic, e) for topic, e in bus.events if topic == "hw.pattern"
     ]
+
+
+# ---------------- A-40: everyday sounds ----------------
+def _fire(r, t, scores, side=(10, 1)):
+    return [
+        e
+        for topic, e in r.evaluate(t, scores, RhythmEvidence(), side)
+        if topic == "alert"
+    ]
+
+
+@pytest.mark.parametrize("kind", sorted(SOUNDS))
+def test_every_everyday_sound_fires_once_with_its_haptic(config, kind):
+    sound = SOUNDS[kind]
+    r = AlertRules(config["alerts"], 3)
+    scores = {sound.labels[-1]: sound.score + 0.05}  # any of its classes counts
+    out = []
+    for i in range(sound.hits):
+        out = r.evaluate(i * 0.5, scores, RhythmEvidence(), (10, 1))
+    assert out[0] == (
+        "alert",
+        {**out[0][1], "kind": kind, "side": "left", "state": "start"},
+    )
+    assert out[1] == ("hw.pattern", {"name": sound.haptic, "side": "L"})
+    assert not _fire(r, sound.hits * 0.5, scores)  # still heard: no repeat
+
+
+def test_sounds_below_threshold_or_under_music_stay_quiet(config):
+    r = AlertRules(config["alerts"], 3)
+    assert not _fire(r, 0, {"Baby cry, infant cry": 0.29})
+    assert not _fire(r, 0.5, {"Bark": 0.9, "Music": 0.6})  # a song with barking in it
+    assert _fire(
+        r, 1, {"Telephone bell ringing": 0.5, "Music": 0.9}
+    )  # ringtones are music
+
+
+def test_water_needs_three_windows_running(config):
+    r = AlertRules(config["alerts"], 3)
+    tap = {"Water tap, faucet": 0.6}
+    assert not _fire(r, 0, tap)
+    assert not _fire(r, 0.5, {})
+    assert not _fire(r, 1, tap)
+    assert not _fire(r, 1.5, tap)
+    assert _fire(r, 2, tap)[0]["kind"] == "water"
+
+
+def test_a_smoke_alarm_is_not_also_a_kitchen_timer(config):
+    r = AlertRules(config["alerts"], 3)
+    beeps = {"Beep, bleep": 0.9, "Smoke detector, smoke alarm": 0.4}  # past watch_score
+    assert not any(
+        e["kind"] == "timer" for i in range(4) for e in _fire(r, i * 0.5, beeps)
+    )
+
+
+def test_quick_sounds_clear_fast_and_rest_before_repeating(config):
+    r = AlertRules(config["alerts"], 3)
+    assert _fire(r, 0, {"Vehicle horn, car horn, honking": 0.8})[0]["kind"] == "horn"
+    assert not r.tick(3.9)
+    assert [e["state"] for topic, e in r.tick(4) if topic == "alert"] == ["clear"]
+    assert not _fire(
+        r, 5, {"Vehicle horn, car horn, honking": 0.8}
+    )  # within its 6 s rest
+    assert _fire(r, 6, {"Vehicle horn, car horn, honking": 0.8})[0]["kind"] == "horn"
+
+
+def test_config_overrides_an_everyday_sound(config):
+    config["alerts"]["dog_score"] = 0.8  # tuned by scripts/train_sounds.py
+    r = AlertRules(config["alerts"], 3)
+    assert not _fire(r, 0, {"Bark": 0.6})
+    assert _fire(r, 0.5, {"Bark": 0.85})[0]["kind"] == "dog"
+
+
+def test_everyday_sounds_take_their_side_from_levels(config):
+    r = AlertRules(config["alerts"], 3)
+    assert r.heard({"Screaming": 0.5})
+    assert not r.heard({"Screaming": 0.1, "Speech": 0.9})
+
+
+# ---------------- A-41: hold to mute a sound for an hour ----------------
+def test_hold_stops_the_alert_and_mutes_that_sound_for_an_hour(config):
+    r = AlertRules(config["alerts"], 3)
+    alert_id = _fire(r, 0, {"Baby cry, infant cry": 0.8})[0]["alert_id"]
+    out = r.snooze(alert_id, 1)
+    assert out[0] == (
+        "alert",
+        {**out[0][1], "kind": "baby", "state": "acknowledged", "snooze_s": 3600},
+    )
+    assert out[1:] == [("hw.stop", {}), ("hw.pattern", {"name": "OK", "side": "B"})]
+    assert "baby" not in r.active
+    assert not _fire(r, 30, {"Baby cry, infant cry": 0.9})  # crying again: still muted
+    assert not _fire(r, 3600, {"Baby cry, infant cry": 0.9})
+    assert (
+        _fire(r, 3601, {"Bark": 0.9})[0]["kind"] == "dog"
+    )  # other sounds are not muted
+    assert (
+        _fire(r, 3601.5, {"Baby cry, infant cry": 0.9})[0]["kind"] == "baby"
+    )  # the hour is up
+
+
+def test_a_held_smoke_alarm_stays_quiet_for_the_hour(config):
+    r = AlertRules(config["alerts"], 3)
+    t3 = RhythmEvidence(t3_cycles=2)
+    alert_id = next(e for topic, e in r.evaluate(0, {}, t3) if topic == "alert")[
+        "alert_id"
+    ]
+    r.snooze(alert_id, 1)
+    assert not any(
+        topic == "alert" for topic, _ in r.evaluate(20, {"Fire alarm": 0.9}, t3)
+    )
+    assert not any(
+        e.get("part") == "alerts.watch"
+        for _, e in r.evaluate(21, {"Fire alarm": 0.4}, RhythmEvidence())
+    )
+    assert r.snooze("no-such-alert", 22) == []
+
+
+def test_touch_hold_mutes_and_tap_acknowledges(bus, config):
+    from attune.alerts.service import AlertService
+
+    service = AlertService(bus, config, model=None)
+    service.clock = lambda: 5.0
+    first = _fire(service.rules, 0, {"Bark": 0.9})[0]["alert_id"]
+    service._handle("touch.action", {"target": "alert", "id": first, "accept": True}, 0)
+    assert "snooze_s" not in bus.events[-2][1]  # a tap: acknowledged, not muted
+    _fire(service.rules, 1, {"Siren": 0.9})  # a siren needs two windows
+    second = _fire(service.rules, 1.5, {"Siren": 0.9})[0]["alert_id"]
+    service._handle(
+        "touch.action", {"target": "alert", "id": second, "accept": False}, 0
+    )
+    muted = [e for topic, e in bus.events if topic == "alert" and e.get("snooze_s")]
+    assert [e["kind"] for e in muted] == ["siren"]
+    assert service.rules.muted("siren", 100) and not service.rules.muted("dog", 100)
+    service._handle(
+        "command", {"name": "alert.snooze", "args": {"alert_id": "gone"}}, 0
+    )  # no-op
