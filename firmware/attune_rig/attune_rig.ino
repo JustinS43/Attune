@@ -690,7 +690,7 @@ void trackSoundSample(uint16_t value, uint16_t &low, uint16_t &nextLow,
 }
 
 void sampleSound() {
-  // The ADC multiplexer switches between A0 and A1. Discard the first conversion
+  // The ADC multiplexer switches between A2 and A0. Discard the first conversion
   // on each channel so the previous channel cannot contaminate the reading.
   analogRead(PIN_SOUND_L);
   uint16_t left = analogRead(PIN_SOUND_L);

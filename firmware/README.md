@@ -126,10 +126,11 @@ If the compile complains about a driver-library call, the four calls used are
   watchdog dropped a live link on about 1 % of heartbeats (an alarm stopped about once a
   minute) and a one-shot pattern was sometimes skipped (fixed in 1.1.1).
 - **Levels:** both sound sensors are sampled every loop; the first ADC conversion after
-  switching A0/A1 is discarded. Every `rate` ms (default 50) the board prints
+  switching A2/A0 is discarded. Every `rate` ms (default 50) the board prints
   `LV <ms> <left> <right> <motor>` with each side's peak-to-peak (0–1023), ignoring one
   isolated highest and lowest sample per window. The readings are not gain-balanced;
-  check which physical mic reaches A0/A1 before interpreting direction. `motor` is 1 if
+  check that the left mic reaches A2 and the right mic reaches A0 before interpreting
+  direction. `motor` is 1 if
   the motor ran (or the servo was attached) at any time in that window.
 - **Touch:** tap (< `tap_ms`, default 400), hold (≥ `hold_ms`, default 800, sent while still
   held), double (second tap starts within `tap_ms` of the first), triple (a third tap within
