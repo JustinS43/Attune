@@ -12,6 +12,11 @@ ADDRESS = re.compile(
 )
 VOCATIVE = re.compile(r"^\s*([A-Za-z][a-z]{1,24})\s*,")
 SELF_INTRO = r"\b(?:i['’]m|i\s+am|my\s+name(?:\s+is)?|call\s+me|me\s+llamo|soy)\s+"
+DIRECT_INTRO = re.compile(
+    r"(?i:\b(?:i['’]m|i\s+am|my\s+name\s+is))\s+"
+    r"([A-Za-z][A-Za-z'’-]{1,24}(?:\s+[A-Z][a-z'’-]{1,24}){0,2})"
+    r"(?![\w'’\-])",
+)
 SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -140,6 +145,31 @@ class Names:
         }
         self.pending[event["proposal_id"]] = event
         return dict(event)
+
+    def direct(self, caption: dict, now: float) -> dict | None:
+        """Offer an unambiguous self introduction without waiting for Ollama."""
+        if not self.eligible(caption):
+            return None
+        for match in DIRECT_INTRO.finditer(caption["text"]):
+            name = match.group(1)
+            # Possessives describe somebody else: "I'm Sam's sister" is not Sam.
+            # Leave an uncapitalized continuation to the model: offering "Maya"
+            # for "maya chen" would make the first visible proposal misleading.
+            tail = caption["text"][match.end() :]
+            next_word = re.match(r"\s+([A-Za-z]+)\b", tail)
+            if (
+                any(word.casefold() in self.stoplist for word in name.split())
+                or any(word.endswith(("'s", "’s")) for word in name.split())
+                or (next_word and next_word.group(1).casefold() not in self.stoplist)
+            ):
+                continue
+            if name.islower():
+                name = name.capitalize()
+            answer = {"is_intro": True, "name": name, "whose": "speaker", "confidence": 1.0}
+            proposal = self.propose(caption, answer, now)
+            if proposal:
+                return proposal
+        return None
 
     def grounded(self, caption: dict, answer: dict) -> str | None:
         """The actual name in a model answer, validated against transcript words."""
