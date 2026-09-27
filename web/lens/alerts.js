@@ -1,25 +1,35 @@
 /*
  * Alert banners, name proposals, the paused state and the status pill (full-colour AR mode).
  *
- * Section 4 - Pages, Engine & Demo. TODO: P-08.
+ * Section 4 - Pages, Engine & Demo. TODO: P-08, P-44 (Daylight look).
  *
- * - Doorbell and other sounds: a glass chip at the top with the sound's icon, where it came
- *   from, an arrow toward `side` (L / R / B), an edge glow on that side and the A keycap.
- * - Smoke and CO: a large red card that pulses in the T3 rhythm, a red vignette and edge glow
- *   toward the source, and a haptic chip. Acknowledged alerts calm down, then fade.
+ * - Doorbell, door knock and other sounds: a bright paper chip at the top with the sound's icon
+ *   on a coloured disc, where it came from, an arrow toward `side` (L / R / B), a soft edge glow
+ *   on that side and the A keycap.
+ * - Smoke and CO: a large coral card that pulses in the T3 rhythm, a red vignette and edge glow
+ *   toward the source, and a haptic chip. Acknowledged alerts turn green, calm down, then fade.
  * - Name proposals for a face that is not in view: "Is this Sam?" with Y / N keycaps.
- * - Paused: the video dims (lens.css) and a pause chip explains that nothing is recognised.
+ * - Paused: a pause chip explains that nothing is recognised.
  * - Calm while people talk: the status pill, sound chips and their arrows stand still. Only the
  *   smoke / CO card keeps its T3 flash, a deliberate safety signal.
+ * - Nothing jumps: when a toast or an alert arrives or leaves, the others glide to their new
+ *   places (critically damped, about 0.25 s) instead of snapping.
  */
 
 import {
-  FD, FT, MINT, AMBER, RED, ACCENT, font, clamp, easeOut, hexA, rrect, textW, glass, icon, eqBars,
-  logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX, REGION, REDUCED_MOTION,
+  FD, FT, font, clamp, easeOut, hexA, rrect, textW, glass, icon, eqBars,
+  logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX, REGION, REDUCED_MOTION, springStep,
+  INK, INK_2, INK_3, TEAL, SUN, CORAL, LEAF, deepen,
 } from './hud.js';
 
 const SIDE_WORD = { left: 'Left', right: 'Right', behind: 'Behind', none: 'Nearby' };
 const SIDE_ANGLE = { left: Math.PI, right: 0, behind: Math.PI / 2, none: -Math.PI / 2 };
+const MOVE_W = 16; // stack glide stiffness (rad/s): about 0.25 s
+/** Semantic colours on paper: the lens model's alert colours mapped to the Daylight accents. */
+const TONE = { '#FF4D4F': CORAL, '#FFC857': SUN, '#FF9F43': '#F28A2E', '#7CC8FF': '#3A95F0', '#8FF3E0': TEAL, '#7CF5D6': TEAL };
+const tone = (c) => TONE[c] ?? c;
+/** White reads on the deeper accents; ink reads better on sunny yellow. */
+const iconOn = (c) => (c === SUN ? INK : '#FFFFFF');
 
 /** T3 smoke-alarm rhythm: three beeps (0.5 s on, 0.5 s off) then 1.5 s silence. Returns 0..1. */
 export function t3Flash(age) {
@@ -28,6 +38,30 @@ export function t3Flash(age) {
   const bl = lt % 1;
   return beep ? 0.55 + 0.45 * Math.cos((bl / 0.5) * Math.PI * 0.5) : Math.max(0, 0.35 - (bl - 0.5) * 0.7);
 }
+
+/**
+ * Where each stacked item (toast, alert, proposal) sits: it glides to its target y; a new one
+ * starts right there. Keep one per glasses mode instance (createStack), so offline renders
+ * start clean.
+ */
+export function createStack() {
+  const items = new Map();
+  return {
+    y(key, target, dt, anim) {
+      let s = items.get(key);
+      if (!s || REDUCED_MOTION) {
+        s = { y: target, v: 0 };
+        items.set(key, s);
+      } else [s.y, s.v] = springStep(s.y, s.v, target, dt, MOVE_W);
+      s.seen = anim;
+      return s.y;
+    },
+    sweep(anim) {
+      for (const [k, s] of items) if (anim - s.seen > 1) items.delete(k);
+    },
+  };
+}
+const fallbackStack = createStack();
 
 // ---------------------------------------------------------------- status pill (top-left of the display)
 // The speech glyph is still: it rises or settles (about 0.2 s) only when speech starts or stops,
@@ -48,49 +82,54 @@ export function drawStatus(ctx, blur, view, anim, a = 1) {
   const y = REGION.y + 22;
   const h = 54;
   const labels = { listening: 'Listening', paused: 'Paused', alert: 'Sound alert', connecting: 'Connecting…' };
-  const colors = { listening: MINT, paused: 'rgba(255,255,255,0.55)', alert: view.activeAlert?.level === 'urgent' ? RED : AMBER, connecting: AMBER };
+  const colors = { listening: LEAF, paused: INK_3, alert: view.activeAlert?.level === 'urgent' ? CORAL : SUN, connecting: SUN };
   const label = labels[view.status];
-  const lf = font(500, 19, FT);
+  const lf = font(560, 19, FT);
   const labelW = Math.max(textW(ctx, 'Listening', lf), textW(ctx, label, lf));
   const barsX = x + 180 + labelW + 14;
   const lockX = barsX + 40;
   const w = lockX + 18 + 22 - x;
-  glass(ctx, blur, x, y, w, h, h / 2, { alpha: a * 0.96, tint: 'rgba(14,16,22,0.44)' });
+  glass(ctx, blur, x, y, w, h, h / 2, { alpha: a * 0.97 });
   ctx.save();
   ctx.globalAlpha *= a;
   logoMark(ctx, x + 30, y + h / 2, 13.5, 1, 1);
-  ctx.font = font(640, 23, FD);
+  ctx.font = font(680, 23, FD);
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = INK;
   ctx.fillText('Attune', x + 54, y + h / 2 + 1);
-  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillStyle = 'rgba(22,32,46,0.14)';
   ctx.fillRect(x + 146, y + 15, 1.5, h - 30);
   if (view.status === 'paused') {
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillStyle = INK_3;
     ctx.fillRect(x + 161, y + h / 2 - 6, 3.5, 12);
     ctx.fillRect(x + 168, y + h / 2 - 6, 3.5, 12);
   } else {
+    // the status dot sits on a soft halo of its own colour
+    ctx.fillStyle = hexA(colors[view.status], 0.2);
+    ctx.beginPath();
+    ctx.arc(x + 166, y + h / 2, 9, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = colors[view.status];
     ctx.beginPath();
     ctx.arc(x + 166, y + h / 2, 5, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.font = lf;
-  ctx.fillStyle = 'rgba(255,255,255,0.86)';
+  ctx.fillStyle = INK_2;
   ctx.fillText(label, x + 180, y + h / 2 + 1);
   const speech = speechLevel(view.status !== 'paused' && !!view.speaking, anim);
-  eqBars(ctx, barsX, y + h / 2, 'rgba(255,255,255,0.8)', 0.6, view.status === 'paused' ? 0 : 0.25 + 0.75 * speech, 16);
-  icon(ctx, 'lock', lockX, y + h / 2 - 9, 18, 'rgba(255,255,255,0.7)', 2.2);
+  eqBars(ctx, barsX, y + h / 2, INK_3, 0.6, view.status === 'paused' ? 0 : 0.25 + 0.75 * speech, 16);
+  icon(ctx, 'lock', lockX, y + h / 2 - 9, 18, INK_3, 2.2);
   ctx.restore();
 }
 
 // ---------------------------------------------------------------- alerts
 /** A round chip with an arrow toward `side`. Still, unless `nudge` (the smoke / CO card only). */
-function directionChip(ctx, cx, cy, r, side, color, anim, a = 1, nudge = false) {
+function directionChip(ctx, cx, cy, r, side, color, anim, a = 1, nudge = false, onColor = false) {
   ctx.save();
   ctx.globalAlpha *= a;
-  ctx.fillStyle = hexA(color, 0.16);
-  ctx.strokeStyle = hexA(color, 0.6);
+  ctx.fillStyle = onColor ? 'rgba(255,255,255,0.22)' : hexA(color, 0.14);
+  ctx.strokeStyle = onColor ? 'rgba(255,255,255,0.7)' : hexA(deepen(color, 0.2), 0.5);
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -98,14 +137,14 @@ function directionChip(ctx, cx, cy, r, side, color, anim, a = 1, nudge = false) 
   ctx.stroke();
   const ang = SIDE_ANGLE[side] ?? -Math.PI / 2;
   const off = nudge ? Math.sin(anim * 6) * r * 0.1 : 0;
-  arrow(ctx, cx + Math.cos(ang) * off, cy + Math.sin(ang) * off, r * 1.05, ang, color, r * 0.13);
+  arrow(ctx, cx + Math.cos(ang) * off, cy + Math.sin(ang) * off, r * 1.05, ang, onColor ? '#FFFFFF' : deepen(color, 0.3), r * 0.13);
   ctx.restore();
 }
 
 function urgentCard(ctx, blur, al, y, anim, dim) {
   const a = al.alpha * dim;
   const flash = al.acked ? 0 : t3Flash(al.age);
-  const color = al.acked ? MINT : al.color;
+  const color = al.acked ? LEAF : CORAL;
   if (!al.acked) {
     ctx.save();
     const R = REGION;
@@ -113,56 +152,75 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
     const cy = R.y + R.h / 2;
     const g = ctx.createRadialGradient(cx, cy, R.h * 0.42, cx, cy, R.w * 0.62);
     g.addColorStop(0, 'rgba(255,40,50,0)');
-    g.addColorStop(1, `rgba(255,40,50,${0.55 * a * flash})`);
+    g.addColorStop(1, `rgba(255,40,50,${0.5 * a * flash})`);
     ctx.fillStyle = g;
     ctx.fillRect(R.x, R.y, R.w, R.h);
     ctx.restore();
-    edgeGlow(ctx, al.side, RED, a * (0.5 + 0.5 * flash), 640);
+    edgeGlow(ctx, al.side, CORAL, a * (0.5 + 0.5 * flash), 640);
   }
   const w = 780;
   const h = 150;
   const x = REGION.x + REGION.w / 2 - w / 2;
   const yy = y + (1 - easeOut(clamp(al.age / 0.3))) * -30;
-  glass(ctx, blur, x, yy, w, h, 36, {
-    alpha: a, glow: color, tint: al.acked ? 'rgba(12,20,18,0.58)' : 'rgba(28,10,12,0.6)',
-    border: hexA(color, al.acked ? 0.45 : 0.35 + 0.5 * flash),
-  });
+  // a solid coral (or, acknowledged, green) card: the one panel that is not paper, on purpose
   ctx.save();
   ctx.globalAlpha *= a;
+  ctx.save();
+  ctx.shadowColor = hexA(color, 0.45 + 0.35 * flash);
+  ctx.shadowBlur = (30 + 26 * flash) * PX;
+  ctx.shadowOffsetY = 10 * PX;
+  rrect(ctx, x, yy, w, h, 36);
+  const g = ctx.createLinearGradient(x, yy, x + w, yy + h);
+  if (al.acked) {
+    g.addColorStop(0, '#2BC47C');
+    g.addColorStop(1, '#159A5B');
+  } else {
+    g.addColorStop(0, '#FF6A4D');
+    g.addColorStop(1, '#E8363A');
+  }
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.restore();
+  rrect(ctx, x, yy, w, h, 36);
+  const sheen = ctx.createLinearGradient(0, yy, 0, yy + h);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.45 * flash})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
   const icx = x + 82;
   const icy = yy + h / 2;
-  if (!al.acked) ripples(ctx, icx, icy, 40, RED, anim, 1, 3, 1.0);
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 26 * flash * PX;
-  ctx.fillStyle = color;
+  if (!al.acked) ripples(ctx, icx, icy, 40, '#FFFFFF', anim, 0.8, 3, 1.0);
+  ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
   ctx.arc(icx, icy, 40, 0, Math.PI * 2);
   ctx.fill();
-  ctx.shadowBlur = 0;
-  icon(ctx, al.acked ? 'check' : al.icon, icx - 22, icy - 23, 44, al.acked ? '#0B1A17' : '#FFFFFF', 2.4);
+  icon(ctx, al.acked ? 'check' : al.icon, icx - 22, icy - 23, 44, color, 2.6);
   ctx.textBaseline = 'middle';
-  ctx.font = font(720, 46, FD);
+  ctx.font = font(740, 46, FD);
   ctx.fillStyle = '#FFFFFF';
   ctx.fillText(al.label, x + 150, yy + 56);
-  ctx.font = font(480, 25, FT);
-  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.font = font(520, 25, FT);
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
   ctx.fillText(al.acked ? 'Acknowledged' : al.detail, x + 152, yy + 102);
   // direction block
-  directionChip(ctx, x + w - 78, yy + h / 2 - 12, 32, al.side, color, anim, 1, !al.acked); // safety: keeps moving
-  ctx.font = font(600, 18, FT);
+  directionChip(ctx, x + w - 78, yy + h / 2 - 12, 32, al.side, color, anim, 1, !al.acked, true); // safety: keeps moving
+  ctx.font = font(650, 18, FT);
   ctx.textAlign = 'center';
-  ctx.fillStyle = hexA(color, 0.95);
+  ctx.fillStyle = '#FFFFFF';
   ctx.fillText(SIDE_WORD[al.side] ?? '', x + w - 78, yy + h / 2 + 40);
   ctx.textAlign = 'left';
   ctx.restore();
   // haptic + acknowledge chip
   const parts = al.acked
-    ? [{ icon: 'check', color: MINT }, { text: 'Acknowledged', font: font(560, 20, FT), color: 'rgba(255,255,255,0.9)' }]
+    ? [{ icon: 'check', color: '#FFFFFF', bg: LEAF }, { text: 'Acknowledged', font: font(600, 20, FT), color: INK }]
     : [
-      { icon: 'wave', color: RED },
-      { text: 'Haptic alert on', font: font(560, 20, FT), color: 'rgba(255,255,255,0.9)', gap: 18 },
+      { icon: 'wave', color: '#FFFFFF', bg: CORAL },
+      { text: 'Haptic alert on', font: font(600, 20, FT), color: INK, gap: 18 },
       { key: 'A', gap: 8 },
-      { text: 'acknowledge', font: font(450, 19, FT), color: 'rgba(255,255,255,0.62)' },
+      { text: 'acknowledge', font: font(480, 19, FT), color: INK_3 },
     ];
   pill(ctx, blur, REGION.x + REGION.w / 2, yy + h + 18, 46, parts, { a: a * clamp((al.age - 0.35) / 0.3), align: 'center' });
   return { x, y: yy, w, h: h + 70 };
@@ -170,15 +228,15 @@ function urgentCard(ctx, blur, al, y, anim, dim) {
 
 function chipAlert(ctx, blur, al, y, anim, dim) {
   const a = al.alpha * dim;
-  const color = al.acked ? MINT : al.color;
-  if (!al.acked && !al.watch) edgeGlow(ctx, al.side, color, a * 0.6, 560); // steady
+  const color = al.acked ? LEAF : tone(al.color);
+  if (!al.acked && !al.watch) edgeGlow(ctx, al.side, color, a * 0.5, 560); // steady
   const h = al.watch ? 56 : 72;
   const parts = [
-    { icon: al.acked ? 'check' : al.icon, color: '#141414', bg: color },
-    { text: al.watch ? `Watching for ${al.label.toLowerCase()}` : al.label, font: font(660, al.watch ? 24 : 30, FD), color: '#FFFFFF' },
+    { icon: al.acked ? 'check' : al.icon, color: al.acked ? '#FFFFFF' : iconOn(color), bg: color },
+    { text: al.watch ? `Watching for ${al.label.toLowerCase()}` : al.label, font: font(680, al.watch ? 24 : 30, FD), color: INK },
   ];
-  if (!al.watch) parts.push({ text: al.acked ? 'Acknowledged' : al.detail, font: font(450, 24, FT), color: 'rgba(255,255,255,0.68)' });
-  if (al.count > 1 && !al.acked) parts.push({ text: `×${al.count}`, font: font(700, 24, FT), color });
+  if (!al.watch) parts.push({ text: al.acked ? 'Acknowledged' : al.detail, font: font(480, 24, FT), color: INK_2 });
+  if (al.count > 1 && !al.acked) parts.push({ text: `×${al.count}`, font: font(720, 24, FT), color: deepen(color, 0.3) });
   let slot = -1;
   if (!al.acked && !al.watch) {
     slot = parts.length;
@@ -195,38 +253,44 @@ function chipAlert(ctx, blur, al, y, anim, dim) {
 }
 
 /** Draw every active alert; returns the rects they cover (obstacles for the bubbles). */
-export function drawAlerts(ctx, blur, view, anim, topY = REGION.y + 88) {
+export function drawAlerts(ctx, blur, view, anim, topY = REGION.y + 88, stack = fallbackStack) {
   const dim = view.paused ? 0.6 : 1;
+  const dt = view.dt ?? 1 / 60;
   const rects = [];
   let y = topY;
   for (const al of view.alerts) {
-    const r = al.level === 'urgent' && !al.watch ? urgentCard(ctx, blur, al, y + 14, anim, dim) : chipAlert(ctx, blur, al, y, anim, dim);
+    const urgent = al.level === 'urgent' && !al.watch;
+    const at = stack.y(`a${al.id}`, y, dt, anim);
+    const r = urgent ? urgentCard(ctx, blur, al, at + 14, anim, dim) : chipAlert(ctx, blur, al, at, anim, dim);
     rects.push(r);
-    y = r.y + r.h + 16;
+    y += (urgent ? 14 : 0) + r.h + 16;
   }
   // proposals whose face is not in view
   for (const p of view.proposals) {
     const confirmed = p.state === 'confirmed';
     const parts = p.state === 'proposed'
       ? [
-        { icon: 'userplus', color: '#0B1A17', bg: ACCENT },
-        { text: `Is this ${p.name}?`, font: font(620, 26, FD), color: '#FFFFFF', gap: 18 },
-        { key: 'Y', gap: 6 }, { text: 'yes', font: font(450, 20, FT), color: 'rgba(255,255,255,0.6)', gap: 14 },
-        { key: 'N', gap: 6 }, { text: 'no', font: font(450, 20, FT), color: 'rgba(255,255,255,0.6)' },
+        { icon: 'userplus', color: '#FFFFFF', bg: TEAL },
+        { text: `Is this ${p.name}?`, font: font(660, 26, FD), color: INK, gap: 18 },
+        { key: 'Y', gap: 6 }, { text: 'yes', font: font(480, 20, FT), color: INK_3, gap: 14 },
+        { key: 'N', gap: 6 }, { text: 'no', font: font(480, 20, FT), color: INK_3 },
       ]
       : [
-        { icon: confirmed ? 'check' : 'cross', color: '#0B1A17', bg: confirmed ? MINT : 'rgba(255,255,255,0.7)' },
-        { text: confirmed ? `${p.name} added to your people` : `Not ${p.name}`, font: font(620, 24, FD), color: '#FFFFFF' },
+        { icon: confirmed ? 'check' : 'cross', color: '#FFFFFF', bg: confirmed ? LEAF : INK_3 },
+        { text: confirmed ? `${p.name} added to your people` : `Not ${p.name}`, font: font(660, 24, FD), color: INK },
       ];
-    const r = pill(ctx, blur, REGION.x + REGION.w / 2, y, 58, parts, { a: p.alpha, align: 'center', glow: ACCENT });
+    const at = stack.y(`p${p.id}`, y, dt, anim);
+    const r = pill(ctx, blur, REGION.x + REGION.w / 2, at, 58, parts, { a: p.alpha, align: 'center', glow: confirmed ? LEAF : TEAL });
     rects.push(r);
     y += 74;
   }
+  stack.sweep(anim);
   return rects;
 }
 
 // ---------------------------------------------------------------- toasts (top centre)
-export function drawToasts(ctx, blur, view, anim, topY = REGION.y + 22) {
+export function drawToasts(ctx, blur, view, anim, topY = REGION.y + 22, stack = fallbackStack) {
+  const dt = view.dt ?? 1 / 60;
   let y = topY;
   const rects = [];
   for (const t of view.toasts) {
@@ -234,17 +298,20 @@ export function drawToasts(ctx, blur, view, anim, topY = REGION.y + 22) {
     if (a <= 0) continue;
     let parts;
     if (t.kind === 'learned') {
+      // a person's own colour on the disc, with an ink icon (their pastel is too light for white)
       parts = [
-        { icon: 'userplus', color: '#0B1A17', bg: t.color },
-        { text: `${t.text} ${t.enrolled ? 'saved to your people' : 'added to your people'}`, font: font(620, 24, FD), color: '#FFFFFF' },
+        { icon: 'userplus', color: INK, bg: t.color },
+        { text: `${t.text} ${t.enrolled ? 'saved to your people' : 'added to your people'}`, font: font(660, 24, FD), color: INK },
       ];
-      if (t.relation) parts.push({ text: `·  ${t.relation}`, font: font(430, 21, FT), color: 'rgba(255,255,255,0.62)' });
+      if (t.relation) parts.push({ text: `·  ${t.relation}`, font: font(480, 21, FT), color: INK_2 });
     } else {
-      parts = [{ icon: t.icon ?? 'check', color: '#0B1A17', bg: t.color ?? MINT }, { text: t.text, font: font(600, 23, FD), color: '#FFFFFF' }];
+      const bg = t.color ? tone(t.color) : LEAF;
+      parts = [{ icon: t.icon ?? 'check', color: iconOn(bg), bg }, { text: t.text, font: font(640, 23, FD), color: INK }];
     }
+    const at = stack.y(`t${t.t}${t.text}`, y, dt, anim);
     ctx.save();
     ctx.translate(0, (1 - easeOut(a)) * -18);
-    rects.push(pill(ctx, blur, REGION.x + REGION.w / 2, y, 56, parts, { a, align: 'center', glow: t.color ?? MINT }));
+    rects.push(pill(ctx, blur, REGION.x + REGION.w / 2, at, 56, parts, { a, align: 'center', glow: t.kind === 'learned' ? t.color : LEAF }));
     ctx.restore();
     y += 66;
   }
@@ -257,11 +324,11 @@ export function drawPaused(ctx, blur, view, anim) {
   const a = clamp(view.pausedAge / 0.3);
   const y = REGION.y + REGION.h / 2 - 36;
   const parts = [
-    { icon: 'pause', color: '#FFFFFF', bg: 'rgba(255,255,255,0.18)' },
-    { text: 'Paused', font: font(680, 30, FD), color: '#FFFFFF', gap: 14 },
-    { text: 'Nothing is being recognised', font: font(450, 23, FT), color: 'rgba(255,255,255,0.7)', gap: 22 },
+    { icon: 'pause', color: '#FFFFFF', bg: INK_3 },
+    { text: 'Paused', font: font(700, 30, FD), color: INK, gap: 14 },
+    { text: 'Nothing is being recognised', font: font(480, 23, FT), color: INK_2, gap: 22 },
     { key: 'P', gap: 6 },
-    { text: 'resume', font: font(450, 20, FT), color: 'rgba(255,255,255,0.6)' },
+    { text: 'resume', font: font(480, 20, FT), color: INK_3 },
   ];
   pill(ctx, blur, REGION.x + REGION.w / 2, y, 72, parts, { a, align: 'center' });
 }

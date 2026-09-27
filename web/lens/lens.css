@@ -560,3 +560,56 @@ body.chrome-hidden {
   font: 450 12.5px/1.4 var(--attune-font-text);
   color: var(--attune-text-3);
 }
+
+/* ------------------------------------------------------------ Daylight chrome (P-44)
+   The demo chrome matches the lens's bright, hopeful look: paper panels, deep ink text, teal.
+   Tokens are overridden here only, so the shared theme and the other pages keep their look. */
+.notice,
+.chrome,
+.help {
+  --attune-glass: rgba(255, 255, 255, 0.84);
+  --attune-glass-strong: rgba(255, 255, 255, 0.92);
+  --attune-border: rgba(255, 255, 255, 0.9);
+  --attune-border-strong: rgba(22, 32, 46, 0.16);
+  --attune-shadow: 0 10px 32px rgba(22, 32, 46, 0.18), 0 1px 3px rgba(22, 32, 46, 0.1);
+  --attune-text: #16202e;
+  --attune-text-2: #4a586b;
+  --attune-text-3: #7b8798;
+  --attune-accent: #0b8f80;
+  --attune-mint: #0ea897;
+  --attune-brand: linear-gradient(135deg, #14b8a6, #2f80ed);
+  color: var(--attune-text);
+}
+
+.notice .attune-glass,
+.notice.attune-glass,
+.chrome .attune-glass,
+.help.attune-glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 45%),
+    var(--attune-glass);
+}
+
+.chrome .seg,
+.chrome .help-btn {
+  background: rgba(22, 32, 46, 0.05);
+}
+
+.chrome .seg button:hover,
+.chrome .help-btn:hover,
+.chrome .icon-btn:hover {
+  background: rgba(22, 32, 46, 0.07);
+}
+
+.chrome .seg button[aria-pressed="true"] {
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(47, 128, 237, 0.28);
+}
+
+.chrome .scene-bar {
+  background: rgba(22, 32, 46, 0.1);
+}
+
+.chrome .mode-swatch {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 2px 6px rgba(22, 32, 46, 0.15);
+}

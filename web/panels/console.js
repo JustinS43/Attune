@@ -16,7 +16,7 @@ const PATTERN_HINT = { T3: 'Smoke (3 pulses)', T4: 'CO (4 pulses)', BELL: 'Doorb
 const SIDES = [['L', 'Left'], ['B', 'Both'], ['R', 'Right']];
 const SWITCHES = [
   ['translation', 'Translation', 'Show English under other languages'],
-  ['alerts', 'Sound alerts', 'Smoke, CO and doorbell banners + buzz'],
+  ['alerts', 'Sound alerts', 'Smoke, CO, doorbell and knock banners + buzz'],
   ['debug', 'Debug overlay', 'Boxes, scores and timings on the lens'],
 ];
 const LANGS = [['en', 'English'], ['es', 'Spanish']];

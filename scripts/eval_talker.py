@@ -639,8 +639,10 @@ def _cpu_only(args, vision: dict) -> None:
         mod.make_session = make_session
 
 
-def engine_run(args, truth: Truth) -> dict:
-    """Run the engine on the clip and return what the WebSocket carried."""
+def engine_run(args, truth: Truth, on_engine=None) -> dict:
+    """Run the engine on the clip and return what the WebSocket carried.
+
+    `on_engine(engine)` is called before the engine starts (to listen on its bus)."""
     import cv2
     from attune.config import load_config
     from attune.core import clock
@@ -690,6 +692,8 @@ def engine_run(args, truth: Truth) -> dict:
         ]
     player = AlignedPlayer(engine.bus, args.wav, n_frames, clock.now)
     track_rows = _record_tracks(engine.bus)
+    if on_engine is not None:
+        on_engine(engine)
     rec = WsRecorder(f"ws://127.0.0.1:{args.port}/ws", clock.now)
     try:
         engine.start()
