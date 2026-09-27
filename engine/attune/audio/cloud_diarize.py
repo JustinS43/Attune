@@ -274,7 +274,8 @@ def error_kind(exc: BaseException) -> str:
     if names & _LIMIT:
         return "limit"
     if names & _BAD_REQUEST:
-        return "error"
+        # A bad API key comes back as InvalidArgument (400 API_KEY_INVALID), not Unauthenticated
+        return "auth" if "API_KEY_INVALID" in str(exc) else "error"
     code = getattr(exc, "grpc_status_code", None)
     value = getattr(code, "value", code)
     if isinstance(value, tuple):

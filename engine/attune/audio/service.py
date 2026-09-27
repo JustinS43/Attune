@@ -197,6 +197,8 @@ class AudioService:
         try:
             return NemotronASR(self.config["nemotron"] | {"languages": languages})
         except (ImportError, FileNotFoundError, RuntimeError):
+            if not self.config["whisper"].get("enabled", True):
+                raise
             logger.warning("Nemotron unavailable; selecting local Whisper")
             return WhisperASR(self.config["whisper"] | {"languages": languages})
 
@@ -648,6 +650,10 @@ class AudioService:
                 return self.asr.feed(normalized, final)
         except RuntimeError:
             if not isinstance(self.asr, NemotronASR):
+                self._reset()
+                raise
+            if not self.config["whisper"].get("enabled", True):
+                logger.warning("Nemotron decoding failed; Whisper is paused, dropping the utterance")
                 self._reset()
                 raise
             logger.warning("Nemotron decoding failed; retrying utterance with local Whisper")

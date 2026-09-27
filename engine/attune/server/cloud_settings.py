@@ -46,6 +46,15 @@ def _summary(path: Path) -> dict:
     }
 
 
+def _clean_key(value: str) -> str:
+    """Forgive how a key is usually copied: spaces, quotes, or a whole `NAME=key` line."""
+    value = value.strip()
+    name, sep, rest = value.partition("=")
+    if sep and name.strip().replace("_", "").isalnum():
+        value = rest.strip()
+    return value.strip("'\"` \t\r\n")
+
+
 def _save(path: Path, changes: dict[str, str]) -> dict:
     if changes:
         _write_env(path, changes)
@@ -87,9 +96,9 @@ def create_router(root: Path) -> APIRouter:
             value = body["api_key"]
             if not isinstance(value, str) or len(value) > 4096:
                 raise HTTPException(400, "Invalid settings value.")
-            value = value.strip()
-            if value and (not value.isascii() or not all(c.isalnum() or c in "_-" for c in value)):
-                raise HTTPException(400, "Use only letters, numbers, underscores and hyphens.")
+            value = _clean_key(value)
+            if value and (not value.isascii() or not all(c.isalnum() or c in "_-." for c in value)):
+                raise HTTPException(400, "Use only letters, numbers, dots, underscores and hyphens.")
             if value:  # an empty password field keeps the saved key
                 changes[_KEY] = value
         try:

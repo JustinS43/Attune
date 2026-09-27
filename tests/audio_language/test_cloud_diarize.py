@@ -72,6 +72,10 @@ class PermissionDenied(Exception):
     """Named like google.api_core.exceptions.PermissionDenied (a rejected key)."""
 
 
+class InvalidArgument(Exception):
+    """Named like google.api_core.exceptions.InvalidArgument (a bad request, or a bad API key)."""
+
+
 class OutOfRange(Exception):
     """Named like the error Google sends when a stream runs past its limit."""
 
@@ -655,6 +659,9 @@ def test_error_kinds_by_google_exception_name():
     assert error_kind(OutOfRange()) == "limit"
     assert error_kind(ServiceUnavailable()) == "network"
     assert error_kind(ConnectionError()) == "network"
+    # Google answers a bad API key with 400 InvalidArgument, reason API_KEY_INVALID
+    assert error_kind(InvalidArgument('400 API key not valid. [reason: "API_KEY_INVALID"]')) == "auth"
+    assert error_kind(InvalidArgument("400 bad sample rate")) == "error"
 
 
 def test_settings_ignore_the_fusion_keys_in_the_same_table():

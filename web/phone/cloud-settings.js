@@ -162,7 +162,7 @@ export function cloudSettings({demo = false, live = false, getCloud, send, toast
     const response = await fetch(endpoint, {cache: 'no-store', credentials: 'same-origin', ...options});
     if (!response.ok) {
       if (response.status === 403) throw new Error('Open Settings on the Attune laptop at localhost to add the Google key.');
-      if (response.status === 400) throw new Error('Check the key: use letters, numbers, underscores and hyphens.');
+      if (response.status === 400) throw new Error('Check the key: use letters, numbers, dots, underscores and hyphens (no spaces).');
       if (response.status === 404 || response.status === 405) throw new Error('This preview has no engine. Open Settings from the live Attune page on your laptop.');
       throw new Error('Could not reach the key settings. Check that Attune is running and try again.');
     }
@@ -170,7 +170,7 @@ export function cloudSettings({demo = false, live = false, getCloud, send, toast
   }
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (!ready || busy || key.disabled) return;
+    if (busy || key.disabled) return;
     busy = true;
     save.disabled = true;
     keyStatus.textContent = 'Saving…';
@@ -178,6 +178,8 @@ export function cloudSettings({demo = false, live = false, getCloud, send, toast
     if (key.value.trim()) values.api_key = key.value.trim();
     key.value = '';
     try {
+      // The page may have opened while the engine was down: check again instead of doing nothing.
+      if (!ready) { configured(await request()); ready = true; }
       const data = await request({method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(values)});
       configured(data);
       delete form.dataset.editing;
@@ -195,7 +197,10 @@ export function cloudSettings({demo = false, live = false, getCloud, send, toast
   if (demo) {
     keyStatus.textContent = 'Demo only. Open the live Attune Settings page on the laptop to add a Google key.';
   } else {
-    request().then(data => { ready = true; configured(data); }).catch(error => { keyStatus.textContent = error.message; });
+    request().then(data => { ready = true; configured(data); }).catch(error => {
+      keyStatus.textContent = error.message;
+      key.disabled = save.disabled = false;  // Save checks again once the engine is back
+    });
   }
   return {el: section, update};
 }

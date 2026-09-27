@@ -81,6 +81,16 @@ def test_new_file_and_environment_key_wins(settings, monkeypatch):
     assert dotenv_values(path)["GOOGLE_SPEECH_API_KEY"] == FAKE
 
 
+def test_key_pasted_with_quotes_name_or_dots_is_saved_clean(settings):
+    client, path = settings
+    for pasted in (f'"{FAKE}"', f"GEMINI_API_KEY={FAKE}", f"  '{FAKE}'\n"):
+        assert client.post(URL, headers=HEADERS, json={"api_key": pasted}).status_code == 200
+        assert dotenv_values(path)["GOOGLE_SPEECH_API_KEY"] == FAKE
+    assert client.post(URL, headers=HEADERS, json={"api_key": "AQ.fake-dotted_key"}).status_code == 200
+    assert dotenv_values(path)["GOOGLE_SPEECH_API_KEY"] == "AQ.fake-dotted_key"
+    assert client.post(URL, headers=HEADERS, json={"api_key": "fake key;rm"}).status_code == 400
+
+
 def test_service_account_only_when_the_file_exists_and_path_never_returned(
     settings, tmp_path, monkeypatch
 ):
