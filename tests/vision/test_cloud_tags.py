@@ -304,6 +304,23 @@ def test_tags_renumbered_after_a_restart_keep_their_faces():
     assert cloud.speakers[cloud.speaker_of[("s2", "2")]].track == 1
 
 
+def test_wrong_tags_in_the_overlap_do_not_hand_a_voice_to_someone_else():
+    # s1: X says w0-w5, then Y says w6-w10. s2 re-hears w6-w10 (Y is its "1", with two
+    # words wrongly tagged "2") and then X talks a long time as its "2".
+    y_words = [(f"w{i}", i * 0.5, i * 0.5 + 0.45) for i in range(6, 11)]
+    old = [(f"w{i}", i * 0.5, i * 0.5 + 0.45, "1") for i in range(6)]
+    old += [(w, a, b, "2") for w, a, b in y_words]
+    new = [(w, a, b, "2" if w in ("w9", "w10") else "1") for w, a, b in y_words]
+    new += [(f"x{i}", 5.5 + i * 0.5, 5.95 + i * 0.5, "2") for i in range(12)]
+    tags = CloudTags()
+    tags.on_state({"enabled": True, "state": "on"})
+    tags.on_words({"stream_id": "s1", "words": old, "final": True, "t_end": 5.5}, 6.0)
+    tags.on_words({"stream_id": "s2", "words": new, "final": True, "t_end": 11.5}, 12.0)
+    y = tags.speaker_of[("s1", "2")]
+    assert tags.speaker_of[("s2", "1")] == y  # the stronger overlap wins, not the longer tag
+    assert tags.speaker_of[("s2", "2")] not in (y, tags.speaker_of[("s1", "1")])
+
+
 def test_a_voice_quiet_during_the_overlap_binds_again_from_the_faces():
     turns = [Turn(1, 0.0, 3.0), Turn(2, 3.1, 6.0), Turn(1, 6.1, 9.0), Turn(2, 9.1, 11.0)]
     conv = Conv(turns)

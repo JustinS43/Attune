@@ -228,7 +228,13 @@ class CloudTags:
         return self._n
 
     def _map_tags(self, stream: str) -> None:
-        """Give each tag of `stream` a cloud speaker: an older one it overlaps (restart), or new."""
+        """Give each tag of `stream` a cloud speaker: an older one it overlaps (restart), or new.
+
+        The new stream re-hears the old one's last audio, so the same words come back at the
+        same moments: each tag votes for the old cloud speakers of the words it shares (same
+        text, middles within word_match_s). Pairs are made strongest first, one to one, from
+        `bridge_min_s` of shared words; a tag with none keeps its cloud speaker, or gets a new one.
+        """
         tags: dict[str, list[_Word]] = {}
         for w in self.words[stream].values():
             tags.setdefault(w.tag, []).append(w)
@@ -238,27 +244,30 @@ class CloudTags:
         )
         starts = [w.t0 for w in older]
         tol = self.s.word_match_s
-        taken: set[int] = set()
-        by_length = sorted(tags.items(), key=lambda kv: -sum(_span(w.t0, w.t1) for w in kv[1]))
-        for tag, mine in by_length:
-            votes: dict[int, float] = {}
+        votes: dict[tuple[str, int], float] = {}
+        for tag, mine in tags.items():
             for w in mine:
-                mid = (w.t0 + w.t1) / 2
+                mid, text = (w.t0 + w.t1) / 2, _norm(w.word)
                 for o in older[bisect_left(starts, w.t0 - 5.0) : bisect_right(starts, w.t1 + tol)]:
                     m = self.speaker_of.get((o.stream, o.tag))
-                    if m is not None and abs((o.t0 + o.t1) / 2 - mid) <= tol:
-                        both = min(_span(o.t0, o.t1), _span(w.t0, w.t1))
-                        votes[m] = votes.get(m, 0.0) + both
+                    if m is None or abs((o.t0 + o.t1) / 2 - mid) > tol or _norm(o.word) != text:
+                        continue
+                    both = min(_span(o.t0, o.t1), _span(w.t0, w.t1))
+                    votes[(tag, m)] = votes.get((tag, m), 0.0) + both
+        bridged: dict[str, int] = {}
+        taken: set[int] = set()
+        for (tag, m), v in sorted(votes.items(), key=lambda kv: -kv[1]):
+            if v >= self.s.bridge_min_s and tag not in bridged and m not in taken:
+                bridged[tag] = m  # the same voice as before the restart
+                taken.add(m)
+        by_length = sorted(tags, key=lambda tag: -sum(_span(w.t0, w.t1) for w in tags[tag]))
+        for tag in by_length:
             key = (stream, tag)
+            if tag in bridged:
+                self.speaker_of[key] = bridged[tag]
+                continue
             current = self.speaker_of.get(key)
-            best = max(
-                (m for m in votes if m not in taken and votes[m] >= self.s.bridge_min_s),
-                key=votes.get,
-                default=None,
-            )
-            if best is not None:
-                self.speaker_of[key] = best  # the same voice as before the restart
-            elif current is None or current in taken:
+            if current is None or current in taken:
                 self.speaker_of[key] = self._new_speaker()
             taken.add(self.speaker_of[key])
 
