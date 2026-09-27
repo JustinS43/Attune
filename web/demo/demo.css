@@ -46,12 +46,7 @@ body {
 }
 
 .brand { display: flex; align-items: center; gap: 9px; font-size: 14px; white-space: nowrap; }
-.brand .mark {
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--attune-brand, linear-gradient(135deg, #7cf5d6, #6ab8ff));
-  box-shadow: 0 0 14px rgba(124, 245, 214, 0.45);
-}
-.brand .word { font-family: var(--attune-font-display, inherit); font-weight: 650; letter-spacing: 0.01em; }
+.brand-wordmark { display: block; width: 112px; height: 30px; object-fit: contain; object-position: left center; }
 .brand .sep { color: var(--attune-text-3, rgba(255, 255, 255, 0.46)); }
 .brand .sub { color: var(--attune-text-2, rgba(255, 255, 255, 0.68)); }
 

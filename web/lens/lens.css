@@ -161,33 +161,15 @@ body.offline *::after {
   margin: 0 auto calc(14px * var(--u));
 }
 
-.notice-mark .ring {
-  stroke-dasharray: 100;
-  animation: ring 2.4s var(--attune-ease) infinite;
-}
-
-.notice-mark .bar {
+.notice-mark .conversation-head {
   transform-origin: center;
   transform-box: fill-box;
-  animation: bar 1.1s ease-in-out infinite;
+  animation: conversation-head 1.8s ease-in-out infinite;
 }
 
-.notice-mark .b2 {
-  animation-delay: 0.15s;
-}
-
-.notice-mark .b3 {
-  animation-delay: 0.3s;
-}
-
-@keyframes ring {
-  0% { stroke-dashoffset: 100; }
-  55%, 100% { stroke-dashoffset: 0; }
-}
-
-@keyframes bar {
-  0%, 100% { transform: scaleY(0.55); }
-  50% { transform: scaleY(1); }
+@keyframes conversation-head {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .notice-title {

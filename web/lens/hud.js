@@ -372,36 +372,41 @@ export function logoMark(ctx, cx, cy, R, p = 1, a = 1) {
   if (a <= 0) return;
   ctx.save();
   ctx.globalAlpha *= a;
-  const g = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-  g.addColorStop(0, GLASS.bright ? TEAL : MINT);
-  g.addColorStop(1, GLASS.bright ? BLUE : SKY);
-  ctx.strokeStyle = g;
-  ctx.fillStyle = g;
-  ctx.lineWidth = R * 0.14;
+  ctx.translate(cx, cy);
+  const reveal = easeBack(clamp(p));
+  ctx.scale(reveal, reveal);
   ctx.lineCap = 'round';
-  const start = Math.PI * 0.72;
-  const sweep = Math.PI * 1.86 * easeInOut(clamp(p / 0.7));
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, start, start + sweep);
-  ctx.stroke();
-  const tailP = easeOut(clamp((p - 0.62) / 0.2));
-  if (tailP > 0) {
-    const bx = cx + Math.cos(start) * R;
-    const by = cy + Math.sin(start) * R;
-    ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.quadraticCurveTo(bx - R * 0.12, by + R * 0.3 * tailP, bx - R * 0.34 * tailP, by + R * 0.4 * tailP);
-    ctx.stroke();
-  }
-  const hs = [0.42, 0.86, 0.58];
-  for (let i = 0; i < 3; i++) {
-    const bp = easeBack(clamp((p - 0.55 - i * 0.1) / 0.3));
-    if (bp <= 0) continue;
-    const bh = R * hs[i] * bp;
-    const bw = R * 0.2;
-    rrect(ctx, cx + (i - 1) * R * 0.38 - bw / 2, cy - bh / 2, bw, bh, bw / 2);
+
+  const drawBubble = (x, y, angle, fill, line, tailSide) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = fill;
+    rrect(ctx, -R * 0.45, -R * 0.36, R * 0.9, R * 0.72, R * 0.2);
     ctx.fill();
-  }
+    ctx.beginPath();
+    ctx.moveTo(tailSide * R * 0.25, R * 0.28);
+    ctx.lineTo(tailSide * R * 0.56, R * 0.58);
+    ctx.lineTo(tailSide * R * 0.1, R * 0.39);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = line;
+    ctx.lineWidth = Math.max(1.1, R * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.25, -R * 0.06);
+    ctx.lineTo(R * 0.24, -R * 0.06);
+    ctx.moveTo(-R * 0.25, R * 0.13);
+    ctx.lineTo(R * 0.08, R * 0.13);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  drawBubble(-R * 0.34, R * 0.18, -0.14, GLASS.bright ? '#159B9E' : MINT, GLASS.bright ? '#E0F7EE' : INK, -1);
+  drawBubble(R * 0.34, R * 0.28, 0.14, GLASS.bright ? '#97DCD0' : SKY, GLASS.bright ? '#17656C' : INK, 1);
+  ctx.fillStyle = GLASS.bright ? '#F4BC88' : AMBER;
+  ctx.beginPath();
+  ctx.arc(0, -R * 0.62, R * 0.15, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
