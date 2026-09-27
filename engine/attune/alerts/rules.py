@@ -49,7 +49,13 @@ class AlertRules:
     ) -> list:
         """Ignore motor-contaminated windows, then apply the plan's firing table."""
         if motor_on:
+            # The rig's own taps drown the room, so this window can neither confirm an alarm
+            # (the taps play the alarm's own rhythm) nor show that it stopped. It must not run
+            # down the quiet-clear timer either: a playing alarm stays on until "Got it", or
+            # until the room is heard quiet once the taps have stopped (A-28).
             self.history.clear()
+            for a in self.active.values():
+                a["seen"] = max(a["seen"], t)
             return self.tick(t)
         smoke = max(
             scores.get("Smoke detector, smoke alarm", scores.get("Smoke detector", 0)),

@@ -214,7 +214,7 @@ void setIcon(int8_t icon) {
 void updateStatus(unsigned long now) {
   if (blinkCode == NULL) return;
   uint16_t stepMs = RIG_READ_U16(&blinkCode[blinkStep]);
-  if (now - blinkStepStart < stepMs) return;
+  if ((long)(now - blinkStepStart) < (long)stepMs) return;  // setIcon() may stamp after `now`
   blinkStepStart = now;
   blinkStep = (blinkStep + 1) % blinkLen;
   digitalWrite(PIN_STATUS_LED, (blinkStep & 1) ? LOW : HIGH);  // even steps are "on"
@@ -458,6 +458,7 @@ bool evalSlot(Slot &slot, unsigned long now, Output &out) {
   unsigned long total = 0;
   for (uint8_t i = 0; i < def.count; i++) total += RIG_READ_U16(&def.steps[i].ms);
   unsigned long elapsed = now - slot.start;
+  if ((long)elapsed < 0) elapsed = 0;  // started after `now` was read: it has just begun
   if (elapsed >= total) {
     if (!def.repeats) {
       slot.pat = -1;
@@ -723,9 +724,14 @@ void setup() {
 }
 
 void loop() {
-  unsigned long now = millis();
+  // Commands first, then the clock: a command stamps its own millis() (HB -> lastHbIn,
+  // PAT -> slot.start), and `now` must never be older than those stamps. Read the other way
+  // round, a millis() tick in between made `now - lastHbIn` wrap to ~4e9, so the watchdog
+  // dropped a live link (and stopped a playing alarm) about once a minute, and a one-shot
+  // pattern (BELL, NAME, OK, NO) was sometimes skipped.
   readSerial();
-  if (linked && now - lastHbIn > HB_TIMEOUT_MS) linkLost(now);
+  unsigned long now = millis();
+  if (linked && (long)(now - lastHbIn) > (long)HB_TIMEOUT_MS) linkLost(now);
   sampleSound();
   updateTouch(now);
   updatePatterns(now);
