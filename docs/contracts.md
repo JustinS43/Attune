@@ -37,7 +37,7 @@ A service reports its health by publishing `status.part` about once per second. 
 | `vision.track_lost` | 1 Vision | `track_id, t, side` (`left`, `right`, `none`) | Drives off-screen arrows |
 | `vision.appearance` | 1 Vision | `track_id, color, crop` (numpy) | Once a stranger is steady for 1 s |
 | `vision.description` | 2 Audio & Lang | `track_id, label` (e.g. "Person in blue jacket") | From the fixed lists only |
-| `audio.block` | 2 Audio | `t, sample_rate, samples` (mono float32 numpy array) | Local RAM only; timestamp is first sample; 16 kHz speech and 32 kHz alerts; never WebSocket/history |
+| `audio.block` | 2 Audio | `t, sample_rate, samples` (mono float32 numpy array) | Local RAM only; timestamp is first sample; 16 kHz speech and 32 kHz alerts; never WebSocket/history. The one exception: while the wearer has turned on cloud captions, the 16 kHz stream goes to Google Speech-to-Text (see "Cloud captions") |
 | `audio.vad` | 2 Audio & Lang | `t, is_speech, prob` | Every 32 ms |
 | `audio.transcript` | 2 Audio & Lang | `utt_id, t_start, t_end, text, final, lang, words: [(word, t0, t1)]` | No speaker yet |
 | `audio.voice_match` | 2 Audio & Lang | `utt_id, person_id or None, score` | After ≥ 1 s of speech |
@@ -69,6 +69,8 @@ A service reports its health by publishing `status.part` about once per second. 
 | `session.forget` | 4 Pages & Engine | — | Every section wipes session-only data |
 | `paused` | 4 Pages & Engine | `paused` (bool) | All recognition pauses |
 | `camera.state` | 4 Pages & Engine | `on` (bool) | 1 Vision stops or restarts the camera; captions and alerts keep running |
+| `speaker.cloud` | 2 Audio & Lang (cloud captions) | `stream_id, words: [(word, t0, t1, tag)], final, t_end, latency_s, lang, confidence` | Only while cloud captions are on. A `tag` compares only within its `stream_id`; see "Cloud captions" |
+| `cloud.state` | 2 Audio & Lang (cloud captions) | `enabled, state, reason, latency_ms, provider, model, language, languages, credentials` | On every change; see "Cloud captions" |
 | `command` | 4 Pages & Engine | `Command` (section 4) | From the pages |
 | `status.part` | every service | `part, ok, detail, metrics: {}` | ~1/s |
 
@@ -121,6 +123,7 @@ Pages send `{"type": "command", "name": ..., "args": {...}}` over the same WebSo
 | `name.answer` | proposal_id, accept | 2 Audio & Lang (keyboard fallback for tap/hold) |
 | `alert.ack` | alert_id | 2 Audio & Lang |
 | `mark` | note | 4 Pages & Engine (session log) |
+| `cloud.set` | on (bool), language (optional, one of `cloud.state.languages`) | 2 Audio & Lang: cloud captions on or off; the choice is kept on the laptop (see "Cloud captions") |
 
 ## 5. History API (Section 3 router, mounted by Section 4)
 
@@ -184,6 +187,7 @@ to `lip_score`. It is computed from local frames and PCM only; nothing is stored
 ## Section 2 integration additions
 
 `audio.block` is local PCM, never serialized to WebSockets, history or the generic event log.
+It leaves the laptop only as described in "Cloud captions" below.
 Replay may feed these blocks directly on the shared clock. Audio capture publishes both
 16 kHz and 32 kHz mono streams. Pause/forget consumers discard queued recognition work.
 
@@ -229,6 +233,7 @@ Extra engine → page messages (JSON, with `seq` like the rest):
 | `enroll_preview` | only that page | as `enroll.preview` with `jpeg_b64` instead of `jpeg`; only the newest waits if the page is slow |
 | `enroll_level` | only that page | as the bus event `enroll.level` |
 | `enroll_mismatch` | only that page | as the bus event `enroll.mismatch` |
+| `cloud` | all | as the bus event `cloud.state`, on every change; the latest is also sent right after `welcome` |
 
 `caption.translation` is not sent on its own: the engine re-sends that utterance's
 `caption` with its `translation` field filled in. Times (`t`, `t_start`, word times)
@@ -337,3 +342,65 @@ consent_t, source` (`station` or `glasses`; missing = `glasses`), `embedding`, `
 
 **Privacy.** Frames, face crops and audio exist only in memory during the save; the preview
 goes only to the page that started it and is never stored. Only prints are saved.
+
+## Cloud captions (A-32, V-32, P-47)
+
+Optional and **off by default**. When the wearer turns them on in the phone's Settings, the
+16 kHz mic audio (the same stream the local captions hear) is also streamed to Google
+Speech-to-Text (v1 `StreamingRecognize`, speaker diarization on), which returns a speaker tag
+for every word. Fusion uses those tags as strong "who is speaking" evidence. Design, API
+choice and limits: [cloud-diarization.md](cloud-diarization.md). Code:
+`engine/attune/audio/cloud_diarize.py` (2), `engine/attune/fusion/cloud_tags.py` (1).
+
+**What leaves the laptop.** Only that audio, and only while `cloud.state.enabled` is true and
+recognition isn't paused. Never frames, face or voice prints, names, captions or history.
+During the wearer's own spoken reply (`speech_out.playing`) silence is sent instead of the
+audio. `off` and `unavailable`: no network client exists and nothing is sent. Google's
+optional data logging stays off.
+
+**Turning it on.** The command `cloud.set` {on, language?} (Section 2 handles it) turns it on
+or off. The choice and the language are kept on the laptop in `<data_dir>/cloud.json`
+(`[cloud] remember`), so they survive a restart; without that file, `[cloud] enabled` (false)
+applies. `cloud.state` goes out on every change, and the hub sends the latest one as `cloud`
+to every page, also right after `welcome`. While `enabled` is true, every page shows a calm
+"Cloud captions on" badge (the lens in all three modes, and the phone).
+
+**Credentials** live only in `.env`, typed by a person: `GOOGLE_SPEECH_API_KEY` (primary; the
+phone's Settings saves it there through the laptop-only `/api/settings/google`, like the
+ElevenLabs key, and shows only that a key is saved) or `GOOGLE_APPLICATION_CREDENTIALS` (the
+path of a service-account JSON key file). They are read when a stream opens, so a new key
+applies without a restart. They never go on the bus, to a page or into a log; the log says
+only "cloud: credentials present" or "cloud: credentials missing".
+
+**States** (`cloud.state.state`, `reason`):
+
+| state | meaning | fusion |
+|---|---|---|
+| `off` | the wearer hasn't turned it on | local speaker evidence only |
+| `connecting` | opening a stream | local only |
+| `on` | streaming, results fresh | uses the tags; may hold a final up to `[cloud] final_wait_ms` for them |
+| `fallback` | on, but not usable right now: `network`, `quota`, `slow` (recent results later than `latency_fallback_ms`, or speech with no result for `stall_s`); it retries by itself | uses tags that still arrive, never waits |
+| `unavailable` | on, but can't run: `credentials missing`, `credentials rejected`, `library missing`; nothing is sent (a new key is picked up by itself) | local only |
+| `paused` | recognition is paused: the stream is closed | — |
+
+Local captions always run: caption words, utterance ids, drafts, translation and history come
+from the local recogniser whatever the cloud does, so falling back never leaves a gap.
+
+**`speaker.cloud`.** `words` are `(word, t0, t1, tag)` on the engine clock (the stream's first
+audio sample time plus Google's offsets). Google re-sends a stream's words with revised tags
+as it learns the voices, so an event carries only the words that are new or changed; a later
+event overrides an earlier one for the same `stream_id` and word start. `final` results carry
+the tags (an interim result is published only if it carries tags). `t_end` is how far into
+the audio the cloud has heard: fusion stops waiting for a final caption once `t_end` passes
+its last word. A `tag` is meaningful only within its `stream_id`: a stream is restarted before
+Google's ~5 minute limit (and after an error), and the new stream numbers the speakers
+afresh. It starts with the last `[cloud] overlap_s` of audio the old stream heard, so words
+near the restart are tagged in both streams and fusion can carry each old tag's face over to
+the new tag.
+
+**In fusion.** A tag's speech that overlaps a visible face that Light-ASD (or the lip checks)
+hears talking binds the tag to that face (and to its person, when known). Afterwards a change
+of tag between words starts a new caption segment for the other speaker at once, even for a
+short reply; a bound tag's words go to its face; a tag bound to no face goes to the dock
+(`offscreen`, the sensors' side or `none`). A shown segment still changes speaker only by the
+"Caption segments" rules, and a final caption is never changed after it is sent.

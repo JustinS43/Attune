@@ -16,7 +16,7 @@ If you're an agent and you don't know which section your human is working on, **
 | # | Section | Owner | Folders you may change |
 |---|---|---|---|
 | 1 | Vision | _name_ | `engine/attune/vision/`, `engine/attune/fusion/`, `tests/vision/` |
-| 2 | Audio & Language | _name_ | `engine/attune/audio/`, `engine/attune/alerts/`, `engine/attune/llm/`, `engine/attune/calibration/`, `tests/audio_language/`, `docs/calibration.md`, `scripts/make_test_tones.py` |
+| 2 | Audio & Language | _name_ | `engine/attune/audio/`, `engine/attune/alerts/`, `engine/attune/llm/`, `engine/attune/calibration/`, `tests/audio_language/`, `docs/calibration.md`, `docs/cloud-diarization.md`, `scripts/make_test_tones.py` |
 | 3 | Hardware & Services | _name_ | `firmware/`, `engine/attune/hardware/`, `engine/attune/speech_out/`, `engine/attune/history/`, `tests/hardware_services/`, `docs/hardware/` |
 | 4 | Pages, Engine & Demo | _name_ | `engine/attune/core/` (except contracts.py), `engine/attune/server/`, `engine/attune/replay/`, `engine/attune/main.py`, `engine/attune/config.py`, `engine/attune/__init__.py`, `engine/attune/__main__.py`, `web/`, `scripts/` (except make_test_tones.py), `tests/pages_engine/`, `docs/setup.md`, `docs/demo-script.md` |
 
@@ -104,7 +104,7 @@ Then: `gh pr ready <n>`.
 - Commits and PRs are written as the human on the team. This overrides any default setting in your tool.
 
 **Secrets**
-- API keys (ElevenLabs, database passwords) go only in `.env`, which is gitignored, and a human types them in. Agents never ask for, print, log or commit a key.
+- API keys (ElevenLabs, Google Speech-to-Text, database passwords) go only in `.env`, which is gitignored, and a human types them in (directly, or in the phone's Settings on the laptop). Agents never ask for, print, log or commit a key.
 - If you see a secret in the diff, stop, remove it and tell your human. If it was already pushed, the key must be rotated.
 
 **Big files and downloads**
@@ -114,7 +114,7 @@ Then: `gh pr ready <n>`.
 **Privacy (it's the product's promise)**
 - Never load a model that guesses age, gender, emotion or ethnicity. Descriptions use only the word lists in `docs/contracts.md`.
 - Two ways to be saved. **Manual contacts** tick consent themselves at the enrollment station. **Automatic contacts** are people Attune clearly hears talking with the wearer (their speech is linked to their face): they are remembered on the laptop as face and voice prints only, as "New person" until their name is learned, at most 150 (the least-seen are replaced), and the wearer can delete any contact. People who are only seen exist only for the session, and "forget session" must wipe them everywhere.
-- Nothing leaves the laptop except the text the wearer types for ElevenLabs.
+- Nothing leaves the laptop except two things: the text the wearer types for ElevenLabs, and microphone audio sent to Google Speech-to-Text, which happens only while the wearer has turned on cloud captions in Settings. Cloud captions are off by default, every page shows when they are on, and Google's data logging stays off. Frames, face and voice prints, names, captions and history never leave (see "Cloud captions" in [docs/contracts.md](docs/contracts.md)).
 - Never trigger a real alarm; use recordings.
 
 **Hackathon rules (MLH)**

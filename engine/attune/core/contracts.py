@@ -63,6 +63,10 @@ SESSION_FORGET = "session.forget"
 PAUSED = "paused"
 # The camera switched on or off from a page (`camera.set`): {on}
 CAMERA_STATE = "camera.state"
+# Cloud captions (A-32 / V-32 / P-47): optional and off by default. Only while the wearer has
+# turned them on does the 16 kHz mic audio go to Google Speech-to-Text (docs/cloud-diarization.md).
+SPEAKER_CLOUD = "speaker.cloud"  # per-word speaker tags: {stream_id, words, final, t_end, ...}
+CLOUD_STATE = "cloud.state"  # the cloud client's state: {enabled, state, reason, latency_ms, ...}
 COMMAND = "command"
 STATUS_PART = "status.part"
 # Engine-internal (Section 4): the aggregated status the hub sends to the console.
@@ -108,6 +112,8 @@ TOPICS = frozenset(
         ENROLL_MISMATCH,
         SESSION_FORGET,
         PAUSED,
+        SPEAKER_CLOUD,
+        CLOUD_STATE,
         COMMAND,
         STATUS_PART,
         STATUS,
@@ -141,6 +147,7 @@ WS_CAMERA = "camera"
 WS_ENROLL_PROGRESS = "enroll_progress"
 WS_SAVE_REQUEST = "save_request"
 WS_SAVE_CANCEL = "save_cancel"
+WS_CLOUD = "cloud"  # cloud captions' state (as the bus event cloud.state), for the badge
 # Enrollment station: only to the page that started the save (not in WS_AUDIENCE broadcasts)
 WS_ENROLL_STATE = "enroll_state"
 WS_ENROLL_PREVIEW = "enroll_preview"  # jpeg_b64 instead of the bus event's jpeg bytes
@@ -176,6 +183,7 @@ WS_AUDIENCE: dict[str, frozenset[str]] = {
     WS_ENROLL_PROGRESS: _ALL,
     WS_SAVE_REQUEST: _ALL,
     WS_SAVE_CANCEL: _ALL,
+    WS_CLOUD: _ALL,
 }
 
 FRAME_HEADER_FORMAT = "<Qd"  # little-endian uint64 frame_no, float64 capture t
@@ -203,6 +211,7 @@ COMMAND_NAMES = frozenset(
         "save.start",
         "save.cancel",
         "enroll.station",
+        "cloud.set",
     }
 )
 # `enroll.station` {action, ...}: start {name, consent, consent_t, request_id?, track_id?};
@@ -220,6 +229,22 @@ ENROLL_PHASES = (
     "done",
     "cancelled",
     "fallback",
+)
+
+# Cloud captions (cloud.state `state`): off = the wearer hasn't turned them on (no network client,
+# no audio sent); connecting; on = streaming with fresh results (fusion uses the tags); fallback =
+# on but not usable right now (network, quota, slow): local speaker labels only, retrying;
+# unavailable = on but can't run (no or rejected credentials, library missing): nothing is sent;
+# paused = recognition is paused: nothing is sent.
+CLOUD_STATES = ("off", "connecting", "on", "fallback", "unavailable", "paused")
+CLOUD_REASONS = (
+    "",
+    "credentials missing",
+    "credentials rejected",
+    "library missing",
+    "network",
+    "quota",
+    "slow",
 )
 
 # Touch gestures (sensors.touch) and what the touch router makes of them (touch.action target).
@@ -536,6 +561,39 @@ class PersonChanged:
 @dataclass
 class Paused:
     paused: bool
+
+
+@dataclass
+class SpeakerCloud:
+    """Cloud captions (A-32): speaker tags per word, from one Google stream.
+
+    `tag` is only comparable within one `stream_id`: a restart (about every 5 minutes)
+    numbers the speakers afresh. A later event re-tags words already sent (the cloud revises
+    its speaker labels); consumers key words by stream and start time.
+    """
+
+    stream_id: str
+    words: list[tuple[str, float, float, str]]  # (word, t0, t1, tag), engine-clock seconds
+    final: bool = True
+    t_end: float = 0.0  # the stream's audio the cloud has heard, up to this engine time
+    latency_s: float | None = None  # arrival time minus t_end
+    lang: str = ""
+    confidence: float | None = None
+
+
+@dataclass
+class CloudState:
+    """Cloud captions' state (A-32), on every change. Never carries a credential."""
+
+    enabled: bool = False  # the wearer's setting (cloud.set)
+    state: str = "off"  # see CLOUD_STATES
+    reason: str = ""  # see CLOUD_REASONS
+    latency_ms: int | None = None  # recent results: arrival minus the audio they cover (median)
+    provider: str = "google"
+    model: str = ""
+    language: str = ""
+    languages: list[str] = field(default_factory=list)  # the choices cloud.set accepts
+    credentials: bool = False  # a key or service account is configured (never the value)
 
 
 @dataclass

@@ -34,6 +34,7 @@ audio = [
     "torch",                # EfficientAT and Silero
     "torchaudio",
     "ollama",
+    "google-cloud-speech",  # optional cloud captions (A-32); imported only while they are on
 ]
 # Section 3 - Hardware & Services
 hardware = [

@@ -78,6 +78,7 @@ Each feature lists its TODO IDs, the gate it's needed by, and what it depends on
 | Who's talking + scene | V-09, V-10 | M1 / M2 | `audio.transcript`, `audio.vad`, `audio.voice_match` (2); `sensors.levels` (3) | `caption`, `scene` |
 | Voice-print harvesting | V-11 | M2 | voice prints (2) | `voice.harvest` |
 | Instant colour labels | V-12 | M2 | — | `vision.appearance` |
+| Cloud speaker tags in who's talking (optional): bind tags to faces, a tag change starts a bubble | V-32 | after M3 | `speaker.cloud`, `cloud.state` (2) | better `caption` speakers |
 
 ### Section 2 – Audio & Language
 | Feature | TODO | Gate | Needs from others | Gives to others |
@@ -88,6 +89,7 @@ Each feature lists its TODO IDs, the gate it's needed by, and what it depends on
 | Sound alerts | A-08 – A-10 | M2 | `sensors.levels` (3) | `alert`, `hw.pattern` |
 | Ollama jobs: names, translation, descriptions, replies | A-07, A-11 – A-15 | M2 | `caption` (1), `vision.appearance` (1), `touch.action` (3) | `name.proposal`, `caption.translation`, `vision.description`, `reply.suggestions` |
 | Calibration + test tones | A-16, A-17 | M3 | levels (3), faces (1), console UI (4) | venue profile |
+| Cloud captions (optional, off by default): Google streaming speaker diarization | A-32 | after M3 | `audio.block`, `audio.vad` (2), `cloud.set` (4), key in `.env` | `speaker.cloud`, `cloud.state` |
 
 ### Section 3 – Hardware & Services
 | Feature | TODO | Gate | Needs from others | Gives to others |
@@ -109,6 +111,7 @@ Each feature lists its TODO IDs, the gate it's needed by, and what it depends on
 | Panels: console, speak, history + keys | P-09 – P-12 | M1 – M2 | history API (3), `reply.suggestions` (2) | commands |
 | Session log + replay | P-13 | M1 | frames, audio, serial | test reels for everyone |
 | Setup, scripts, OBS, demo, write-up | P-14, P-15 | M3 – M4 | — | submission |
+| Cloud captions: Settings toggle and Google key, badge on the lens and phone, console status | P-47 | after M3 | `cloud.state` (2) | `cloud.set`, `/api/settings/google` |
 
 ## File map
 
@@ -132,6 +135,7 @@ Every file below already exists with a header that says what goes in it. Build i
 | `engine/attune/fusion/speaker.py` | Decides who is talking and builds the Scene | V-09 |
 | `engine/attune/fusion/sync.py` | In-time check: do the lips move with the sound? | V-10 |
 | `engine/attune/fusion/harvest.py` | Voice-print harvesting for this session | V-11 |
+| `engine/attune/fusion/cloud_tags.py` | Cloud speaker tags: bind them to faces, split captions at a tag change | V-32 |
 
 ### Section 2 - Audio & Language
 
@@ -162,6 +166,8 @@ Every file below already exists with a header that says what goes in it. Build i
 | `engine/attune/calibration/profile.py` | Venue profile save/load | A-16 |
 | `scripts/make_test_tones.py` | Generates T3 / T4 alarm tones for tests | A-17 |
 | `docs/calibration.md` | How to run venue calibration | A-16 |
+| `engine/attune/audio/cloud_diarize.py` | Cloud captions: Google Speech-to-Text streaming diarization (optional, off by default) | A-32 |
+| `docs/cloud-diarization.md` | Cloud captions: API choice, privacy, design, setup and limits | A-32 |
 
 ### Section 3 - Hardware & Services
 
@@ -222,6 +228,8 @@ Every file below already exists with a header that says what goes in it. Build i
 | `web/shared/ws.js` | WebSocket client with auto-reconnect | P-03 |
 | `web/shared/keys.js` | Keyboard shortcuts | P-12 |
 | `web/shared/theme.css` | Colours and type shared by every page | P-06 |
+| `engine/attune/server/cloud_settings.py` | Google key for cloud captions in Settings (laptop-only, kept in `.env`) | P-47 |
+| `web/phone/cloud-settings.js` | Settings card: cloud captions toggle, Google key, language, status | P-47 |
 | `scripts/check_setup.py` | Checks GPU, CUDA libraries, models, Ollama and devices | P-14 |
 | `scripts/download_models.py` | Fetches the model list in docs/setup.md into models/ | P-14 |
 | `scripts/start_attune.ps1` | Starts the engine and restarts it if it dies | P-14 |
@@ -249,7 +257,7 @@ Attune/
 │       ├── replay/        4  reel recorder and player
 │       ├── vision/        1  camera, faces, tracker, gallery, lips, enrollment, colour
 │       ├── fusion/        1  who's talking, in-time check, harvesting
-│       ├── audio/         2  mic, VAD, captions, voice prints, language check
+│       ├── audio/         2  mic, VAD, captions, voice prints, language check, cloud captions
 │       ├── alerts/        2  sound model, rhythm, rules
 │       ├── llm/           2  Ollama client, names, translation, descriptions, replies
 │       ├── calibration/   2  wizard, venue profile
