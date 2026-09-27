@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1000" role="img" aria-labelledby="title description">
+  <title id="title">Attune Devpost thumbnail</title>
+  <desc id="description">Attune Conversation logo beside the words More awareness, more agency on a warm cream background.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#F3EAE0"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#173C45"/>
+      <stop offset="1" stop-color="#102F3A"/>
+    </linearGradient>
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F8CEA6"/>
+      <stop offset="1" stop-color="#F4BC88"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#173C45" flood-opacity=".16"/>
+    </filter>
+    <filter id="small-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#173C45" flood-opacity=".13"/>
+    </filter>
+  </defs>
+
+  <rect width="1500" height="1000" fill="url(#canvas)"/>
+  <circle cx="1350" cy="88" r="250" fill="#97DCD0" opacity=".18"/>
+  <circle cx="38" cy="955" r="280" fill="#F4BC88" opacity=".16"/>
+  <path d="M1060 0C1190 110 1350 168 1500 158V0Z" fill="#159B9E" opacity=".07"/>
+
+  <g transform="translate(100 88)">
+    <svg x="0" y="0" width="435" height="117" viewBox="0 0 670 180"><g transform="translate(0 0) scale(.7)"><circle cx="128" cy="62" r="19" fill="#F4BC88"/>
+<g transform="rotate(-8 90 130)"><path d="M65 87h35c16 0 27 11 27 27v23c0 17-11 28-28 28H83l-24 15v-20c-12-5-19-14-19-28v-18c0-16 10-27 25-27Z" fill="#159B9E"/><path d="M63 112h40m-40 18h26" stroke="#E0F7EE" stroke-width="7" stroke-linecap="round"/></g>
+<g transform="rotate(8 167 137)"><path d="M151 97h36c16 0 27 11 27 27v18c0 14-7 23-19 28v20l-24-15h-17c-16 0-27-11-27-28v-23c0-16 9-27 24-27Z" fill="#97DCD0"/><path d="M150 123h40m-40 18h26" stroke="#17656C" stroke-width="7" stroke-linecap="round"/></g></g><g transform="translate(196 44) scale(1.5)"><g fill="none" stroke="#173C45" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="22" cy="40" r="18"/><path d="M40 22v36"/>
+<path d="M66 6v39q0 13 12 13h5M54 23h29"/>
+<path d="M106 6v39q0 13 12 13h5M94 23h29"/>
+<path d="M143 23v19q0 16 17 16t17-16V23"/>
+<path d="M198 58V23m0 17q0-18 17-18t17 18v18"/>
+<path d="M291 49c-9 15-36 12-36-9 0-24 37-25 37-3h-36"/>
+</g></g></svg>
+    <text x="7" y="310" fill="#173C45" font-family="Avenir Next, Nunito Sans, Segoe UI, system-ui, sans-serif" font-size="82" font-weight="700" letter-spacing="-3">
+      <tspan x="7" dy="0">More awareness.</tspan>
+      <tspan x="7" dy="100">More agency.</tspan>
+    </text>
+    <text x="10" y="570" fill="#526D73" font-family="Avenir Next, Nunito Sans, Segoe UI, system-ui, sans-serif" font-size="28" font-weight="500">
+      <tspan x="10" dy="0">Live captions, familiar voices and sound alerts</tspan>
+      <tspan x="10" dy="42">for Deaf and hard-of-hearing people.</tspan>
+    </text>
+
+    <g transform="translate(8 730)" font-family="Avenir Next, Nunito Sans, Segoe UI, system-ui, sans-serif" font-size="21" font-weight="650" fill="#17656C">
+      <g><rect width="168" height="52" rx="26" fill="#DDF2EC"/><circle cx="28" cy="26" r="6" fill="#159B9E"/><text x="48" y="33">Live captions</text></g>
+      <g transform="translate(184)"><rect width="190" height="52" rx="26" fill="#E4F2F0"/><circle cx="28" cy="26" r="6" fill="#97DCD0"/><text x="48" y="33">People aware</text></g>
+      <g transform="translate(390)"><rect width="176" height="52" rx="26" fill="#FAE7D4"/><circle cx="28" cy="26" r="6" fill="#F4BC88"/><text x="48" y="33">Sound alerts</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(925 178)" filter="url(#shadow)">
+    <rect width="460" height="600" rx="88" fill="url(#panel)"/>
+    <circle cx="372" cy="96" r="112" fill="#97DCD0" opacity=".12"/>
+    <circle cx="76" cy="540" r="130" fill="#159B9E" opacity=".11"/>
+    <svg x="55" y="92" width="350" height="350" viewBox="0 0 256 256"><circle cx="128" cy="62" r="19" fill="#F4BC88"/>
+<g transform="rotate(-8 90 130)"><path d="M65 87h35c16 0 27 11 27 27v23c0 17-11 28-28 28H83l-24 15v-20c-12-5-19-14-19-28v-18c0-16 10-27 25-27Z" fill="#159B9E"/><path d="M63 112h40m-40 18h26" stroke="#E0F7EE" stroke-width="7" stroke-linecap="round"/></g>
+<g transform="rotate(8 167 137)"><path d="M151 97h36c16 0 27 11 27 27v18c0 14-7 23-19 28v20l-24-15h-17c-16 0-27-11-27-28v-23c0-16 9-27 24-27Z" fill="#97DCD0"/><path d="M150 123h40m-40 18h26" stroke="#17656C" stroke-width="7" stroke-linecap="round"/></g></svg>
+    <g transform="translate(66 472)">
+      <rect width="328" height="68" rx="22" fill="#FFFFFF" opacity=".10"/>
+      <circle cx="37" cy="34" r="11" fill="#F4BC88"/>
+      <path d="M72 25h186M72 43h128" stroke="#E0F7EE" stroke-width="8" stroke-linecap="round" opacity=".9"/>
+    </g>
+  </g>
+
+  <g filter="url(#small-shadow)">
+    <g transform="translate(860 690) rotate(-5)">
+      <rect width="210" height="92" rx="30" fill="#FFFFFF"/>
+      <circle cx="45" cy="46" r="18" fill="url(#warm)"/>
+      <path d="M80 36h90M80 56h60" stroke="#159B9E" stroke-width="9" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(1240 720) rotate(6)">
+      <rect width="170" height="82" rx="28" fill="#DDF2EC"/>
+      <path d="M35 35h100M35 54h68" stroke="#17656C" stroke-width="8" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <text x="1402" y="938" text-anchor="end" fill="#789096" font-family="Avenir Next, Nunito Sans, Segoe UI, system-ui, sans-serif" font-size="20" font-weight="650" letter-spacing="3">BUILT FOR A MORE ACCESSIBLE WORLD</text>
+</svg>

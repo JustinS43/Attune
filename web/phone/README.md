@@ -15,7 +15,9 @@ python -m http.server 8021 --bind 127.0.0.1 --directory .
 
 **Demo only.** Add `?demo` to skip connecting and use the built-in sample data.
 
-**Apricot Studio palette.** Add `?palette=apricot` (for example `http://localhost:8000/phone/?palette=apricot`) for the Apricot Studio colorway and wordmark. The default URL keeps the original palette. Logo and colorway explorations are in `branding/` (open `branding/index.html`, `branding/colorways/index.html` or the round galleries in a browser).
+**Brand.** The product uses the selected 01 Conversation logo and wordmark from `web/shared/brand/`. Earlier logo studies and color explorations remain in `branding/` for reference.
+
+**Apricot Studio palette.** Add `?palette=apricot` (for example `http://localhost:8000/phone/?palette=apricot`) to preview Apricot Studio colors without changing the default Conversation identity.
 
 ## Live and demo
 
