@@ -7,10 +7,16 @@
  * screen shows live data (captions, people, name proposals, alerts, suggested replies, history)
  * and every control sends the matching command. Until it has ever connected, it runs the
  * built-in demo, labelled "Demo". Open with ?demo to stay in the demo without connecting.
+ *
+ * Cloud captions (P-48): the `cloud` message drives a calm "Cloud captions on" pill next to the
+ * connection pill on every screen, and the "Cloud captions (Google)" card in Settings
+ * (cloud-settings.js): its switch and language send `cloud.set`, and its Google key goes only to
+ * the laptop's .env.
  */
 
 import { connect } from '../shared/ws.js';
 import { speechSettings } from './speech-settings.js';
+import { cloudSettings, cloudBadge } from './cloud-settings.js';
 import { createSaveSheet } from './save.js';
 import { createStation } from './station.js';
 import {listContacts, saveContact, deleteContact, photoFromFile} from './contacts.js';
@@ -66,6 +72,7 @@ const state = {
   suggestions: [],
   speaking: '',
   hwLink: null,
+  cloud: null,        // the latest `cloud` message (cloud captions, P-48), or null
   sessionId: null,
   enroll: {phase: 'ready', name: '', consent: false, trackId: null, personId: null, photo: '', face: 'idle', voice: 'idle', reason: ''},
   faces: new Map()
@@ -112,11 +119,22 @@ function heading(title, subtitle, eyebrow) {
 }
 
 /** Connection pill: LIVE (connected), RECONNECTING (was live) or DEMO. */
-function pill() {
+function connectionPill() {
   if (state.live && state.connected) return el('div', 'demo-pill live-pill', 'LIVE · CONNECTED TO ATTUNE');
   if (state.live) return el('div', 'demo-pill offline-pill', 'OFFLINE · RECONNECTING');
   return el('div', 'demo-pill', 'DEMO · NOT CONNECTED');
 }
+
+/** The connection pill, then "Cloud captions on" beside it while they are on (P-48). */
+function pill() {
+  const row = el('div', 'pill-row');
+  row.append(connectionPill());
+  const cloud = state.live && state.connected ? cloudBadge(state.cloud) : null;
+  if (cloud) row.append(cloud);
+  return row;
+}
+
+let cloudCard = null; // the Settings card while it is on screen (updated in place)
 
 function button(label, className, action) {
   const node = el('button', className, label);
@@ -785,7 +803,14 @@ function renderSettings() {
     choice.setAttribute('aria-pressed', String(theme === state.theme));
     mode.append(choice);
   }
-  content.append(mode, speechSettings({demo: params.has('demo')}), el('h2', 'setting-label', 'Live features'));
+  cloudCard = cloudSettings({
+    demo: params.has('demo'),
+    live: state.live,
+    getCloud: () => state.cloud,
+    send: (on, language) => link.send('cloud.set', language ? {on, language} : {on}),
+    toast: showToast,
+  });
+  content.append(mode, speechSettings({demo: params.has('demo')}), cloudCard.el, el('h2', 'setting-label', 'Live features'));
   const features = el('div', 'card setting-group');
   features.append(
     settingToggle('Captions', state.live ? 'On this phone' : '', 'captions', 'wave'),
@@ -810,9 +835,15 @@ function renderSettings() {
   camera.prepend(icon('camera'));
   camera.setAttribute('aria-pressed', String(!state.cameraOn));
   actions.append(pause, camera, power, button('Forget this session', 'outline full', 'forget'));
-  content.append(actions, el('p', 'subtle-center', state.live
-    ? 'Turning off pauses all recognition on the laptop. Nothing leaves the laptop except text you type to speak.'
-    : 'Demo mode: these controls only change this preview. Open the page from the Attune laptop to go live.'));
+  const privacyNote = el('p', 'subtle-center', state.live ? privacyText() : 'Demo mode: these controls only change this preview. Open the page from the Attune laptop to go live.');
+  privacyNote.id = 'privacy-note';
+  content.append(actions, privacyNote);
+}
+
+function privacyText() {
+  return state.cloud?.enabled
+    ? 'Turning off pauses all recognition on the laptop. Nothing leaves the laptop except text you type to speak and, while cloud captions are on, microphone audio sent to Google Speech-to-Text.'
+    : 'Turning off pauses all recognition on the laptop. Nothing leaves the laptop except text you type to speak. Cloud captions are off.';
 }
 
 function renderLive() {
@@ -879,7 +910,7 @@ function render() {
 
 /** Re-render in place for live updates, keeping scroll position and any text being typed. */
 function refresh() {
-  if (content.querySelector('.speech-settings-form[data-editing]')) {
+  if (content.querySelector('.speech-settings-form[data-editing], .cloud-settings-form[data-editing]')) {
     renderHint();
     return;
   }
@@ -892,6 +923,16 @@ function refresh() {
   if (state.screen === 'speak') state.draft = document.querySelector('#speak-text')?.value ?? state.draft;
   render();
   viewport.scrollTop = top;
+}
+
+/** Swap every "Cloud captions on" pill for the current one, without re-rendering the screen. */
+function syncCloudBadges() {
+  for (const node of content.querySelectorAll('.cloud-pill')) node.remove();
+  const badge = state.live && state.connected ? cloudBadge(state.cloud) : null;
+  if (!badge) return;
+  for (const live of content.querySelectorAll('.demo-pill.live-pill, .demo-pill.offline-pill')) {
+    live.after(badge.cloneNode(true));
+  }
 }
 
 function renderHint() {
@@ -1157,6 +1198,21 @@ function onMessage(msg) {
       state.hwLink = {connected: !!msg.connected, firmware: msg.firmware, driver: msg.driver};
       if (state.screen === 'settings') refresh();
       break;
+    case 'cloud': {
+      // cloud captions (P-48): every change, and the latest right after welcome
+      const prev = state.cloud;
+      state.cloud = msg;
+      const flipped = prev != null && !!prev.enabled !== !!msg.enabled;
+      const shown = !prev || flipped || prev.state !== msg.state;
+      if (state.screen === 'settings' && cloudCard?.el.isConnected) {
+        cloudCard.update(); // in place: no refetch, and a key being typed is never touched
+        const note = document.querySelector('#privacy-note');
+        if (note && state.live) note.textContent = privacyText();
+      }
+      if (shown) syncCloudBadges();
+      if (flipped) showToast(msg.enabled ? 'Cloud captions on. Microphone audio goes to Google while they are on.' : 'Cloud captions off. Captions stay on the laptop.');
+      break;
+    }
     default:
       break;
   }

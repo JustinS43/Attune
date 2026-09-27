@@ -493,7 +493,7 @@ def show_turns(ref: dict, limit: int = 60) -> None:
 FUSION_TOPICS = (
     "vision.tracks", "vision.track_lost", "vision.appearance", "vision.description",
     "audio.vad", "audio.level", "sensors.levels", "audio.voice_match", "name.proposal",
-    "audio.transcript",
+    "audio.transcript", "speaker.cloud", "cloud.state",
 )  # fmt: skip
 
 
@@ -564,11 +564,75 @@ def run(args) -> int:
     return 0
 
 
-def refuse(run_json: dict, overrides: list[str] | None = None) -> dict:
+CLOUD_SIM = {"lag_s": 0.9, "error": 0.03, "restart_s": 290.0, "overlap_s": 3.0, "pause_s": 0.5}
+
+
+def simulate_cloud(run_json: dict, seed: int = 0, **opts) -> list:
+    """Google-like `speaker.cloud` events for a run, with tags from the reference (A-32/V-32).
+
+    Stands in for cloud captions where there are no Google credentials: each final caption
+    word of the local recogniser gets the reference speaker of the word it aligns to
+    (`turn_speakers`), and the fake cloud reports those words as Google's streaming
+    diarization does. A final comes at each pause of `pause_s` (and the stream's end),
+    `lag_s` late (+/- 0.2 s); `error` of the words get another speaker's tag; the stream
+    restarts every `restart_s` starting `overlap_s` early, and each stream numbers the
+    voices afresh in the order it hears them. Returns (t, topic, event) fusion inputs.
+    """
+    o = {**CLOUD_SIM, **opts}
+    rng = np.random.default_rng(seed)
+    ref = run_json["ref"]
+    turn_spk = {int(k): v for k, v in (ref.get("turn_speakers") or {}).items()}
+    local: dict[tuple, tuple] = {}
+    for _, topic, ev in run_json["fusion_inputs"]:
+        if topic == "audio.transcript" and ev.get("final"):
+            for w in ev.get("words") or []:
+                local[(round(float(w[1]), 2), w[0])] = (w[0], float(w[1]), float(w[2]))
+    hyp = [w for w in sorted(local.values(), key=lambda w: w[1]) if normalize(w[0])]
+    rw = ref["words"]
+    pairs = align([w["w"] for w in rw], [normalize(w[0])[0] for w in hyp])
+    words = sorted(
+        (
+            (*hyp[j], turn_spk[rw[i]["turn"]])
+            for i, j in pairs
+            if i is not None and j is not None and turn_spk.get(rw[i]["turn"]) is not None
+        ),
+        key=lambda w: w[1],
+    )
+    if not words:
+        return []
+    start = words[0][1]
+    out: list = [(start - 1.0, "cloud.state", {"enabled": True, "state": "on", "reason": ""})]
+    k = 0
+    while start + k * o["restart_s"] <= words[-1][1]:
+        lo = start + k * o["restart_s"] - (o["overlap_s"] if k else 0.0)
+        hi = start + (k + 1) * o["restart_s"]
+        mine = [w for w in words if lo <= w[1] < hi]
+        tags: dict = {}
+        for w in mine:
+            tags.setdefault(w[3], str(len(tags) + 1))
+        stream, batch = f"sim-{k}", []
+        for i, (text, t0, t1, spk) in enumerate(mine):
+            tag = tags[spk]
+            if len(tags) > 1 and rng.random() < o["error"]:
+                tag = str(rng.choice([v for v in tags.values() if v != tag]))
+            batch.append((text, t0, t1, tag))
+            last = i == len(mine) - 1
+            if last or mine[i + 1][1] - t1 >= o["pause_s"]:
+                at = t1 + o["lag_s"] + float(rng.uniform(-0.2, 0.2))
+                ev = {"stream_id": stream, "words": batch, "final": True, "t_end": t1 + 0.05}
+                out.append((at, "speaker.cloud", ev))
+                batch = []
+        k += 1
+    return out
+
+
+def refuse(run_json: dict, overrides: list[str] | None = None, cloud: dict | None = None) -> dict:
     """The run again with this code's SpeakerFusion on the recorded inputs (no engine).
 
     Returns a run dict whose messages are this fusion's `caption`, `caption_retract` and
     `scene` (boxes scaled to the pages' 1280x720 like the hub does), ready for score().
+    `cloud` (simulate_cloud's options) adds a simulated cloud-captions tag stream; a run
+    recorded with real cloud captions replays its own `speaker.cloud` events.
     """
     from attune.fusion.speaker import SpeakerFusion
     from attune.server.ws import scale_box, to_jsonable
@@ -580,7 +644,17 @@ def refuse(run_json: dict, overrides: list[str] | None = None) -> dict:
         table, name = key.split(".", 1)
         config.setdefault(table, {})[name] = json.loads(value)
     _, settings = load_settings(config)
-    f = SpeakerFusion(settings)
+    inputs = list(run_json["fusion_inputs"])
+    if cloud is not None:
+        inputs = [e for e in inputs if e[1] not in ("speaker.cloud", "cloud.state")]
+        inputs += simulate_cloud(run_json, **cloud)
+    if any(e[1] == "speaker.cloud" for e in inputs):
+        from attune.fusion.cloud_tags import CloudTags, CloudTagSettings  # V-32
+
+        f = SpeakerFusion(settings, CloudTags(CloudTagSettings.from_config(config.get("cloud"))))
+    else:  # today's fusion; the cloud topics (if any) are skipped
+        f = SpeakerFusion(settings)
+        inputs = [e for e in inputs if e[1] != "cloud.state"]
     cw, ch = run_json.get("camera_size") or [1280, 720]
     fw, fh = run_json.get("frame_size") or [1280, 720]
     handlers = {
@@ -590,9 +664,11 @@ def refuse(run_json: dict, overrides: list[str] | None = None) -> dict:
         "sensors.levels": f.on_sensor_levels, "audio.voice_match": f.on_voice_match,
         "name.proposal": f.on_name_proposal,
     }  # fmt: skip
+    if getattr(f, "cloud", None) is not None:
+        handlers["cloud.state"] = f.on_cloud_state
     msgs: list = []
     period = 1.0 / settings.rate_hz
-    events = sorted(run_json["fusion_inputs"], key=lambda e: e[0])
+    events = sorted(inputs, key=lambda e: e[0])
     next_tick = events[0][0] if events else 0.0
 
     def tick(now: float) -> None:
@@ -612,6 +688,8 @@ def refuse(run_json: dict, overrides: list[str] | None = None) -> dict:
             next_tick += period
         if topic == "audio.transcript":
             f.on_transcript(ev, t)
+        elif topic == "speaker.cloud":
+            f.on_cloud_words(ev, t)
         elif topic in handlers:
             handlers[topic](ev)
     for _ in range(int(3 / period)):  # the last drafts settle
@@ -620,7 +698,24 @@ def refuse(run_json: dict, overrides: list[str] | None = None) -> dict:
     out = {k: v for k, v in run_json.items() if k not in ("messages", "fusion_inputs")}
     out["messages"] = msgs
     out["settings"] = list(overrides or []) + ["(fusion replayed)"]
+    if cloud is not None:
+        out["settings"].append("(cloud captions simulated)")
     return out
+
+
+BEFORE_AFTER = (
+    "speaker_accuracy", "right_face", "wrong_face", "changes_split", "mixed_bubble_words",
+    "segments_per_turn", "someone_share", "latency_p50_s", "latency_p90_s",
+)  # fmt: skip
+
+
+def before_after(before: dict, after: dict) -> str:
+    """One line per metric: local-only fusion, then with cloud captions."""
+    rows = [f"{'':22s}{'local only':>12s}{'with cloud':>12s}"]
+    for k in BEFORE_AFTER:
+        if before.get(k) is not None or after.get(k) is not None:
+            rows.append(f"{k:22s}{before.get(k)!s:>12s}{after.get(k)!s:>12s}")
+    return "\n".join(rows)
 
 
 # ============================================================================ scoring
@@ -932,6 +1027,13 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("refuse", help="replay a run's recorded fusion inputs into this code")
     f.add_argument("runs", nargs="+")
     f.add_argument("--set", action="append", help="fusion setting, e.g. fusion.snap_max_s=0")
+    f.add_argument(
+        "--cloud-sim", action="store_true",
+        help="also replay with simulated cloud captions (tags from the reference) and compare",
+    )  # fmt: skip
+    f.add_argument("--cloud-lag", type=float, default=CLOUD_SIM["lag_s"], help="s after a pause")
+    f.add_argument("--cloud-error", type=float, default=CLOUD_SIM["error"], help="wrong-tag share")
+    f.add_argument("--cloud-restart", type=float, default=CLOUD_SIM["restart_s"], help="stream s")
     t = sub.add_parser("turns", help="print a clip's reference turns and speakers")
     t.add_argument("name")
     a = sub.add_parser("truth", help="who talks when, from Light-ASD + voices (static shots)")
@@ -954,7 +1056,13 @@ def main(argv: list[str] | None = None) -> int:
             current = PODCASTS / str(got.get("name")) / "ref.json"
             if current.is_file():
                 got["ref"] = json.loads(current.read_text(encoding="utf-8"))
-            report(score(refuse(got, args.set)))
+            before = score(refuse(got, args.set))
+            report(before)
+            if args.cloud_sim:
+                sim = {"lag_s": args.cloud_lag, "error": args.cloud_error}
+                after = score(refuse(got, args.set, {**sim, "restart_s": args.cloud_restart}))
+                report(after)
+                print(before_after(before, after))
         return 0
     if args.cmd == "truth":
         return asd_truth(args)

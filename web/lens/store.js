@@ -56,6 +56,7 @@ export function createStore() {
     replySeq: 0,
     sceneSeq: 0, // bumps on every scene message (the face filter steps once per message)
     epoch: 0, // bumps on reset(): the view builder drops its caption threads and face memory
+    cloud: null, // cloud captions' state (P-48): { enabled, state, reason, latency_ms, ... } or null
   };
 
   const wall = nowS; // appear animations run on wall time, even with the film paused
@@ -173,6 +174,15 @@ export function createStore() {
         });
         break;
       }
+      case 'cloud':
+        // cloud captions (P-48): the hub sends every change and the latest right after welcome
+        s.cloud = {
+          enabled: !!msg.enabled,
+          state: typeof msg.state === 'string' ? msg.state : 'off',
+          reason: typeof msg.reason === 'string' ? msg.reason : '',
+          latencyMs: Number.isFinite(msg.latency_ms) ? msg.latency_ms : null,
+        };
+        break;
       case 'people': {
         const list = Array.isArray(msg.people) ? msg.people : Array.isArray(msg.list) ? msg.list : [];
         for (const p of list) {
@@ -213,7 +223,10 @@ export function createStore() {
     s.toasts = [];
     s.lastStatus.clear();
     s.trackNames.clear();
-    if (!keepPeople) s.people.clear();
+    if (!keepPeople) {
+      s.people.clear();
+      s.cloud = null; // a new source: its engine sends its own cloud state
+    }
   }
 
   return { state: s, apply, prune, reset, colorOf, toast };
@@ -289,12 +302,15 @@ function stickyUp(prev, dy) {
  * Builds the per-frame view model. Holds the face filters, caption threads and direction state,
  * so keep one per page (lens.js makes a fresh one for offline rendering).
  * view = { clock, faces[], bubbles[], offscreen[], lower, you, alerts[], proposals[], status, feed[] ... }
+ * view.cloud = { on, state, reason, latencyMs, local }: cloud captions (P-48), shown only from a
+ * connected live engine; `local` is true while they have fallen back to local captions.
  *
  * Captions become one thread per speaker: an utterance's ".n" segments and the speaker's next
  * utterances join that speaker's running text, so a bubble or a line fills in instead of being
  * replaced. A speaker attribution that flips for less than FLIP_HOLD_S does not move the text.
  */
 export function createViewBuilder(store) {
+  const cloudView = { on: false, state: 'off', reason: '', latencyMs: null, local: false }; // reused
   const faceMem = new Map(); // face key -> { filt, flt, sm, face, born, seen, trackId, personId }
   const alias = new Map(); // track_id -> face key (a re-found person keeps their key)
   const owners = new Map(); // utt_id -> { key, cand, since }
@@ -735,11 +751,18 @@ export function createViewBuilder(store) {
     else if (s.paused) status = 'paused';
     else if (activeAlert) status = 'alert';
 
+    const cl = sourceKind === 'live' && s.connected ? s.cloud : null;
+    cloudView.on = !!cl?.enabled;
+    cloudView.state = cl ? cl.state : 'off';
+    cloudView.reason = cl ? cl.reason : '';
+    cloudView.latencyMs = cl ? cl.latencyMs : null;
+    cloudView.local = cloudView.on && (cloudView.state === 'fallback' || cloudView.state === 'unavailable');
+
     return {
       clock, anim, dt, sourceKind, config: cfg, paused: s.paused, pausedAge: anim - s.tPaused,
       connected: s.connected, status, speaking,
       faces, bubbles, offscreen: [...offMap.values()], lower, you, feed, utterances, translating,
-      alerts, activeAlert, proposals, pendingProposal,
+      alerts, activeAlert, proposals, pendingProposal, cloud: cloudView,
       toasts: s.toasts.map((t) => ({ ...t, age: anim - t.t })),
     };
   };

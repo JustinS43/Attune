@@ -18,6 +18,8 @@
  * text rolls up to make room; untranslated words never join the caption lines. Pure green light only: no
  * fills, nothing dark (a waveguide cannot draw black), a 3-4 px glow, nothing outside the band.
  * Alerts become an icon and a word; name proposals read "SAM?  ✓ Y  ✕ N".
+ * Cloud captions (P-48): while they are on, the rule under the header ends in a small, steady
+ * cloud and "CLOUD CAPTIONS ON" ("CLOUD · LOCAL CAPTIONS", dimmer, while they have fallen back).
  */
 
 import { W, H, FT, PX, font, clamp, lerp, hexA, rrect, icon, chevrons, degToPx, REDUCED_MOTION } from '../hud.js';
@@ -36,6 +38,7 @@ const F = {
   head: font(680, 22, FT),
   body: font(560, 24, FT),
   small: font(560, 16, FT),
+  cloud: font(600, 14, FT),
   big: font(680, 34, FT),
   mid: font(520, 21, FT),
   orig: font(500, 20, FT), // a line waiting for its translation: smaller and dimmed
@@ -130,6 +133,27 @@ function fitEnd(ctx, str, f, maxW) {
   return `${out.trimEnd()}…`;
 }
 
+const CLOUD_Y = 48; // baseline of the cloud label, on the rule under the header
+let cloudWidths = null; // measured once: [on, local]
+
+/** The steady cloud captions label at the rule's right end; returns its left x (for the rule). */
+function cloudLabel(ctx, cloud) {
+  const str = cloud.local ? 'CLOUD · LOCAL CAPTIONS' : 'CLOUD CAPTIONS ON';
+  if (!cloudWidths) {
+    ctx.font = F.cloud;
+    ctx.letterSpacing = '2px';
+    cloudWidths = [ctx.measureText('CLOUD CAPTIONS ON').width, ctx.measureText('CLOUD · LOCAL CAPTIONS').width];
+    ctx.letterSpacing = '0px';
+  }
+  const tw = cloudWidths[cloud.local ? 1 : 0];
+  const a = cloud.local ? 0.6 : 0.85;
+  const x1 = VW - LINE_X;
+  text(ctx, str, x1, CLOUD_Y, F.cloud, a, 'right', 2);
+  const ix = x1 - tw - 24;
+  monoIcon(ctx, 'cloud', ix, CLOUD_Y - 16, 19, 2, a);
+  return ix - 8;
+}
+
 function monoIcon(ctx, name, x, y, size, lw = 2.2, a = 1) {
   ctx.globalAlpha = a;
   icon(ctx, name, x, y, size, G, lw);
@@ -173,6 +197,7 @@ export function createMonoMode() {
       const urgent = view.alerts.find((a) => a.level === 'urgent' && !a.watch);
       const chip = view.alerts.find((a) => a !== urgent && !a.watch);
 
+      const cloud = view.cloud?.on ? view.cloud : null;
       if (view.status === 'connecting') {
         text(ctx, 'CONNECTING…', VW / 2, VH / 2 + 2, F.big, 0.55 + 0.35 * Math.sin(anim * 3), 'center', 3);
         text(ctx, 'ATTUNE ENGINE OFFLINE', VW / 2, VH / 2 + 40, F.small, 0.6, 'center', 2.5);
@@ -183,6 +208,7 @@ export function createMonoMode() {
         ctx.fillRect(VW / 2 - 81, VH / 2 - 24, 7, 28);
         text(ctx, 'PAUSED', VW / 2 - 62, VH / 2 + 3, F.big, 0.95, 'left', 4);
         text(ctx, 'P TO RESUME', VW / 2, VH / 2 + 44, F.small, 0.65, 'center', 2.5);
+        if (cloud) cloudLabel(ctx, cloud);
       } else if (urgent) {
         // an urgent alarm takes the whole band: the word flashes in the T3 rhythm but never
         // drops below half brightness, so it stays readable over a bright scene
@@ -242,11 +268,12 @@ export function createMonoMode() {
           const names = inView(view);
           text(ctx, names.length ? `IN VIEW · ${names.join(' · ').toUpperCase()}` : 'LISTENING', LINE_X, HEAD_Y, F.small, 0.55, 'left', 2.5);
         }
+        const ruleEnd = cloud ? cloudLabel(ctx, cloud) : LINE_X + LINE_W;
         ctx.save();
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 0.28;
         ctx.fillStyle = G;
-        ctx.fillRect(LINE_X, 42, LINE_W, 1.2);
+        ctx.fillRect(LINE_X, 42, ruleEnd - LINE_X, 1.2);
         ctx.restore();
 
         if (st) {
