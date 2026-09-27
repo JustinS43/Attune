@@ -3,10 +3,10 @@
 Section 4 - Pages, Engine & Demo. TODO: P-02. Contracts: docs/contracts.md (1).
 
 Loads the config, creates the bus and clock, then each section's service in the
-contract order: hardware, audio, vision, fusion, alerts, llm, (calibration),
-speech_out, history, server. A service that is missing or fails to start is
-logged, reported as a `status.part` with ok=false, and skipped; the rest keep
-running. Ctrl+C stops everything within about 3 seconds.
+contract order: hardware, audio, cloud (optional cloud captions, A-32), vision,
+fusion, alerts, llm, (calibration), speech_out, history, server. A service that is
+missing or fails to start is logged, reported as a `status.part` with ok=false, and
+skipped; the rest keep running. Ctrl+C stops everything within about 3 seconds.
 
     python -m attune                                  # webcam by name, mic, browser
     python -m attune --source data/reels/film/cafe_friends.mp4 --audio-file talk.wav
@@ -185,6 +185,7 @@ class Engine:
                 "audio",
                 make("attune.audio.service", "AudioService", mic=False if opts.no_mic else None),
             ),
+            ("cloud", make("attune.audio.cloud_diarize", "CloudDiarizeService")),
             (
                 "vision",
                 make("attune.vision.service", "VisionService", clock=clock.now, source=opts.source),

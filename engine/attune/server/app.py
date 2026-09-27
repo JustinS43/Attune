@@ -9,6 +9,7 @@ Routes:
     /data/reels/film/  demo reels from <cwd>/data/reels/film (only that folder:
                        people, profiles, sessions and history are never served)
     /api/history/...   Section 3's history router, when it exists
+    /api/settings/elevenlabs, /api/settings/google   laptop-only keys in .env (P-41, P-47)
     /api/sim/...       simulated-Arduino controls, only with --simulate-hardware
     /favicon.ico       the Attune mark (pages without their own icon)
 
@@ -34,6 +35,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .cloud_settings import create_router as cloud_settings_router
 from .speech_settings import create_router as speech_settings_router
 from .ws import Hub, host_of, is_loopback_host
 
@@ -205,7 +207,9 @@ def create_app(
         return Response(status_code=204)
 
     app.add_api_websocket_route("/ws", hub.endpoint)
-    app.include_router(speech_settings_router(Path(data_root) if data_root else Path.cwd()))
+    settings_root = Path(data_root) if data_root else Path.cwd()
+    app.include_router(speech_settings_router(settings_root))
+    app.include_router(cloud_settings_router(settings_root))  # the Google key (P-47)
 
     if history_router is not None:
         app.include_router(history_router, prefix="/api/history")
