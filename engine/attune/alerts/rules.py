@@ -8,6 +8,9 @@ from uuid import uuid4
 
 from .rhythm import RhythmEvidence
 
+# Kinds that fire on a single sound, and the config key for the rest between their alerts.
+REST_KEYS = {"doorbell": "doorbell_rest_s", "knock": "knock_rest_s"}
+
 
 class AlertRules:
     """Fuse recent model scores with independent alarm rhythm evidence."""
@@ -16,7 +19,7 @@ class AlertRules:
         self.cfg, self.side_db = config, side_db
         self.history = deque(maxlen=3)
         self.active: dict = {}
-        self.last_bell = float("-inf")
+        self.last_start = dict.fromkeys(REST_KEYS, float("-inf"))
         self.watch_until = float("-inf")
 
     def side(self, left: float, right: float) -> str:
@@ -35,7 +38,7 @@ class AlertRules:
 
     def _pattern(self, kind: str) -> tuple[str, dict]:
         return "hw.pattern", {
-            "name": {"smoke": "T3", "co": "T4", "doorbell": "BELL"}[kind],
+            "name": {"smoke": "T3", "co": "T4", "doorbell": "BELL", "knock": "BELL"}[kind],
             "side": {"left": "L", "right": "R", "none": "B"}[self.active[kind]["side"]],
         }
 
@@ -74,6 +77,14 @@ class AlertRules:
             and scores.get("Music", 0) < self.cfg["speech_music_block"]
         ):
             fires["doorbell"] = bell
+        # A-30: a knock on the door. Music blocks it (drums), speech doesn't: people call out
+        # while they knock, and knocks under speech still scored well above the threshold.
+        knock = scores.get("Knock", 0)
+        if (
+            knock >= self.cfg["knock_score"]
+            and scores.get("Music", 0) < self.cfg["speech_music_block"]
+        ):
+            fires["knock"] = knock
         output = []
         if (
             self.cfg["watch_score"] <= smoke < self.cfg["smoke_score"]
@@ -99,7 +110,7 @@ class AlertRules:
             if kind == "co" or (kind == "smoke" and smoke < self.cfg["smoke_score"]):
                 seen -= rhythm.quiet_s
             if kind not in self.active:
-                if kind == "doorbell" and t - self.last_bell < self.cfg["doorbell_rest_s"]:
+                if kind in REST_KEYS and t - self.last_start[kind] < self.cfg[REST_KEYS[kind]]:
                     continue
                 self.active[kind] = {
                     "id": str(uuid4()),
@@ -109,8 +120,8 @@ class AlertRules:
                     "ack": None,
                 }
                 output.extend([self._event(kind, "start"), self._pattern(kind)])
-                if kind == "doorbell":
-                    self.last_bell = t
+                if kind in REST_KEYS:
+                    self.last_start[kind] = t
             else:
                 a = self.active[kind]
                 a["seen"], a["score"] = seen, score
@@ -145,5 +156,6 @@ class AlertRules:
         output = [self._event(kind, "clear") for kind in self.active]
         self.active.clear()
         self.history.clear()
-        self.last_bell = self.watch_until = float("-inf")
+        self.last_start = dict.fromkeys(REST_KEYS, float("-inf"))
+        self.watch_until = float("-inf")
         return output + [("hw.stop", {})]

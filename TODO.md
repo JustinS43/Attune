@@ -74,6 +74,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-26 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2 (#77)
 - [x] A-27 A voice print from another voice model (another size, or another model's tag) is ignored at load with one warning, never compared (#80)
 - [x] A-28 A sounding alarm stays on while the glasses tap: tapped windows can't show that it stopped, so they no longer run down the 15 s quiet-clear (it cycled 14 s on, 10 s off); it ends with "Got it" or 15 s of heard quiet (#89)
+- [x] A-30 Door knock alert: a knock on the door (EfficientAT "Knock" at `knock_score` or more, blocked by music but not by speech) raises a `knock` alert with the BELL pattern, on the side the sensors hear it; threshold set on synthetic knocks, real knocks on the rig still to check (#92)
 
 ## Section 3 – Hardware & Services
 
