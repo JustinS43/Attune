@@ -320,7 +320,7 @@ def test_alarm_holds_while_the_rig_taps_until_got_it(config, bus):
 
 
 def test_knock_fires_through_speech_with_the_bell_pattern(config):
-    """A-29: people call out while they knock, so speech must not block a knock."""
+    """A-30: people call out while they knock, so speech must not block a knock."""
     r = AlertRules(config["alerts"], 3)
     assert not r.evaluate(0, {"Knock": 0.09}, RhythmEvidence(), (10, 1))
     e = r.evaluate(0.5, {"Knock": 0.3, "Speech": 0.8}, RhythmEvidence(), (10, 1))

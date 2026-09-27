@@ -77,7 +77,7 @@ class AlertRules:
             and scores.get("Music", 0) < self.cfg["speech_music_block"]
         ):
             fires["doorbell"] = bell
-        # A-29: a knock on the door. Music blocks it (drums), speech doesn't: people call out
+        # A-30: a knock on the door. Music blocks it (drums), speech doesn't: people call out
         # while they knock, and knocks under speech still scored well above the threshold.
         knock = scores.get("Knock", 0)
         if (
