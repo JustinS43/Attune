@@ -1,4 +1,4 @@
-"""Laptop-only Google key for cloud captions (P-47); the key stays in .env, never on the bus.
+"""Laptop-only Google key for cloud captions (P-48); the key stays in .env, never on the bus.
 
 Works exactly like the ElevenLabs settings (speech_settings.py, P-41): loopback and
 same-origin only, an atomic .env write that keeps every other entry, a blank key keeps the

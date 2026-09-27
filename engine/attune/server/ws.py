@@ -27,7 +27,7 @@ the hub remembers, the lens only those still on screen (`bubble_fade_s` + 3 s).
 It also gets every alert still sounding (P-44): a lens that reloads mid-alarm shows the alarm
 again instead of going quiet until the next update.
 
-Cloud captions (P-47): every `cloud.state` goes to every page as `cloud`, and the latest one
+Cloud captions (P-48): every `cloud.state` goes to every page as `cloud`, and the latest one
 is sent again right after `welcome`, so each page can show the "Cloud captions on" badge. The
 console's event log notes only when `enabled` or `state` changes. `cloud.state` never carries
 a credential, and nothing here adds one.
@@ -275,7 +275,7 @@ class Hub:
         self._part_ok: dict[str, bool] = {}
         self._hw_connected: bool | None = None
         self._hw_link: Any = None  # latest hw.link, sent to pages that connect later
-        self._cloud: dict | None = None  # latest cloud.state (P-47), sent after welcome
+        self._cloud: dict | None = None  # latest cloud.state (P-48), sent after welcome
         self._cloud_seen: tuple[bool, str] | None = None  # (enabled, state) last logged
         self._sensor_levels: dict | None = None
         self._sensor_sent_at = float("-inf")
@@ -627,7 +627,7 @@ class Hub:
             )
 
     def _on_cloud(self, body: dict[str, Any]) -> None:
-        """Cloud captions' state (P-47): to every page; the event log notes real changes."""
+        """Cloud captions' state (P-48): to every page; the event log notes real changes."""
         self.broadcast(C.WS_CLOUD, body)
         enabled, state = bool(body.get("enabled")), str(body.get("state") or "off")
         seen, self._cloud_seen = self._cloud_seen, (enabled, state)

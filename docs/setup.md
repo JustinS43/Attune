@@ -182,6 +182,63 @@ Writes require same-origin JSON requests. Responses contain `key_configured`,
 `key_source`, `voice_id`, `voice_from_environment`, and, after saving,
 `restart_required`; never the key. These routes are local settings, not bus commands.
 
+## Cloud captions (optional)
+
+Cloud captions stream the microphone audio to Google Speech-to-Text, which labels every word
+with a speaker, so a quick reply from a second person gets its own bubble. They are **off by
+default**. While they are on, only the 16 kHz microphone audio leaves the laptop (never
+frames, faces, voice prints, names, captions or history), and every page shows a calm
+"Cloud captions on" badge. Local captions keep running the whole time, and Attune falls
+back to them without a gap if Google is slow, unreachable or has no key. Design and limits:
+[cloud-diarization.md](cloud-diarization.md).
+
+**Cost.** About $0.024 per minute of audio sent, with Google's data logging off (Attune
+never turns it on), and the first 60 minutes each month are free. Prices change: check
+[Google's pricing page](https://cloud.google.com/speech-to-text/pricing) before relying on
+these figures. Nothing is sent, and nothing is billed, while the switch is off.
+
+**Set it up (an API key):**
+
+1. Open the [Google Cloud console](https://console.cloud.google.com/) and create a project,
+   or pick an existing one.
+2. Enable billing for that project (**Billing**). The free minutes still need a billing
+   account.
+3. Go to **APIs & Services → Library**, search for **Cloud Speech-to-Text API**, and choose
+   **Enable**.
+4. Go to **APIs & Services → Credentials → Create credentials → API key**.
+5. Restrict the key: open it, and under **API restrictions** choose **Restrict key** and tick
+   only **Cloud Speech-to-Text API**. Save.
+6. On the laptop, open `/phone/` at `localhost`, then **Settings → Cloud captions (Google) →
+   Google API key**. Paste the key and choose **Save key**. (Or put
+   `GOOGLE_SPEECH_API_KEY=...` in the engine's `.env` yourself.) The key is saved only in the
+   laptop's `.env`; Settings then shows "Key saved ••••" and never shows it again. It applies
+   without a restart.
+7. Leave Google's **data logging** off (it is off unless you opt in on the Speech-to-Text
+   page).
+8. Turn on the **Cloud captions** switch in the same card. The status line then reads
+   "Connecting…" and "On · <latency> ms"; the console shows the same.
+
+Paste the key only into the laptop's Settings page or its `.env`: never into chat, an issue,
+a commit, a screenshot or anywhere else. If it leaks, delete it in the Cloud console and make
+a new one.
+
+**Alternative: a service account.** In **IAM & Admin → Service accounts**, create a service
+account with the **Cloud Speech Client** role (`roles/speech.client`), then **Keys → Add key →
+Create new key → JSON**. Save the JSON file outside the repo (for example
+`C:\Users\<you>\keys\attune-speech.json`) and put its full path in the engine's `.env`:
+
+    GOOGLE_APPLICATION_CREDENTIALS=C:\Users\<you>\keys\attune-speech.json
+
+With both set, the API key is tried first. Settings shows only whether a service-account
+file is set, never its path.
+
+The card uses `GET /api/settings/google` (returns `key_configured`, `key_source`
+(`environment`, `file` or `none`), `service_account` and `restart_required`, never the key or
+a path) and `POST /api/settings/google` with `{"api_key": "..."}`. Like the ElevenLabs
+settings, these routes answer only on the laptop (`localhost` or a loopback address) to
+same-origin JSON requests; a blank key keeps the saved one. The switch and the language send
+the `cloud.set` command; the laptop remembers the choice in `data/cloud.json`.
+
 ## Windows notes
 
 - **Keep the virtual environment on a short path** (for example `C:\venvs\attune`, via

@@ -1,4 +1,4 @@
-"""The Google key for cloud captions (P-47): saved to .env like P-41, never echoed.
+"""The Google key for cloud captions (P-48): saved to .env like P-41, never echoed.
 
 Only obviously fake values are used here."""
 

@@ -10,6 +10,9 @@
  *   toward the source, and a haptic chip. Acknowledged alerts turn green, calm down, then fade.
  * - Name proposals for a face that is not in view: "Is this Sam?" with Y / N keycaps.
  * - Paused: a pause chip explains that nothing is recognised.
+ * - Cloud captions (P-48): while the wearer has them on, a small calm chip beside the status pill
+ *   reads "Cloud captions on" (with "· local captions" while they have fallen back). It never
+ *   flashes or pulses and uses no alert colour.
  * - Calm while people talk: the status pill, sound chips and their arrows stand still. Only the
  *   smoke / CO card keeps its T3 flash, a deliberate safety signal.
  * - Nothing jumps: when a toast or an alert arrives or leaves, the others glide to their new
@@ -19,7 +22,7 @@
 import {
   FD, FT, font, clamp, easeOut, hexA, rrect, textW, glass, icon, eqBars,
   logoMark, keycap, arrow, edgeGlow, ripples, pill, dot, PX, REGION, REDUCED_MOTION, springStep,
-  INK, INK_2, INK_3, TEAL, SUN, CORAL, LEAF, deepen,
+  INK, INK_2, INK_3, TEAL, SUN, CORAL, LEAF, BLUE, deepen,
 } from './hud.js';
 
 const SIDE_WORD = { left: 'Left', right: 'Right', behind: 'Behind', none: 'Nearby' };
@@ -121,6 +124,22 @@ export function drawStatus(ctx, blur, view, anim, a = 1) {
   eqBars(ctx, barsX, y + h / 2, INK_3, 0.6, view.status === 'paused' ? 0 : 0.25 + 0.75 * speech, 16);
   icon(ctx, 'lock', lockX, y + h / 2 - 9, 18, INK_3, 2.2);
   ctx.restore();
+  if (view.cloud?.on) drawCloudChip(ctx, blur, x + w + 12, y + (h - CLOUD_H) / 2, view.cloud, a);
+}
+
+// ---------------------------------------------------------------- cloud captions chip (P-48)
+const CLOUD_H = 40;
+const CLOUD_FONT = font(600, 17, FT);
+const CLOUD_SUB = font(520, 16, FT);
+/** Parts reused every frame: only the second one's alpha changes with the state. */
+const cloudOn = [
+  { icon: 'cloud', color: BLUE, gap: 10 },
+  { text: 'Cloud captions on', font: CLOUD_FONT, color: INK_2, gap: 12 },
+];
+const cloudLocal = [...cloudOn, { text: '· local captions', font: CLOUD_SUB, color: INK_3, gap: 12 }];
+
+function drawCloudChip(ctx, blur, x, y, cloud, a = 1) {
+  pill(ctx, blur, x, y, CLOUD_H, cloud.local ? cloudLocal : cloudOn, { a: a * 0.97 });
 }
 
 // ---------------------------------------------------------------- alerts

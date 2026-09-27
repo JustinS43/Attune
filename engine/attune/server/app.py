@@ -9,7 +9,7 @@ Routes:
     /data/reels/film/  demo reels from <cwd>/data/reels/film (only that folder:
                        people, profiles, sessions and history are never served)
     /api/history/...   Section 3's history router, when it exists
-    /api/settings/elevenlabs, /api/settings/google   laptop-only keys in .env (P-41, P-47)
+    /api/settings/elevenlabs, /api/settings/google   laptop-only keys in .env (P-41, P-48)
     /api/sim/...       simulated-Arduino controls, only with --simulate-hardware
     /favicon.ico       the Attune mark (pages without their own icon)
 
@@ -209,7 +209,7 @@ def create_app(
     app.add_api_websocket_route("/ws", hub.endpoint)
     settings_root = Path(data_root) if data_root else Path.cwd()
     app.include_router(speech_settings_router(settings_root))
-    app.include_router(cloud_settings_router(settings_root))  # the Google key (P-47)
+    app.include_router(cloud_settings_router(settings_root))  # the Google key (P-48)
 
     if history_router is not None:
         app.include_router(history_router, prefix="/api/history")

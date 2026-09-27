@@ -1,4 +1,4 @@
-"""Cloud captions in the engine (P-47): cloud.state to every page, cloud.set to the bus."""
+"""Cloud captions in the engine (P-48): cloud.state to every page, cloud.set to the bus."""
 
 from __future__ import annotations
 

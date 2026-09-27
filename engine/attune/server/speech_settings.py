@@ -56,7 +56,7 @@ def _summary(path: Path) -> dict:
 
 
 def _write_env(path: Path, changes: dict[str, str]) -> None:
-    """Set `changes` in the .env at `path` atomically (also used by cloud_settings, P-47)."""
+    """Set `changes` in the .env at `path` atomically (also used by cloud_settings, P-48)."""
     with _LOCK:
         # Build the replacement privately and swap once, preserving unrelated .env entries.
         fd, name = tempfile.mkstemp(prefix=".env.settings-", dir=path.parent)
