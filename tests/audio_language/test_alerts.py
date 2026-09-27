@@ -572,3 +572,33 @@ def test_touch_hold_mutes_and_tap_acknowledges(bus, config):
     service._handle(
         "command", {"name": "alert.snooze", "args": {"alert_id": "gone"}}, 0
     )  # no-op
+
+
+def test_smoke_alarm_beeps_never_show_as_a_timer_first(config):
+    """Live smoke test: "Beep, bleep" scored before the T3 rhythm was confirmed."""
+    r = AlertRules(config["alerts"], 3)
+    beep = {"Beep, bleep": 0.9}
+    for i in range(4):  # alarm-pitch beeps heard, rhythm not yet confirmed
+        assert not _fire_rhythm(r, i * 0.5, beep, RhythmEvidence(tone_on=True, beeps=1))
+    kinds = [
+        e["kind"]
+        for e in _fire_rhythm(r, 2, beep, RhythmEvidence(beeps=3, t3_cycles=2))
+    ]
+    assert kinds == ["smoke"]
+
+
+def test_a_timer_already_up_is_cleared_when_it_turns_out_to_be_smoke(config):
+    r = AlertRules(config["alerts"], 3)
+    _fire(r, 0, {"Beep, bleep": 0.9})
+    assert _fire(r, 0.5, {"Beep, bleep": 0.9})[0]["kind"] == "timer"
+    out = _fire_rhythm(r, 1, {}, RhythmEvidence(t3_cycles=2))
+    assert [(e["kind"], e["state"]) for e in out] == [
+        ("timer", "clear"),
+        ("smoke", "start"),
+    ]
+
+
+def _fire_rhythm(r, t, scores, rhythm):
+    return [
+        e for topic, e in r.evaluate(t, scores, rhythm, (10, 1)) if topic == "alert"
+    ]

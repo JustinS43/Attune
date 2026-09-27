@@ -194,6 +194,8 @@ class AlertRules:
         ):
             fires["knock"] = knock
         alarm = "smoke" in fires or "co" in fires or "smoke" in self.active or "co" in self.active
+        # pure beeps at a smoke/CO alarm's pitch: wait for the rhythm check before calling it a timer
+        alarm = alarm or rhythm.tone_on or rhythm.beeps > 0
         for kind, sound in SOUNDS.items():
             score = sound_score(scores, kind)
             hit = score >= self.threshold(kind) and all(
@@ -206,6 +208,9 @@ class AlertRules:
                 fires[kind] = score
         fires = {kind: score for kind, score in fires.items() if not self.muted(kind, t)}
         output = []
+        if ("smoke" in fires or "co" in fires) and "timer" in self.active:
+            output.append(self._event("timer", "clear"))  # it was the alarm all along
+            del self.active["timer"]
         if (
             self.cfg["watch_score"] <= smoke < self.cfg["smoke_score"]
             and not self.muted("smoke", t)
