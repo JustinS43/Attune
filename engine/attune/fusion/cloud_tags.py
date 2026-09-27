@@ -8,8 +8,9 @@ streaming diarization. A tag is evidence about one stream only: a restart number
 afresh, and Google revises tags as it hears more. So:
 
 - **Cloud speakers.** Each (stream, tag) maps to a *cloud speaker*, the thing fusion binds. A
-  new stream starts with audio the old one already heard, so a new tag whose words overlap an
-  old tag's words for `bridge_min_s` takes over that tag's cloud speaker (and with it the face).
+  new stream starts with audio the old one already heard, so a new tag that shares
+  `bridge_min_s` of the same words (same text, same moment) with an old tag takes over that
+  tag's cloud speaker, and with it the face; pairs are made strongest first, one to one.
 - **Binding.** Every tick `note` records which visible faces are talking: Light-ASD's verdict
   where it is fresh, else the lip checks (a probable-band face counts half); the wearer too,
   when "You" is decided. A cloud speaker binds to the face whose talking overlaps its words
@@ -19,14 +20,15 @@ afresh, and Google revises tags as it hears more. So:
   evidence, and remembers the face's person, so the same person seen again as a new track keeps
   it. Only the newest stream's voices hold faces against each other; an older stream's voice
   keeps its face for its old words but blocks nobody.
-- **Words.** `evidence` gives each caption word the cloud speaker of the cloud word nearest its
-  middle (within `word_match_s`). A bound speaker's words go to its face, or, with the face out
-  of view, to the dock under that face's label and exit side (words the face said while in view
-  keep it). An unbound speaker's words in a caption all go to one place: the face the local
-  evidence gives most of them, unless that face is another voice's; else a face in view the
-  talk log has talking during them (`bind_share` / 2 of their time; "face" from `bind_share`);
-  else the off-screen voice the voice prints name; else their own dock bubble, "Someone"
-  (person id `session-cloud-N`: session-only, wiped by forget session like any stranger).
+- **Words.** `evidence` gives each caption word the cloud speaker of the cloud word at its
+  middle (within `word_match_s`; the same word first, since overlapping voices share moments).
+  A bound speaker's words go to its face, or, with the face out of view, to the dock under that
+  face's label and exit side (words the face said while in view keep it). An unbound speaker's
+  words in a caption all go to one place: the face the local evidence gives most of them,
+  unless that face is another voice's; else a face in view the talk log has talking during
+  them (`bind_share` / 2 of their time; "face" from `bind_share`); else the off-screen voice
+  the voice prints name; else their own dock bubble, "Someone" (person id `session-cloud-N`:
+  session-only, wiped by forget session like any stranger).
 - **Turns.** `protect` locks a caption piece of one cloud speaker between pieces of others once
   it lasts `turn_min_s` (inside one other voice's speech, also two words: a single wrongly
   tagged word in someone's sentence is not a turn). The smoothing that folds short pieces into
