@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import mimetypes
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -40,6 +41,10 @@ from .speech_settings import create_router as speech_settings_router
 from .ws import Hub, host_of, is_loopback_host
 
 log = logging.getLogger(__name__)
+
+# Windows' registry doesn't know .mjs, so without this it went out as text/plain and the browser
+# refused the lens's modes/focused-layout.mjs, leaving the lens and demo blank (P-50).
+mimetypes.add_type("text/javascript", ".mjs")
 
 WEB_ROOT = Path(__file__).resolve().parents[3] / "web"
 PAGE_FOLDERS = ("lens", "panels", "shared", "phone", "demo")
