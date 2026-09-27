@@ -66,9 +66,7 @@ class Voices:
 
 
 def service(config, bus, asr, voices=None, **audio):
-    cfg = config | {
-        "audio": config["audio"] | {"asr_chunk_ms": 32, "pre_roll_ms": 320} | audio
-    }
+    cfg = config | {"audio": config["audio"] | {"asr_chunk_ms": 32, "pre_roll_ms": 320} | audio}
     return AudioService(
         bus,
         cfg,
@@ -119,9 +117,7 @@ def test_a_capture_gap_finishes_the_utterance_instead_of_dropping_it(config, bus
     audio(s, 13.0, 0.5, QUIET)  # 2 s of audio never arrived
     finals = transcripts(bus, final=True)
     assert len(finals) == 1 and finals[0]["text"]
-    assert finals[0]["t_start"] == pytest.approx(
-        10.0
-    )  # lead-in silence is not real time
+    assert finals[0]["t_start"] == pytest.approx(10.0)  # lead-in silence is not real time
 
 
 @pytest.mark.parametrize(
@@ -132,9 +128,7 @@ def test_a_capture_gap_finishes_the_utterance_instead_of_dropping_it(config, bus
         ("command", {"name": "languages.set", "args": {"langs": ["en"]}}),
     ],
 )
-def test_pausing_replying_or_switching_language_keeps_what_was_said(
-    config, bus, topic, event
-):
+def test_pausing_replying_or_switching_language_keeps_what_was_said(config, bus, topic, event):
     s = service(config, bus, GrowingASR())
     s._make_asr = lambda languages: GrowingASR()
     audio(s, 10.0, 1.0, SPEECH)
@@ -190,9 +184,7 @@ def test_a_short_reply_heard_as_nothing_is_decoded_again(config, bus):
         assert len(asr.rescue_audio) >= 0.32 * 16000 + 0.4 * 16000
         assert not np.any(asr.rescue_audio[:5000])
         # word times are shifted back by the lead-in
-        assert final[0]["words"][0][1] == pytest.approx(
-            final[0]["t_start"] + 0.03, abs=0.01
-        )
+        assert final[0]["words"][0][1] == pytest.approx(final[0]["t_start"] + 0.03, abs=0.01)
     finally:
         s.stop()
 
@@ -224,9 +216,7 @@ def test_long_talk_is_finalised_at_its_first_pause_after_soft_split(config, bus)
     audio(s, 12.5, 0.064, QUIET)  # the VAD dips inside a word: not a pause
     audio(s, 12.564, 0.5, SPEECH)
     assert transcripts(bus, final=True) == []
-    audio(
-        s, 13.064, 0.15, QUIET
-    )  # a short breath between sentences, far below end_silence
+    audio(s, 13.064, 0.15, QUIET)  # a short breath between sentences, far below end_silence
     audio(s, 13.214, 1.0, SPEECH)
     finals = transcripts(bus, final=True)
     assert len(finals) == 1
@@ -253,13 +243,9 @@ def test_speech_right_after_a_final_keeps_its_first_word(config, bus):
 def test_only_16k_blocks_take_room_in_the_audio_inbox(config, bus):
     s = service(config, bus, GrowingASR())
     s.worker.subscribe("audio.block", accept=_is_16k)
-    bus.publish(
-        "audio.block", {"t": 0.0, "sample_rate": 32000, "samples": np.zeros(320)}
-    )
+    bus.publish("audio.block", {"t": 0.0, "sample_rate": 32000, "samples": np.zeros(320)})
     assert s.worker.inbox.qsize() == 0
-    bus.publish(
-        "audio.block", {"t": 0.0, "sample_rate": 16000, "samples": np.zeros(160)}
-    )
+    bus.publish("audio.block", {"t": 0.0, "sample_rate": 16000, "samples": np.zeros(160)})
     assert s.worker.inbox.qsize() == 1
     s.worker.stop()
 
@@ -268,9 +254,7 @@ def test_a_cut_never_splits_a_word():
     t = ["▁Last", "▁sum", "mer", "▁in", "▁North", "▁Ca"]
     assert hold_back(t, 0) == 5  # "Ca" may be the start of "Carolina": it waits
     assert hold_back(t + ["ro", "li", "na", "."], 0) == 10  # a sentence end is whole
-    assert (
-        hold_back(t + ["ro", "li", "na", ".", "▁"], 0) == 10
-    )  # a lone word mark waits
+    assert hold_back(t + ["ro", "li", "na", ".", "▁"], 0) == 10  # a lone word mark waits
     assert hold_back(["▁Hi"], 0) == 1  # the only word is kept
     assert hold_back(t, 5) == 6
     assert hold_back(t, 6) == 6
@@ -348,9 +332,7 @@ def _db(frame):
 
 
 def _tone(db, n=512):
-    return (np.sin(np.arange(n) * 0.3) * np.sqrt(2) * 10 ** (db / 20)).astype(
-        np.float32
-    )
+    return (np.sin(np.arange(n) * 0.3) * np.sqrt(2) * 10 ** (db / 20)).astype(np.float32)
 
 
 def test_quiet_speech_is_raised_for_the_vad_but_not_the_room_floor():
@@ -388,8 +370,8 @@ def test_the_vad_hears_the_gained_frame_when_it_is_on(config, bus):
         tone = _tone(-56) if i >= 100 else 0  # the room's floor, then a quiet talker
         s._audio({"t": 10 + i * 0.032, "samples": tone + noise}, 0)
     assert heard[-1] > -40  # raised ~20 dB
-    s2 = service(config, bus, GrowingASR())
-    assert s2.vad_gain is None  # off unless configured
+    assert service(config, bus, GrowingASR()).vad_gain is not None  # on by default (A-31)
+    assert service(config, bus, GrowingASR(), vad_gain=False).vad_gain is None
 
 
 class QuietTalkerASR(GrowingASR):
@@ -405,9 +387,7 @@ class QuietTalkerASR(GrowingASR):
 
 
 def test_background_talk_that_keeps_the_vad_on_still_lets_a_final_come(config, bus):
-    s = service(
-        config, bus, QuietTalkerASR(), soft_split_s=2.0, soft_split_word_gap_s=0.8
-    )
+    s = service(config, bus, QuietTalkerASR(), soft_split_s=2.0, soft_split_word_gap_s=0.8)
     audio(s, 10.0, 4.0, SPEECH)  # never a VAD pause
     finals = transcripts(bus, final=True)
     assert len(finals) == 1
