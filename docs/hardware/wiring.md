@@ -64,7 +64,7 @@ a buzz: lower `MOTOR_SPEED_*` in `rig_config.h`, lengthen `SOFT_START_MS`, check
 ## How to test tomorrow (plug in → link → patterns)
 
 1. **Flash** the firmware (see `firmware/README.md`, "UNO R3 + servo"). Serial Monitor at
-   115200 should show `READY 1.1.1 NONE` on the R3 (`TB6612` / `L298` / `NONE` on the R4) and
+   115200 should show `READY 1.1.2 NONE` on the R3 (`TB6612` / `L298` / `NONE` on the R4) and
    `LV …` lines; LED 13 blips every 2 s (the R4's matrix shows `?`); the servo twitches to rest once.
    **Close the Serial Monitor** before starting the engine (only one program can hold the port).
 2. **Engine**, from the repo root, with `hardware.simulate = false` (default) and no
@@ -72,7 +72,7 @@ a buzz: lower `MOTOR_SPEED_*` in `rig_config.h`, lengthen `SOFT_START_MS`, check
    `2341:0043` or `2341:0001`, UNO R4 WiFi `2341:1002`; or CH340/FTDI/CP210x clones); set
    `hardware.port = "COM5"` only if auto-find picks the wrong one. The R3 may reset when the
    port opens; that only adds about a second. Within ~3 s: `hw.link` →
-   `{connected: true, firmware: "1.1.1", driver: "NONE"}` (R3 + servo), the console's Arduino
+   `{connected: true, firmware: "1.1.2", driver: "NONE"}` (R3 + servo), the console's Arduino
    chip goes green, LED 13 blinks slowly (the R4's matrix shows a pulsing heart).
 3. **Levels:** clap near each side; the console/`status.part` hardware metrics `left`/`right` jump.
 4. **Patterns from the console** ("test pattern" buttons send command `pattern.test`):

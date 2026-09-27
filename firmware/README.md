@@ -24,7 +24,7 @@ protocol is the same on both.
 | `attune_rig/rig_config.h` | Pins, buzzer choice (`BUZZER`), driver libraries, servo tap angles and times, safety limits |
 | `attune_rig/board.h` | R3 / R4 differences: which board, matrix or LED 13, flash (`PROGMEM`) read helpers |
 
-> **Compile status.** The UNO R3 build compiles cleanly (`arduino-cli` 1.5.1, `arduino:avr`
+> **Earlier 1.1.1 compile status.** The UNO R3 build compiled cleanly (`arduino-cli` 1.5.1, `arduino:avr`
 > 1.8.8, Servo 1.3.0, `--warnings all`): **8,574 bytes flash (26 %), 434 bytes RAM (21 %)**,
 > leaving 1,614 bytes for the stack. 1.1.1 runs on the team's UNO R3 and was bench-tested over
 > the serial link on 2026-09-26 (results in `docs/hardware/wiring.md`). The UNO R4 WiFi build was
@@ -111,9 +111,9 @@ If the compile complains about a driver-library call, the four calls used are
 
 ## Behaviour
 
-- **Start-up:** servo build (R3): parks the servo at rest, prints `READY 1.1.1 NONE`. Motor
+- **Start-up:** servo build (R3): parks the servo at rest, prints `READY 1.1.2 NONE`. Motor
   build (R4): probes I²C (`0x14` → TB6612, `0x0F` → L298, else NONE; with `USE_SERVO_BACKUP`
-  the D9 servo becomes the tapper), prints `READY 1.1.1 <driver>`. Shows LOST (`?` on the
+  the D9 servo becomes the tapper), prints `READY 1.1.2 <driver>`. Shows LOST (`?` on the
   matrix, a blip on LED 13) until the laptop's first `HB`.
 - **Link:** every laptop `HB` refreshes a 2 s watchdog. On the first `HB` after being
   unlinked the board prints `READY` again: the laptop opens the port without toggling DTR,
@@ -125,10 +125,12 @@ If the compile complains about a driver-library call, the four calls used are
   round, and a `millis()` tick in between made the unsigned `now - lastHbIn` wrap, so the
   watchdog dropped a live link on about 1 % of heartbeats (an alarm stopped about once a
   minute) and a one-shot pattern was sometimes skipped (fixed in 1.1.1).
-- **Levels:** both sound sensors are sampled every loop (thousands of times a second); every
-  `rate` ms (default 50) the board prints `LV <ms> <left> <right> <motor>` with the
-  peak-to-peak of each side (0–1023). `motor` is 1 if the motor ran (or the servo was
-  attached) at any time in that window.
+- **Levels:** both sound sensors are sampled every loop; the first ADC conversion after
+  switching A0/A1 is discarded. Every `rate` ms (default 50) the board prints
+  `LV <ms> <left> <right> <motor>` with each side's peak-to-peak (0–1023), ignoring one
+  isolated highest and lowest sample per window. The readings are not gain-balanced;
+  check which physical mic reaches A0/A1 before interpreting direction. `motor` is 1 if
+  the motor ran (or the servo was attached) at any time in that window.
 - **Touch:** tap (< `tap_ms`, default 400), hold (≥ `hold_ms`, default 800, sent while still
   held), double (second tap starts within `tap_ms` of the first), triple (a third tap within
   `tap_ms` of the second; sent at once on its release). A single or double tap is sent `tap_ms`
