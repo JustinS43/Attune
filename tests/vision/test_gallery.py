@@ -53,6 +53,73 @@ def test_session_people_are_forgotten_and_never_saved(gallery, tmp_path):
     assert gallery.get(s.person_id) is None
 
 
+def test_automatic_contact_survives_restart_and_moves_pages(gallery, tmp_path):
+    face = unit(rng.standard_normal(512))
+    person, removed = gallery.remember_auto(np.stack([face] * 5), now=1000)
+    assert removed is None and person.source == "auto" and person.consent_t is None
+    assert gallery.set_tier(person.person_id, "close").tier == "close"
+    reloaded = Gallery(str(tmp_path / "people"))
+    reloaded.load()
+    assert reloaded.get(person.person_id).tier == "close"
+    assert reloaded.match(face)[0] == person.person_id
+
+
+def test_automatic_capacity_never_evicts_close_or_manual_people(gallery):
+    face = unit(rng.standard_normal(512))
+    manual = gallery.enroll("Maya", np.stack([face]), "today")
+    automatic = []
+    for i in range(149):
+        vector = unit(np.roll(face, i + 1))
+        person, removed = gallery.remember_auto(
+            np.stack([vector] * 5), now=float(i + 1)
+        )
+        assert removed is None
+        automatic.append(person)
+    gallery.set_tier(automatic[0].person_id, "close")
+    newcomer, removed = gallery.remember_auto(
+        np.stack([unit(np.roll(face, 300))] * 5), now=200
+    )
+    assert newcomer is not None and removed == automatic[1].person_id
+    assert len(gallery.people()) == 150
+    assert gallery.get(manual.person_id) and gallery.get(automatic[0].person_id)
+
+
+def test_repeated_encounters_promote_an_automatic_contact(gallery):
+    face = unit(rng.standard_normal(512))
+    person, _ = gallery.remember_auto(np.stack([face] * 5), now=100)
+    for i in range(4):
+        gallery.encounter(person.person_id, now=100 + (i + 1) * 3600)
+    assert gallery.get(person.person_id).seen_count == 5
+    assert gallery.get(person.person_id).tier == "familiar"
+
+
+def test_name_needs_distinct_utterances_across_days_and_survives_restart(
+    gallery, tmp_path
+):
+    face = unit(rng.standard_normal(512))
+    person, _ = gallery.remember_auto(np.stack([face] * 5), now=100)
+    day = 1_700_000_000.0
+    for i in range(4):
+        assert not gallery.note_name(person.person_id, "Sam", f"first-{i}", day)
+    assert not gallery.note_name(person.person_id, "Sam", "first-3", day)
+    reloaded = Gallery(str(tmp_path / "people"))
+    reloaded.load()
+    assert reloaded.note_name(person.person_id, "Sam", "later", day + 86400)
+    assert reloaded.get(person.person_id).name == "Sam"
+
+
+def test_rejected_name_cannot_be_promoted(gallery):
+    face = unit(rng.standard_normal(512))
+    person, _ = gallery.remember_auto(np.stack([face] * 5), now=100)
+    gallery.note_name(person.person_id, "Sam", "first", 1_700_000_000)
+    gallery.reject_name(person.person_id, "Sam")
+    for i in range(6):
+        assert not gallery.note_name(
+            person.person_id, "Sam", f"later-{i}", 1_700_086_400
+        )
+    assert gallery.get(person.person_id).name == "New person"
+
+
 def make_rules(gallery):
     a, b = unit(rng.standard_normal(512)), unit(rng.standard_normal(512))
     pa = gallery.enroll("A", np.stack([a]), "t").person_id

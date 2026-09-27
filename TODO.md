@@ -40,8 +40,12 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-22 Light-ASD active speaker model decides who is talking (#58)
 - [x] V-23 Enrollment station: save a face at the laptop camera (OV02E10) with a live phone preview, the glasses' quality gate and 8-most-varied rule, an identity check against the glasses face, and frame sharing when the main camera holds the laptop camera (#60)
 - [x] V-24 Attribution without waiting: the first words of an utterance are held back (up to 300 ms) only while a mouth on screen is moving or a known voice may still be matched, otherwise shown at once (#62)
-- [x] V-26 Use the latest voice verdict across speaker gates so a stale match cannot keep an off-screen name or direction; weak identity scores stay inconclusive (#68)
 - [ ] V-25 Live speaker gate rehearsal: use the built-in camera when no external camera is present, compare Light-ASD on/off on a labeled local clip, and check speech bubble placement in the lens demo — camera access and local model weights pending; runbook in tests/vision/README.md
+- [x] V-26 Use the latest voice verdict so a stale match cannot keep an off-screen name or direction; keep weak identity scores inconclusive; honor a named built-in camera on macOS for the enrollment station (#68)
+- [ ] V-27 Automatic contact memory: persist engaged faces, deduplicate and rank up to 150, replace weak automatic profiles — code and unit tests done; live camera check left
+- [ ] V-28 Light-ASD scores at 8+ fps with gaps up to 0.35 s (a busy laptop), and speaker continuity: a face that earned the speech keeps it through a dip in lip evidence while speech runs on without a pause (#87)
+- [ ] V-29 A voice match that still hears the last turn never vetoes the face Light-ASD hears talking; a voice whose face is in view is never shown off screen (#87)
+- [ ] V-30 A speaker change moves back to the pause before the reply, so a reply's first words no longer end the previous bubble (#87)
 
 ## Section 2 – Audio & Language
 
@@ -68,6 +72,11 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
 - [x] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it (#62)
 - [x] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions (#62)
+- [ ] A-24 Quiet speech and noisy rooms: gain before the VAD, a recogniser gain that rises after a loud start, a babble-noise bench (synthetic hall babble at 15/10/5/0 dB SNR) and a measured choice on a Whisper second pass for finals — in progress
+- [ ] A-25 Automatic voice association and contextual names: persist harvested voice prints, offer repeated name evidence — code and unit tests done; live two-mic check left
+- [x] A-26 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2 (#77)
+- [x] A-27 A voice print from another voice model (another size, or another model's tag) is ignored at load with one warning, never compared (#80)
+- [ ] A-28 Caption words in a script the configured languages don't use are dropped (Arabic words inside English podcast captions) (#87)
 
 ## Section 3 – Hardware & Services
 
@@ -87,7 +96,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
 - [x] H-15 CAD rig page matches the real kit: UNO R3, servo tapper, no motor driver (#43)
 - [x] H-16 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
-- [ ] H-17 Test patterns stop after one cycle; board restarts (brown-out) noticed and logged; heartbeat kept within 0.1–1 s; simulator reboot/heartbeat/sound controls; speech_out device "none" (#61)
+- [x] H-17 Test patterns stop after one cycle; board restarts (brown-out) noticed and logged; heartbeat kept within 0.1–1 s; simulator reboot/heartbeat/sound controls; speech_out device "none" (#61)
 
 ## Section 4 – Pages, Engine & Demo
 
@@ -127,12 +136,16 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 - [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
 - [x] P-36 Captions on the lens and phone survive a reconnect (the hub replays recent captions on hello) and the phone drops retracted segments (#62)
-- [ ] P-37 End-to-end suite (tests/e2e): real engines in replay mode, every page in headless Edge; captions, alerts, camera/pause, reconnect, privacy, robustness, soak (#61)
-- [ ] P-38 Only the laptop's own pages reach the engine: WebSocket origin check, Host guard (DNS rebinding), no API schema (#61)
-- [ ] P-39 Phone and demo fixes from the e2e run: tab bar indicator, camera switch and state, no "UND" tag, hidden demo panes out of the tab order (#61)
-- [ ] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
+
+- [x] P-37 End-to-end suite (tests/e2e): real engines in replay mode, every page in headless Edge; captions, alerts, camera/pause, reconnect, privacy, robustness, station screens, soak (#61)
+- [x] P-38 Only the laptop's own pages reach the engine: WebSocket origin check, Host guard (DNS rebinding), no API schema (#61)
+- [x] P-39 Phone and demo fixes from the e2e run: tab bar indicator, camera switch and state, no "UND" tag, hidden demo panes out of the tab order, Apricot eyebrow contrast (#61)
+- [x] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
 
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
+- [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
+- [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
+- [ ] P-45 Podcast evaluation (scripts/eval_podcast.py): real multi-person YouTube clips with human captions, seat-anchored truth, word/bubble/speaker/right-face scores, recorded fusion inputs replayed offline; scripts/replay_podcast.py shows a recorded run on the real pages (#87)
 
 ## Gates and end-to-end checks (whole team)
 
