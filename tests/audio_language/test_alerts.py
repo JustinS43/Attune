@@ -317,3 +317,76 @@ def test_alarm_holds_while_the_rig_taps_until_got_it(config, bus):
     assert [s for _, s in alerts] == ["start", "acknowledged", "clear"]
     assert alerts[0][0] < 10
     assert 85 <= alerts[2][0] <= 88  # 15 s of heard quiet after the last tapped window
+
+
+def test_knock_fires_through_speech_with_the_bell_pattern(config):
+    """A-29: people call out while they knock, so speech must not block a knock."""
+    r = AlertRules(config["alerts"], 3)
+    assert not r.evaluate(0, {"Knock": 0.09}, RhythmEvidence(), (10, 1))
+    e = r.evaluate(0.5, {"Knock": 0.3, "Speech": 0.8}, RhythmEvidence(), (10, 1))
+    assert e[0] == ("alert", {**e[0][1], "kind": "knock", "side": "left", "state": "start"})
+    assert e[0][1]["confidence"] == 0.3
+    assert e[1] == ("hw.pattern", {"name": "BELL", "side": "L"})
+
+
+def test_music_blocks_a_knock(config):
+    r = AlertRules(config["alerts"], 3)
+    assert not r.evaluate(0, {"Knock": 0.9, "Music": 0.5}, RhythmEvidence(), (10, 1))
+    assert r.evaluate(0.5, {"Knock": 0.9, "Music": 0.49}, RhythmEvidence(), (10, 1))
+
+
+def test_knock_rest_period_and_quiet_clear(config):
+    config["alerts"]["clear_quiet_s"] = 2.0  # shorter than the rest, so the rest is what holds
+    r = AlertRules(config["alerts"], 3)
+    assert r.evaluate(0, {"Knock": 0.3}, RhythmEvidence())[0][1]["state"] == "start"
+    assert not r.tick(1.9)
+    cleared = r.tick(2)
+    assert [e["state"] for topic, e in cleared if topic == "alert"] == ["clear"]
+    assert cleared[-1] == ("hw.stop", {})
+    # Still within knock_rest_s (10 s) of the last knock alert: no new alert...
+    assert not r.evaluate(5, {"Knock": 0.3}, RhythmEvidence())
+    assert "knock" not in r.active
+    # ...while a doorbell has its own rest and still fires.
+    assert r.evaluate(5, {"Doorbell": 0.8}, RhythmEvidence())[0][1]["kind"] == "doorbell"
+    assert r.evaluate(10, {"Knock": 0.3}, RhythmEvidence())[0][1]["kind"] == "knock"
+
+
+def test_knock_stays_up_while_heard_and_clears_after_quiet(config):
+    r = AlertRules(config["alerts"], 3)
+    r.evaluate(0, {"Knock": 0.3}, RhythmEvidence())
+    assert not r.evaluate(4, {"Knock": 0.2}, RhythmEvidence())  # still knocking: no repeat
+    assert not r.tick(18.9)
+    assert [e["state"] for topic, e in r.tick(19) if topic == "alert"] == ["clear"]
+
+
+def test_knock_and_doorbell_fire_side_by_side(config):
+    r = AlertRules(config["alerts"], 3)
+    e = r.evaluate(0, {"Doorbell": 0.8, "Knock": 0.3}, RhythmEvidence(), (1, 10))
+    starts = [ev["kind"] for topic, ev in e if topic == "alert"]
+    assert starts == ["doorbell", "knock"]
+    assert [ev for topic, ev in e if topic == "hw.pattern"] == [{"name": "BELL", "side": "R"}] * 2
+
+
+def test_knock_side_comes_from_the_event_window_levels(config, bus):
+    """A knock has no tone for the rhythm frames, so its side uses the sensor balance."""
+    from attune.alerts.service import AlertService
+
+    class Model:
+        def score(self, pcm):
+            return {"Knock": 0.3}
+
+    service = AlertService(bus, config, model=Model())
+    service.clock = lambda: 0.0
+    for offset in range(0, 32000, 1600):
+        t = offset / 32000
+        service._handle("sensors.levels", {"t": t, "left": 10, "right": 100, "motor_on": False}, 0)
+        service._handle(
+            "audio.block",
+            {"t": t, "sample_rate": 32000, "samples": np.zeros(1600, np.float32)},
+            0,
+        )
+    alerts = [e for topic, e in bus.events if topic == "alert"]
+    assert [(e["kind"], e["side"], e["state"]) for e in alerts] == [("knock", "right", "start")]
+    assert ("hw.pattern", {"name": "BELL", "side": "R"}) in [
+        (topic, e) for topic, e in bus.events if topic == "hw.pattern"
+    ]

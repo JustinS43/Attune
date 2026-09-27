@@ -59,6 +59,8 @@ def config(tmp_path):
             "watch_score": 0.3,
             "doorbell_score": 0.4,
             "doorbell_rest_s": 5.0,
+            "knock_score": 0.1,
+            "knock_rest_s": 10.0,
             "realert_s": 30.0,
             "clear_quiet_s": 15.0,
             "watch_s": 10.0,

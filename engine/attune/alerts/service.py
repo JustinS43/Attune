@@ -148,11 +148,12 @@ class AlertService:
                         else:
                             if self.worker.error.startswith("sound model"):
                                 self.worker.error = ""
-                    # Doorbells are broadband; use the event window's sensor balance.
-                    if (
-                        not pairs
-                        and max(scores.get("Doorbell", 0), scores.get("Ding-dong", 0))
-                        >= self.config["alerts"]["doorbell_score"]
+                    # Doorbells and knocks are broadband; use the event window's sensor balance.
+                    cfg = self.config["alerts"]
+                    bell = max(scores.get("Doorbell", 0), scores.get("Ding-dong", 0))
+                    if not pairs and (
+                        bell >= cfg["doorbell_score"]
+                        or scores.get("Knock", 0) >= cfg["knock_score"]
                     ):
                         pairs = [(v["left"], v["right"]) for v in levels]
                     direction = tuple(np.mean(pairs, axis=0)) if pairs else None
