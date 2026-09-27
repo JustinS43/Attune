@@ -659,6 +659,8 @@ class SpeakerFusion:
             return "support"
         if self._stale_voice(pid, now):
             return None
+        if self._asd_hears(tr, now) and self._quiet_in_view(pid, now):
+            return None  # Light-ASD hears this face; the voice's face in view is still: stale
         if self._seen_elsewhere(pid, tr):
             return "veto"  # its owner is (or was, beside this face) another face in view
         if pid.startswith(("track-", "auto-")):
@@ -716,6 +718,17 @@ class SpeakerFusion:
             return False
         asd = self.asd_gate.covered(self, now).get(tr.track_id)
         return asd is not None and asd.score < self.s.asd_off
+
+    def _quiet_in_view(self, vid: str, now: float) -> bool:
+        """Is voice `vid`'s face in view, not scored by Light-ASD, and its mouth measured and
+        still? (The voice match then hears an earlier turn, like `_stale_voice`.)"""
+        tr = self._visible_track(vid, now)
+        return (
+            tr is not None
+            and tr.track_id not in self.asd_gate.covered(self, now)
+            and tr.measured
+            and not (tr.stirring or tr.talking)
+        )
 
     def _claim(self, now: float) -> None:
         """Let a face that clearly talks with an off-screen voice claim it (offscreen_claim_s)."""
@@ -920,11 +933,13 @@ class SpeakerFusion:
         ):
             return None  # wait a little for a speaker (only before anything is shown)
         evidence = [self.speaker_at(_mid(w)) or _someone() for w in words]
+        # V-31: each change moves back to its pause before smoothing too, so a short reply
+        # whose evidence came late is long enough to keep its own bubble
         if mem is None:
             mem = _UttMemory()
-            groups = self._smooth(_raw_groups(list(zip(words, evidence))))
+            groups = self._smooth(self._snap(_raw_groups(list(zip(words, evidence)))))
         else:
-            groups = self._smooth(self._redraft(mem.segs, words, evidence))
+            groups = self._smooth(self._snap(self._redraft(mem.segs, words, evidence)))
         groups = self._snap(groups)
 
         ids: list[str] = []
@@ -1031,7 +1046,10 @@ class SpeakerFusion:
         speaker next to it, and any other piece under `min_segment_s` joins its
         longer neighbour. Real turn changes (each side longer) stay split. A piece
         already shown with a known speaker (locked) and at least `min_segment_s`
-        long never takes another's speaker.
+        long never takes another's speaker. V-31: neither does a known speaker's piece of at
+        least `turn_min_s` next to another known speaker, with a pause (`snap_gap_s`) on both
+        sides: a short reply ("Okay.", "Do you like it?") is a turn of its own, not a flicker
+        inside someone's sentence.
         """
 
         def span(ws: list) -> float:
@@ -1053,11 +1071,29 @@ class SpeakerFusion:
                 )
             ]
 
+        def turn(gs: list[_Group], i: int) -> bool:
+            """Piece i is a short turn between two known talkers: another known speaker is
+            next to it, with a pause (or the caption's edge) on both sides."""
+            g, gap, cap = gs[i], self.s.snap_gap_s, self.s.max_word_s
+            if g.speaker.kind == "someone" or span(g.words) < self.s.turn_min_s:
+                return False
+            nbrs = [gs[k] for k in (i - 1, i + 1) if 0 <= k < len(gs)]
+            if not any(
+                n.speaker.kind != "someone" and _who(n.speaker) != _who(g.speaker) for n in nbrs
+            ):
+                return False
+            ws = g.words
+            before = i == 0 or float(ws[0][1]) - _end(gs[i - 1].words[-1], cap) >= gap
+            after = i == len(gs) - 1 or float(gs[i + 1].words[0][1]) - _end(ws[-1], cap) >= gap
+            return before and after
+
         def rule(gs: list[_Group], i: int) -> tuple[int, int | None]:
             """(priority, neighbour to join) for piece i; lower priority acts first."""
             g = gs[i]
             if g.locked and g.speaker.kind != "someone":
                 return 9, None  # shown with a known speaker: it keeps it
+            if turn(gs, i):
+                return 9, None  # a short reply between pauses: a turn of its own
             nbrs = [k for k in (i - 1, i + 1) if 0 <= k < len(gs)]
             known = [k for k in nbrs if gs[k].speaker.kind != "someone"]
             sandwiched = len(nbrs) == 2 and _who(gs[i - 1].speaker) == _who(gs[i + 1].speaker)
@@ -1114,6 +1150,28 @@ class SpeakerFusion:
                 del a.words[best_k:], a.evidence[best_k:]
         return groups
 
+    def _change_time(self, spk: Speaker | None, now: float) -> float:
+        """When a speaker change decided now really happened (V-31).
+
+        Light-ASD scores the newest `asd_score_s` of lips and sound a few times a second,
+        so it hears a new talker `asd_switch_lag_s` or so after they start. A switch from
+        one face to another that Light-ASD made is dated back by that much, so a reply's
+        first words (often without a pause for `_snap`) don't stay the previous talker's.
+        """
+        prev = self.timeline[-1] if self.timeline else None
+        if (
+            self.s.asd_switch_lag_s > 0
+            and prev is not None
+            and spk is not None
+            and spk.kind == "face"
+            and prev[1] is not None
+            and prev[1].kind == "face"
+            and prev[1].track_id != spk.track_id
+            and spk.track_id in self.asd_gate.covered(self, now)
+        ):
+            return max(now - self.s.asd_switch_lag_s, prev[0] + 1e-3)
+        return now
+
     def take_retractions(self) -> list[CaptionRetract]:
         """Segment ids to retract since the last call (the service publishes them)."""
         out, self.retractions = self.retractions, []
@@ -1130,7 +1188,7 @@ class SpeakerFusion:
         self.current = spk
         self._current_in_time = r
         if not self.timeline or not _same(self.timeline[-1][1], spk):
-            self.timeline.append((now, spk))
+            self.timeline.append((self._change_time(spk, now), spk))
         while self.timeline and now - self.timeline[0][0] > 30:
             self.timeline.popleft()
 

@@ -153,6 +153,13 @@ class FusionSettings:
     # would otherwise end the previous bubble (fusion/speaker.py `_snap`). 0 turns it off.
     snap_max_s: float = 1.2
     snap_gap_s: float = 0.15
+    # V-31: a known speaker's caption piece this long with a pause (snap_gap_s) on both sides
+    # is a short turn of its own ("Okay."), never merged into a neighbour as a flicker.
+    turn_min_s: float = 0.25
+    # V-31: Light-ASD hears a new talker about this long after they start (it scores the
+    # newest asd_score_s of lips and sound, a few times a second), so a switch from one face
+    # to another that it made is dated back this much. 0 turns it off.
+    asd_switch_lag_s: float = 0.3
     utterance_memory_s: float = 60.0  # forget an unfinished utterance's segments after this
     rate_hz: float = 15.0
     # In time: lips and loudness (both band-passed to syllable rates) correlate at least
