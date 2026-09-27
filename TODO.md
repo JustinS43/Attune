@@ -43,9 +43,9 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [ ] V-25 Live speaker gate rehearsal: use the built-in camera when no external camera is present, compare Light-ASD on/off on a labeled local clip, and check speech bubble placement in the lens demo — camera access and local model weights pending; runbook in tests/vision/README.md
 - [x] V-26 Use the latest voice verdict so a stale match cannot keep an off-screen name or direction; keep weak identity scores inconclusive; honor a named built-in camera on macOS for the enrollment station (#68)
 - [ ] V-27 Automatic contact memory: persist engaged faces, deduplicate and rank up to 150, replace weak automatic profiles — code and unit tests done; live camera check left
-- [ ] V-28 Light-ASD scores at 8+ fps with gaps up to 0.35 s (a busy laptop), and speaker continuity: a face that earned the speech keeps it through a dip in lip evidence while speech runs on without a pause (#87)
-- [ ] V-29 A voice match that still hears the last turn never vetoes the face Light-ASD hears talking; a voice whose face is in view is never shown off screen (#87)
-- [ ] V-30 A speaker change moves back to the pause before the reply, so a reply's first words no longer end the previous bubble (#87)
+- [ ] V-28 Light-ASD scores at 8+ fps with gaps up to 0.35 s (a busy laptop), and speaker continuity: a face that earned the speech keeps it through a dip in lip evidence while speech runs on without a pause (#91)
+- [ ] V-29 A voice match that still hears the last turn never vetoes the face Light-ASD hears talking; a voice whose face is in view is never shown off screen (#91)
+- [ ] V-30 A speaker change moves back to the pause before the reply, so a reply's first words no longer end the previous bubble (#91)
 
 ## Section 2 – Audio & Language
 
@@ -77,7 +77,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-26 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2 (#77)
 - [x] A-27 A voice print from another voice model (another size, or another model's tag) is ignored at load with one warning, never compared (#80)
 - [x] A-28 A sounding alarm stays on while the glasses tap: tapped windows can't show that it stopped, so they no longer run down the 15 s quiet-clear (it cycled 14 s on, 10 s off); it ends with "Got it" or 15 s of heard quiet (#89)
-- [ ] A-29 Caption words in a script the configured languages don't use are dropped (Arabic words inside English podcast captions) (#87)
+- [ ] A-29 Caption words in a script the configured languages don't use are dropped (Arabic words inside English podcast captions) (#91)
 
 ## Section 3 – Hardware & Services
 
@@ -146,7 +146,7 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
 - [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
 - [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
-- [ ] P-45 Podcast evaluation (scripts/eval_podcast.py): real multi-person YouTube clips with human captions, seat-anchored truth, word/bubble/speaker/right-face scores, recorded fusion inputs replayed offline; scripts/replay_podcast.py shows a recorded run on the real pages (#87)
+- [ ] P-45 Podcast evaluation (scripts/eval_podcast.py): real multi-person YouTube clips with human captions, seat-anchored truth, word/bubble/speaker/right-face scores, recorded fusion inputs replayed offline; scripts/replay_podcast.py shows a recorded run on the real pages (#91)
 
 ## Gates and end-to-end checks (whole team)
 
