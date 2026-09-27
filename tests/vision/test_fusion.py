@@ -260,6 +260,47 @@ def test_weak_voice_match_stays_someone():
     assert sim.f.current.kind == "someone"
 
 
+def test_new_no_match_replaces_older_offscreen_voice_and_exit_side():
+    sim = Sim()
+    for _ in range(10):
+        sim.step({3: (40, 0.1, 0.005, "maya-1", "Maya", "enrolled")})
+    sim.f.on_track_lost({"track_id": 3, "t": sim.t, "side": "left"})
+    for _ in range(40):
+        sim.step({}, speech=True, sensors=(150, 400))
+    sim.f.on_voice_match({"utt_id": "u1", "person_id": "maya-1", "score": 0.8})
+    sim.step({}, speech=True, sensors=(150, 400))
+    assert (sim.f.current.kind, sim.f.current.side) == ("offscreen", "left")
+
+    # Later speech from the same draft is no longer a confident voice match.
+    # The old result must not keep naming the offscreen voice or its exit side.
+    sim.f.on_voice_match({"utt_id": "u1", "person_id": None, "score": 0.2})
+    scene, _, _ = sim.step({}, speech=True, sensors=(150, 400))
+    assert (sim.f.current.kind, sim.f.current.side) == ("someone", "right")
+    assert [(s.label, s.side) for s in scene.offscreen] == [("Someone", "right")]
+
+    # New caption words use the updated decision, so the bubble does not inherit
+    # the older person's label or exit direction.
+    sim.step({}, speech=True, sensors=(150, 400))
+    sim.f.on_transcript(
+        {
+            "utt_id": "u1",
+            "t_start": sim.t - 0.02,
+            "t_end": sim.t,
+            "text": "hello",
+            "final": True,
+            "words": [("hello", sim.t - 0.02, sim.t)],
+        },
+        sim.t,
+    )
+    captions = []
+    for _ in range(12):
+        _, emitted, _ = sim.step({}, speech=True, sensors=(150, 400))
+        captions.extend(emitted)
+    assert [(c.speaker.kind, c.speaker.side) for c in captions] == [
+        ("someone", "right")
+    ]
+
+
 # ---------------- captions ----------------
 def test_caption_goes_to_the_speaker_and_splits_at_a_change():
     sim = Sim()
@@ -299,12 +340,10 @@ def test_caption_goes_to_the_speaker_and_splits_at_a_change():
     assert all(c.final for c in caps)
 
 
-def test_first_words_wait_up_to_300ms_then_show_as_someone():
-    sim = Sim()
-    sim.step({}, speech=True)
+def _hello(sim, utt):
     sim.f.on_transcript(
         {
-            "utt_id": "9",
+            "utt_id": utt,
             "t_start": sim.t,
             "t_end": sim.t + 0.3,
             "text": "Hello",
@@ -314,10 +353,46 @@ def test_first_words_wait_up_to_300ms_then_show_as_someone():
         },
         sim.t,
     )
+
+
+def test_first_words_wait_up_to_300ms_while_a_mouth_moves_then_show_as_someone():
+    sim = Sim()
+    for _ in range(20):
+        sim.step({1: still_face(x=500)})
+    for _ in range(3):  # lips start moving: not judged talking yet
+        sim.step({1: talking_face(sim.t)}, speech=True, loud=-30)
+    _hello(sim, "9")
+    _, caps, _ = sim.step({1: talking_face(sim.t)}, speech=True, loud=-30, dt=0.1)
+    assert caps == []
+    _, caps, _ = sim.step({1: talking_face(sim.t)}, speech=True, loud=-30, dt=0.25)
+    assert len(caps) == 1 and caps[0].speaker.kind == "someone"
+
+
+def test_first_words_show_at_once_when_no_speaker_can_be_decided():
+    # V-24: nobody on screen and no known voice: waiting would only delay the words
+    sim = Sim()
+    sim.step({}, speech=True)
+    _hello(sim, "9")
+    _, caps, _ = sim.step({}, speech=True, dt=0.05)
+    assert len(caps) == 1 and caps[0].speaker.kind == "someone"
+    # a still face on screen changes nothing
+    sim = Sim()
+    for _ in range(20):
+        sim.step({1: still_face(x=500)}, speech=True)
+    _hello(sim, "10")
+    _, caps, _ = sim.step({1: still_face(x=500)}, speech=True, dt=0.05)
+    assert len(caps) == 1 and caps[0].speaker.kind == "someone"
+
+
+def test_first_words_wait_for_a_known_voice_to_be_matched():
+    sim = Sim()
+    sim.step({}, speech=True)
+    sim.f.on_voice_match({"utt_id": "old", "person_id": "maya", "score": 0.8})
+    sim.step({}, speech=False, dt=1.0)
+    sim.step({}, speech=True, dt=0.5)  # a new stretch of speech, no match for it yet
+    _hello(sim, "11")
     _, caps, _ = sim.step({}, speech=True, dt=0.1)
     assert caps == []
-    _, caps, _ = sim.step({}, speech=True, dt=0.25)
-    assert len(caps) == 1 and caps[0].speaker.kind == "someone"
 
 
 # ---------------- labels ----------------

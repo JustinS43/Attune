@@ -1,0 +1,7 @@
+.speech-settings-form { display: grid; gap: 10px; padding: 18px; }
+.speech-settings-form h3, .speech-settings-form p { margin: 0; }
+.speech-settings-form label { font-size: 13px; font-weight: 600; }
+.speech-settings-form input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; border: 1px solid var(--line, #ccd8d6); border-radius: 10px; background: transparent; color: inherit; font: inherit; }
+.speech-settings-form input:focus-visible { outline: 2px solid var(--accent, #157f72); outline-offset: 2px; }
+.speech-settings-form button { margin-top: 4px; }
+.speech-settings-form input:disabled, .speech-settings-form button:disabled { opacity: .55; }

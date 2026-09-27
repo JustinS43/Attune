@@ -117,6 +117,53 @@ def test_no_key_uses_kokoro(bus, make):
     assert bus.of("reply.spoken")[0]["voice"] == "kokoro"
 
 
+def test_saved_credentials_apply_to_next_reply(bus, monkeypatch, tmp_path):
+    """Settings saved after startup must not leave the offline voice selected."""
+    from dotenv import set_key
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+    created = []
+
+    def from_env(_cls, _cfg):
+        key, voice = elevenlabs_tts.load_credentials()
+        if not key:
+            return None
+        result = FakeTTS("elevenlabs")
+        created.append((voice, result))
+        return result
+
+    monkeypatch.setattr(elevenlabs_tts.ElevenLabsTTS, "from_env", classmethod(from_env))
+    service = SpeechOutService(
+        bus,
+        {"clock": time.monotonic, "speech_out": {"fallback_after_s": 0.3}},
+        kokoro=FakeTTS("kokoro"),
+        player=FakePlayer(),
+    )
+    service.start()
+    try:
+        speak(bus, "before saving")
+        assert wait_for(lambda: len(bus.of("reply.spoken")) == 1)
+        assert bus.of("reply.spoken")[-1]["voice"] == "kokoro"
+
+        path = tmp_path / ".env"
+        set_key(path, "ELEVENLABS_API_KEY", "synthetic-key")
+        set_key(path, "ELEVENLABS_VOICE_ID", "voice-one")
+        speak(bus, "after saving")
+        assert wait_for(lambda: len(bus.of("reply.spoken")) == 2)
+        assert bus.of("reply.spoken")[-1]["voice"] == "elevenlabs"
+        assert created[-1][0] == "voice-one"
+
+        set_key(path, "ELEVENLABS_VOICE_ID", "voice-two")
+        speak(bus, "after changing voice")
+        assert wait_for(lambda: len(bus.of("reply.spoken")) == 3)
+        assert created[-1][0] == "voice-two"
+        assert len(created) == 2
+    finally:
+        service.stop()
+
+
 def test_stream_breaking_midway_does_not_repeat(bus, make):
     service = make(eleven=FakeTTS("elevenlabs", chunks=5, fail_after=2))
     speak(bus)
@@ -315,3 +362,64 @@ def test_interrupt_event_is_threadsafe(bus, make):
     gate.set()
     time.sleep(0.3)
     assert bus.of("reply.spoken") == [] or len(bus.of("speech_out.playing")) in (0, 2)
+
+
+# ---------------------------------------------------------------- device "none" (P-37)
+
+
+@pytest.mark.parametrize("device", ["none", "NULL", " off ", "silent"])
+def test_silent_device_names(device):
+    from attune.speech_out.player import is_silent_device
+
+    assert is_silent_device(device)
+
+
+@pytest.mark.parametrize("device", [None, "", "Speakers (Realtek)", "default"])
+def test_real_device_names(device):
+    from attune.speech_out.player import is_silent_device
+
+    assert not is_silent_device(device)
+
+
+def test_null_player_times_like_audio_but_plays_nothing():
+    from attune.speech_out.player import NullPlayer
+
+    chunks = [np.zeros(2400, np.float32)] * 5  # 0.5 s at 24 kHz
+    started = []
+    t0 = time.monotonic()
+    played = NullPlayer().play(
+        iter(chunks), 24000, threading.Event(), lambda: started.append(1)
+    )
+    assert played == pytest.approx(0.5)
+    assert started == [1]
+    assert time.monotonic() - t0 >= 0.4  # paced like real playback, so "speaking" lasts
+
+
+def test_null_player_stops_when_cancelled():
+    from attune.speech_out.player import NullPlayer
+
+    cancel = threading.Event()
+    cancel.set()
+    assert NullPlayer().play(iter([np.zeros(24000, np.float32)]), 24000, cancel) == 0.0
+    assert NullPlayer(realtime=False).play(
+        iter([np.zeros(2400, np.float32)]), 24000, threading.Event()
+    ) == pytest.approx(0.1)
+
+
+def test_device_none_speaks_through_the_null_player(bus):
+    from attune.speech_out.player import NullPlayer
+
+    service = SpeechOutService(
+        bus,
+        {"clock": time.monotonic, "speech_out": {"device": "none"}},
+        elevenlabs=False,
+        kokoro=FakeTTS("kokoro"),
+    )
+    service.start()
+    try:
+        assert isinstance(service.player, NullPlayer)
+        speak(bus)
+        assert wait_for(lambda: bus.of("reply.spoken"), 3.0)
+        assert service.status()["metrics"]["output"] == "none"
+    finally:
+        service.stop()

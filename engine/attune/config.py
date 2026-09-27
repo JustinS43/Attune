@@ -24,6 +24,26 @@ LOCAL_NAME = Path("config") / "attune.toml"
 EXAMPLE_NAME = Path("config") / "attune.example.toml"
 
 
+class ConfigError(Exception):
+    """The config can't be used; `python -m attune` prints it and exits with code 2."""
+
+
+class ConfigSyntaxError(ConfigError, ValueError):
+    """A TOML file that doesn't parse."""
+
+
+class ConfigNotFound(ConfigError, FileNotFoundError):
+    """An explicit --config file that doesn't exist."""
+
+
+def _read_toml(path: Path) -> dict[str, Any]:
+    try:
+        with open(path, "rb") as fh:
+            return tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigSyntaxError(f"{path}: {exc}") from None
+
+
 def merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
     """Deep-merge `over` into a copy of `base`; tables merge, everything else replaces."""
     out = dict(base)
@@ -54,19 +74,17 @@ def load_config(path: str | Path | None = None, cwd: str | Path | None = None) -
     config: dict[str, Any] = {}
     example = _find(EXAMPLE_NAME, cwd)
     if example:
-        with open(example, "rb") as fh:
-            config = tomllib.load(fh)
+        config = _read_toml(example)
     else:
         log.warning("No %s found; starting from empty defaults", EXAMPLE_NAME)
     if path is not None:
         local = Path(path)
         if not local.is_file():
-            raise FileNotFoundError(f"Config file not found: {local}")
+            raise ConfigNotFound(f"Config file not found: {local}")
     else:
         local = _find(LOCAL_NAME, cwd)
     if local:
-        with open(local, "rb") as fh:
-            config = merge(config, tomllib.load(fh))
+        config = merge(config, _read_toml(local))
         log.info("Config: %s%s", local, f" over {example}" if example else "")
     else:
         log.info("Config: %s only (copy it to %s to change settings)", example, LOCAL_NAME)

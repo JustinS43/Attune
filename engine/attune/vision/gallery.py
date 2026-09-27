@@ -2,12 +2,11 @@
 
 Section 1 - Vision. TODO: V-06. Plan: section 05 "Faces" (match rules).
 
-Two kinds of people:
-- Enrolled: consented in the console. Face prints and the consent record are
-  saved in data/people/<person_id>/ (gitignored) and survive restarts.
-  Delete removes the whole folder.
-- Session: named by "tap to confirm" after an introduction. Memory only;
-  "forget session" wipes them.
+Three kinds of people:
+- Manual: saved through enrollment with the person's consent.
+- Automatic: saved after a visible face is attributed conversation, unnamed at first.
+  Both persistent kinds live in data/people/<person_id>/ (gitignored).
+- Session: named only in memory; "forget session" wipes them.
 
 Match rules (per track):
 - A name appears only when the best person scores >= threshold (0.45) and
@@ -26,8 +25,10 @@ import os
 import re
 import shutil
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -41,6 +42,12 @@ class Person:
     prints: np.ndarray  # (n, 512), unit length
     enrolled: bool
     consent_t: str | None = None  # wall-clock ISO time the person ticked consent
+    source: str = "manual"  # manual or auto; automatic profiles have no consent record
+    tier: str = "other"  # close, familiar, other
+    seen_count: int = 0
+    last_seen_t: float = 0.0
+    name_evidence: dict[str, dict] = field(default_factory=dict)
+    blocked_names: list[str] = field(default_factory=list)
 
 
 class Gallery:
@@ -64,22 +71,54 @@ class Gallery:
             with open(meta_path, encoding="utf-8") as fh:
                 meta = json.load(fh)
             prints = np.load(prints_path).astype(np.float32)
-            self._people[pid] = Person(pid, meta["name"], prints, True, meta.get("consent_t"))
+            self._people[pid] = Person(
+                pid,
+                meta["name"],
+                prints,
+                True,
+                meta.get("consent_t"),
+                meta.get("source", "manual"),
+                meta.get("tier", "close" if meta.get("source", "manual") == "manual" else "other"),
+                int(meta.get("seen_count", 0)),
+                float(meta.get("last_seen_t", 0)),
+                meta.get("name_evidence") or {},
+                meta.get("blocked_names") or [],
+            )
         self._rebuild()
         log.info("Loaded %d enrolled people", len(self._people))
 
-    def _save(self, person: Person) -> None:
+    def _save(self, person: Person, *, prints: bool = True) -> None:
         folder = os.path.join(self.people_dir, person.person_id)
         os.makedirs(folder, exist_ok=True)
-        np.save(os.path.join(folder, "face.npy"), person.prints)
+        if prints:
+            np.save(os.path.join(folder, "face.npy"), person.prints)
         with open(os.path.join(folder, "meta.json"), "w", encoding="utf-8") as fh:
-            json.dump({"name": person.name, "consent_t": person.consent_t}, fh, indent=2)
+            json.dump(
+                {
+                    "name": person.name,
+                    "consent_t": person.consent_t,
+                    "source": person.source,
+                    "tier": person.tier,
+                    "seen_count": person.seen_count,
+                    "last_seen_t": person.last_seen_t,
+                    "name_evidence": person.name_evidence,
+                    "blocked_names": person.blocked_names,
+                },
+                fh,
+                indent=2,
+            )
 
     # ---- changes ----
     def enroll(self, name: str, prints: np.ndarray, consent_t: str) -> Person:
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "person"
         person = Person(
-            f"{slug}-{uuid.uuid4().hex[:6]}", name, prints.astype(np.float32), True, consent_t
+            f"{slug}-{uuid.uuid4().hex[:6]}",
+            name,
+            prints.astype(np.float32),
+            True,
+            consent_t,
+            "manual",
+            "close",
         )
         with self._lock:
             self._people[person.person_id] = person
@@ -94,14 +133,121 @@ class Gallery:
             self._rebuild()
         return person
 
+    def remember_auto(
+        self, prints: np.ndarray, now: float | None = None
+    ) -> tuple[Person | None, str | None]:
+        """Keep one engaged stranger, evicting only the least encountered automatic profile."""
+        now = time.time() if now is None else now
+        with self._lock:
+            saved = [p for p in self._people.values() if p.enrolled]
+            removed = None
+            if len(saved) >= 150:
+                choices = [p for p in saved if p.source == "auto" and p.tier != "close"]
+                if not choices:
+                    return None, None
+                victim = min(choices, key=lambda p: (p.seen_count, p.last_seen_t))
+                removed = victim.person_id
+                del self._people[removed]
+                shutil.rmtree(os.path.join(self.people_dir, removed), ignore_errors=True)
+            pid = f"auto-{uuid.uuid4().hex[:12]}"
+            person = Person(
+                pid, "New person", prints.astype(np.float32), True, None, "auto", "other", 1, now
+            )
+            self._people[pid] = person
+            self._save(person)
+            self._rebuild()
+            return person, removed
+
+    def encounter(self, person_id: str, now: float | None = None) -> Person | None:
+        """Count encounters at most once per hour and promote frequent automatic contacts."""
+        now = time.time() if now is None else now
+        with self._lock:
+            person = self._people.get(person_id)
+            if person is None or not person.enrolled:
+                return None
+            if now - person.last_seen_t >= 3600:
+                person.seen_count += 1
+                person.last_seen_t = now
+                if person.source == "auto" and person.tier == "other" and person.seen_count >= 5:
+                    person.tier = "familiar"
+                self._save(person, prints=False)
+            return person
+
+    def set_tier(self, person_id: str, tier: str) -> Person | None:
+        """Pin a close contact or return one to automatic ranking."""
+        if tier not in {"close", "familiar", "other"}:
+            return None
+        with self._lock:
+            person = self._people.get(person_id)
+            if person is None or not person.enrolled:
+                return None
+            person.tier = tier
+            self._save(person, prints=False)
+            return person
+
+    def note_name(self, person_id: str, name: str, utt_id: str, now: float | None = None) -> bool:
+        """Learn an automatic person's name only after five uses on at least two days."""
+        if not isinstance(name, str) or not (1 < len(name) <= 24 and name.isalpha()):
+            return False
+        now = time.time() if now is None else now
+        name = name.title()
+        key = name.casefold()
+        with self._lock:
+            person = self._people.get(person_id)
+            if person is None or person.source != "auto" or person.name != "New person":
+                return False
+            if key in person.blocked_names:
+                return False
+            evidence = person.name_evidence.setdefault(
+                key, {"name": name, "count": 0, "days": [], "utts": []}
+            )
+            if utt_id in evidence["utts"]:
+                return False
+            evidence["utts"] = (evidence["utts"] + [utt_id])[-32:]
+            evidence["count"] = min(100, int(evidence["count"]) + 1)
+            day = datetime.fromtimestamp(now, UTC).date().isoformat()
+            if day not in evidence["days"]:
+                evidence["days"].append(day)
+            if len(person.name_evidence) > 3:
+                weakest = min(person.name_evidence, key=lambda k: person.name_evidence[k]["count"])
+                del person.name_evidence[weakest]
+            competing = max(
+                (v["count"] for k, v in person.name_evidence.items() if k != key), default=0
+            )
+            ready = (
+                evidence["count"] >= 5
+                and len(evidence["days"]) >= 2
+                and evidence["count"] >= competing + 3
+            )
+            if ready:
+                person.name = name
+                person.name_evidence.clear()
+            self._save(person, prints=False)
+            return ready
+
+    def reject_name(self, person_id: str, name: str) -> None:
+        """A rejected suggestion is never later promoted by accumulated evidence."""
+        with self._lock:
+            person = self._people.get(person_id)
+            if person is None or person.source != "auto":
+                return
+            key = name.casefold()
+            person.name_evidence.pop(key, None)
+            if key not in person.blocked_names:
+                person.blocked_names.append(key)
+            person.blocked_names = person.blocked_names[-16:]
+            self._save(person, prints=False)
+
     def rename(self, person_id: str, name: str) -> Person | None:
         with self._lock:
             person = self._people.get(person_id)
             if person is None:
                 return None
             person.name = name
+            if person.source == "auto" and name != "New person":
+                person.name_evidence.clear()
             if person.enrolled:
-                self._save(person)
+                self._save(person, prints=False)
             return person
 
     def delete(self, person_id: str) -> Person | None:

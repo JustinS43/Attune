@@ -74,7 +74,11 @@ def station_camera(avoid=("Brio 101",)):
 
 
 # ------------------------------------------------------------------ camera clash
-def test_the_glasses_camera_never_takes_the_laptop_camera_from_a_save(devices):
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
+def test_the_glasses_camera_never_takes_the_laptop_camera_from_a_save(
+    devices, monkeypatch, platform
+):
+    monkeypatch.setattr(camera_mod.sys, "platform", platform)  # macOS picks cameras its own way
     main = Camera(name="Brio 101")
     main.start()
     station = None
@@ -97,6 +101,19 @@ def test_the_glasses_camera_never_takes_the_laptop_camera_from_a_save(devices):
         if station is not None:
             station.stop()
         main.stop()
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
+def test_a_camera_asked_for_by_name_wins_on_every_platform(devices, monkeypatch, platform):
+    monkeypatch.setattr(camera_mod.sys, "platform", platform)
+    pick = camera_mod.pick_camera
+    assert pick("OV02E10", fallback_any=False).name == LAPTOP  # the station's camera
+    assert pick("Brio 101").name == BRIO
+    # nothing by that name: a reader that must not fall back gets nothing, even with an
+    # external webcam plugged in
+    assert pick("FaceTime", fallback_any=False) is None
+    # one that may fall back gets the external webcam on macOS, the first camera elsewhere
+    assert pick("FaceTime").name == BRIO
 
 
 def test_an_infrared_camera_is_never_a_fallback(devices):

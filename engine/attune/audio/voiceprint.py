@@ -1,4 +1,4 @@
-"""CAM++ embeddings; consented disk prints and forgettable session prints.
+"""CAM++ embeddings; manual or automatic disk prints and forgettable session prints.
 
 A saved person's `data/people/<id>/voice.json` holds their consent, one base print
 (`embedding`) and where it was made (`source`: "station" = the laptop mic at the enrollment
@@ -25,6 +25,7 @@ is saved with it (`adapt_persist`) and deleted with the person.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -56,6 +57,8 @@ class CAMExtractor:
         if not cfg.validate():
             raise ValueError("invalid CAM++ configuration")
         self.extractor = sherpa_onnx.SpeakerEmbeddingExtractor(cfg)
+        self.dim = int(self.extractor.dim)  # the size of every print this model makes
+        self.model_id = model_tag(path)  # stored with each print (A-27)
 
     BLOCK = 32000  # 2 s at 16 kHz
 
@@ -76,7 +79,17 @@ class CAMExtractor:
         return np.asarray(self.extractor.compute(stream), dtype=np.float32)
 
 
-def _consented_at(value) -> bool:
+def model_tag(path: str | Path) -> str:
+    """A short fingerprint of a voice model file: prints of different models never match
+    even when they have the same size (A-27)."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()[:16]
+
+
+def _valid_stamp(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
@@ -104,18 +117,23 @@ def write_print(
     consent_t: float,
     source: str = GLASSES,
     adapted: list[np.ndarray] | None = None,
+    automatic: bool = False,
+    model: str | None = None,
 ) -> Path:
-    """Atomically write a consented voice print (prints only, never audio)."""
-    if not _consented_at(consent_t):
-        raise ValueError("consent is required")
+    """Atomically write a voice print (prints only, never audio)."""
+    if not _valid_stamp(consent_t):
+        raise ValueError("a capture timestamp is required")
     path = voice_path(root, person_id)
     record = {
-        "consent": True,
+        "consent": not automatic,
+        "automatic": automatic,
         "consent_t": consent_t,
         "source": source,
         "embedding": unit(vector).tolist(),
         "adapted": [unit(v).tolist() for v in adapted or []],
     }
+    if model:
+        record["model"] = model  # which voice model made it (A-27)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(record))
@@ -124,7 +142,7 @@ def write_print(
 
 
 class VoicePrints:
-    """Persistent prints require explicit consent; harvested updates stay in RAM."""
+    """Manual and automatic prints persist; other harvested voices stay in RAM."""
 
     def __init__(
         self,
@@ -152,21 +170,35 @@ class VoicePrints:
         self.adapted: dict[str, list[np.ndarray]] = {}  # glasses-mic bank per saved person
         self._last_adapt: dict[str, float] = {}
         self.session: dict[str, np.ndarray] = {}
+        # A-27: prints made by another voice model (another size) are ignored, not
+        # compared; the extractor tells the size, else the first voice heard does.
+        self.dim: int | None = getattr(extract, "dim", None)
+        self.model_id: str | None = getattr(extract, "model_id", None)
+        self._foreign: set[str] = set()
         if self.root.exists():
             for path in self.root.glob("*/voice.json"):
                 self.load(path.parent.name)
 
     # ------------------------------------------------------------------ storage
     def load(self, person_id: str) -> bool:
-        """(Re)read one person's consented print from disk; False (and forget it) if none."""
+        """(Re)read one person's persistent print; False (and forget it) if none."""
         try:
             path = voice_path(self.root, person_id)
             data = json.loads(path.read_text())
-            if data.get("consent") is not True or not _consented_at(data.get("consent_t")):
-                raise ValueError("no consent")
+            if not (
+                data.get("consent") is True or data.get("automatic") is True
+            ) or not _valid_stamp(data.get("consent_t")):
+                raise ValueError("no valid capture record")
             base = unit(data["embedding"])
             bank = [unit(v) for v in data.get("adapted") or []][-self.adapt_max :]
             source = STATION if data.get("source") == STATION else GLASSES
+            tag = data.get("model")
+            if (self.dim is not None and len(base) != self.dim) or (
+                self.model_id and tag and tag != self.model_id
+            ):
+                self._ignore_foreign(person_id, len(base))
+                return False
+            bank = [v for v in bank if len(v) == len(base)]
         except FileNotFoundError:
             self._drop(person_id)
             return False
@@ -179,6 +211,47 @@ class VoicePrints:
         self.consents[person_id] = float(data["consent_t"])
         self.adapted[person_id] = bank
         return True
+
+    def remember_auto(self, person_id: str, session_id: str) -> bool:
+        """Persist an already harvested voice vector for an automatic face profile."""
+        vector = self.session.get(session_id)
+        if vector is None or person_id in self.enrolled:
+            return False
+        stamp = time.time()
+        write_print(
+            self.root, person_id, vector, stamp, GLASSES, automatic=True, model=self.model_id
+        )
+        self.session.pop(session_id, None)
+        self.enrolled = {**self.enrolled, person_id: vector}
+        self.sources[person_id] = GLASSES
+        self.consents[person_id] = stamp
+        self.adapted[person_id] = []
+        return True
+
+    def _ignore_foreign(self, person_id: str, size: int) -> None:
+        """Forget (in memory only) a print from another voice model; the file stays, so
+        switching the model back brings it back."""
+        if person_id not in self._foreign:
+            logger.warning(
+                "voice print for %s is from another voice model (%d values; this one makes"
+                " %s, model %s); re-enroll",
+                person_id,
+                size,
+                self.dim,
+                self.model_id,
+            )
+            self._foreign.add(person_id)
+        self._drop(person_id)
+
+    def _learn_dim(self, vector: np.ndarray) -> np.ndarray:
+        """The first voice heard tells the model's print size: drop prints of another."""
+        if self.dim is None:
+            self.dim = len(vector)
+            for key, base in list(self.enrolled.items()):
+                if len(base) != self.dim:
+                    self._ignore_foreign(key, len(base))
+            self.session = {k: v for k, v in self.session.items() if len(v) == self.dim}
+        return vector
 
     def _drop(self, person_id: str) -> None:
         self.enrolled = {k: v for k, v in self.enrolled.items() if k != person_id}
@@ -199,16 +272,16 @@ class VoicePrints:
         """Save only the embedding from sufficient consented speech."""
         if (
             consent is not True
-            or not _consented_at(consent_t)
+            or not _valid_stamp(consent_t)
             or len(samples) < self.enroll_s * 16000
         ):
             raise ValueError("consent and sufficient speech are required")
         voice_path(self.root, person_id)
-        vector = unit(self.extract(samples))
+        vector = self._learn_dim(unit(self.extract(samples)))
         with lock if lock is not None else nullcontext():
             if guard is not None and not guard():
                 return
-            write_print(self.root, person_id, vector, consent_t, source)
+            write_print(self.root, person_id, vector, consent_t, source, model=self.model_id)
             self.enrolled = {**self.enrolled, person_id: vector}
             self.sources[person_id] = source
             self.consents[person_id] = float(consent_t)
@@ -243,7 +316,9 @@ class VoicePrints:
         """Return no identity below the configured similarity or duration gate."""
         if len(samples) < self.match_s * 16000 or not (self.enrolled or self.session):
             return None, 0.0
-        vector = unit(self.extract(samples))
+        vector = self._learn_dim(unit(self.extract(samples)))
+        if not (self.enrolled or self.session):
+            return None, 0.0
         score, person = max((s, k) for k, s in self.scores(vector).items())
         return (person if score >= self.threshold else None), score
 
@@ -258,7 +333,7 @@ class VoicePrints:
             return self._adapt(person_id, samples, talkers)
         if len(samples) < self.match_s * 16000:
             return "short"
-        vector = unit(self.extract(samples))
+        vector = self._learn_dim(unit(self.extract(samples)))
         prior = self.session.get(person_id)
         self.session[person_id] = unit(vector + prior) if prior is not None else vector
         return "session"
@@ -271,7 +346,7 @@ class VoicePrints:
         now = self.clock()
         if now - self._last_adapt.get(person_id, -math.inf) < self.adapt_gap_s:
             return "too soon"
-        vector = unit(self.extract(samples))
+        vector = self._learn_dim(unit(self.extract(samples)))
         mine = self._base_scores(vector).get(person_id, -1.0)
         if mine < self.adapt_min:
             return "not like their print"
@@ -290,6 +365,8 @@ class VoicePrints:
                     self.consents[person_id],
                     self.sources.get(person_id, GLASSES),
                     self.adapted[person_id],
+                    automatic=person_id.startswith("auto-"),
+                    model=self.model_id,
                 )
             except (OSError, ValueError):
                 logger.warning("Could not save an adapted voice print")

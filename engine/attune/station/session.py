@@ -518,7 +518,13 @@ class StationEnroller:
     # ------------------------------------------------------------------ voice
     def _voice_until_done(self, session: Session) -> None:
         while True:
-            ok, reason = self._voice_step(session)
+            try:
+                ok, reason = self._voice_step(session)
+            except _Cancel:
+                raise
+            except Exception as exc:  # a failed mic or model must leave retry available
+                log.exception("Station voice step failed")
+                ok, reason = False, f"microphone or voice model unavailable: {exc}"
             if ok:
                 return
             self._result(session, "voice", False, reason)
@@ -562,8 +568,8 @@ class StationEnroller:
         if hasattr(vad, "reset"):
             vad.reset()
         mic = self._open_mic()
-        mic.start()
         try:
+            mic.start()
             quiet_since = self.clock()  # wall clock: no blocks at all means a dead mic
             step: VoiceStep | None = None  # made on the first block: paced by audio time
             self._state(session, VOICE, mic=getattr(mic, "label", s.mic_name))
@@ -619,7 +625,15 @@ class StationEnroller:
             del audio
         from ..audio.voiceprint import STATION, write_print
 
-        write_print(self.people_dir, session.person_id, vector, session.consent_t, STATION)
+        # A-27: tag the print with the voice model that made it, as the engine's own prints are
+        write_print(
+            self.people_dir,
+            session.person_id,
+            vector,
+            session.consent_t,
+            STATION,
+            model=getattr(extract, "model_id", None),
+        )
         session.voice_ok = True
         self._progress(session, "voice", 1.0, "")
         self._result(session, "voice", True)

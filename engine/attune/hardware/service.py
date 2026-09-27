@@ -4,6 +4,14 @@ Publishes ``sensors.levels``, ``sensors.touch``, ``touch.action``, ``hw.link`` a
 ``status.part``; turns ``hw.pattern`` / ``hw.stop`` / command ``pattern.test`` into serial
 commands and keeps the LED matrix icon in step with alerts and pause.
 
+A ``pattern.test`` of a repeating pattern (T3, T4) plays one cycle and then stops by itself
+(H-17): the console's light-and-buzz buttons have no Stop, and an alarm pattern must never
+keep buzzing after a test. A newer pattern or a real alert in the meantime keeps it going.
+
+A real alert's looping pattern (T3, T4) is sent again when the board says READY while it
+should be playing (H-18): a reset (brown-out) or a dropped link stops everything on the
+board, but the alarm is still sounding. ``hw.stop`` ends it for good.
+
 With ``hardware.simulate = true`` (or ``ATTUNE_SIMULATE_HARDWARE=1``) a FakeArduino runs
 in-process instead of the rig; ``hw.sim_touch`` {gesture} injects a touch into it.
 Without a board and without the simulator the service reports ``hw.link``
@@ -15,15 +23,32 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from collections.abc import Callable
 
 from . import protocol as p
 from .common import fields, section, shared_clock
 from .serial_link import SerialLink, SerialTransport, Transport, find_port
-from .simulator import FakeArduino
+from .simulator import PATTERN_STEPS, FakeArduino
 from .touch_router import TouchRouter
 
 logger = logging.getLogger(__name__)
+
+# The alarm patterns the board loops until STOP (T3, T4).
+ALARM_PATTERNS = frozenset(name for name in p.PATTERNS if PATTERN_STEPS.get(name, ([], False))[1])
+# A reset shows up as two READYs close together (at boot, then on the next HB): restart once.
+REARM_GAP_S = 1.5
+
+
+def one_cycle_stop_s(name: str) -> float | None:
+    """When a ``pattern.test`` of `name` should be stopped: during the pause after its first
+    cycle (T3 3.0 s, T4 1.2 s), or None for patterns that end by themselves."""
+    steps, repeats = PATTERN_STEPS.get(name, ([], False))
+    if not repeats or not steps:
+        return None
+    last = steps[-1][0]
+    played = sum(s[0] for s in steps) - last
+    return (played + min(500, last / 2)) / 1000.0
 
 
 def simulate_requested(cfg: dict) -> bool:
@@ -55,6 +80,10 @@ class HardwareService:
         self._stop = threading.Event()
         self._status_thread: threading.Thread | None = None
         self.metrics = {"levels": 0, "touches": 0, "patterns": 0, "last_levels": None}
+        self._last_pat: int | None = None  # serial number of the newest PAT sent
+        self._test_timer: threading.Timer | None = None
+        self._alarm: tuple[str, str] | None = None  # (T3/T4, L/R/B) a real alert is playing
+        self._rearmed_at = float("-inf")
 
     # ------------------------------------------------------------- lifecycle
     def start(self) -> None:
@@ -77,6 +106,7 @@ class HardwareService:
             ("paused", self._on_paused),
             ("session.forget", self._on_forget),
             ("hw.sim_touch", self._on_sim_touch),
+            ("hw.sim_control", self._on_sim_control),
         ):
             self._unsubs.append(self.bus.subscribe(topic, handler))
         self._publish_link({"connected": False, "firmware": None, "driver": None})
@@ -90,6 +120,7 @@ class HardwareService:
 
     def stop(self) -> None:
         self._stop.set()
+        self._cancel_test_timer()
         for unsub in self._unsubs:
             if callable(unsub):
                 try:
@@ -166,18 +197,38 @@ class HardwareService:
     def _on_ready(self) -> None:
         self.icon = None
         self._update_icon()
+        alarm = self._alarm
+        if alarm is None or not self.link:
+            return
+        now = time.monotonic()
+        if now - self._rearmed_at < REARM_GAP_S:
+            return
+        self._rearmed_at = now
+        n = self.link.pattern(*alarm)
+        if n is not None:
+            self._last_pat = n
+            logger.warning(
+                "hardware: the board restarted during an alarm; %s %s plays again", *alarm
+            )
 
     # ------------------------------------------------------------- bus -> serial
-    def _on_pattern(self, event) -> None:
+    def _on_pattern(self, event, *, test: bool = False) -> None:
         e = fields(event)
         name = str(e.get("name", "")).upper()
         if name not in p.PATTERNS:
             logger.warning("hardware: unknown pattern %r", name)
             return
-        if self.link and self.link.pattern(name, p.side_code(e.get("side"))) is not None:
+        side = p.side_code(e.get("side"))
+        if name in ALARM_PATTERNS and not test:
+            self._alarm = (name, side)
+        n = self.link.pattern(name, side) if self.link else None
+        if n is not None:
             self.metrics["patterns"] += 1
+            self._last_pat = n
 
     def _on_stop(self, _event=None) -> None:
+        self._alarm = None
+        self._cancel_test_timer()
         if self.link:
             self.link.stop_all()
 
@@ -185,7 +236,35 @@ class HardwareService:
         e = fields(event)
         if e.get("name") == "pattern.test":
             args = e.get("args") or {}
-            self._on_pattern({"name": args.get("name"), "side": args.get("side", "B")})
+            name = str(args.get("name", "")).upper()
+            self._on_pattern({"name": name, "side": args.get("side", "B")}, test=True)
+            after = one_cycle_stop_s(name)
+            if after is not None and self._last_pat is not None:
+                self._arm_test_stop(self._last_pat, after)
+
+    def _arm_test_stop(self, n: int, after: float) -> None:
+        self._cancel_test_timer()
+        timer = threading.Timer(after, self._end_test, args=(n,))
+        timer.daemon = True
+        timer.name = "hardware-test-stop"
+        self._test_timer = timer
+        timer.start()
+
+    def _cancel_test_timer(self) -> None:
+        timer, self._test_timer = self._test_timer, None
+        if timer is not None:
+            timer.cancel()
+
+    def _end_test(self, n: int) -> None:
+        """One cycle of a test pattern has played: stop it, unless something newer is on."""
+        if self._stop.is_set() or self._last_pat != n or not self.link:
+            return
+        with self._lock:
+            alert = self.router.current_alert() if self.router else None
+        if alert is not None:
+            return  # a real alert took over the rig; its "Got it" stops it
+        self.link.stop_all()
+        logger.info("hardware: test pattern played one cycle; stopped")
 
     def _on_alert(self, event) -> None:
         with self._lock:
@@ -214,6 +293,31 @@ class HardwareService:
             self.simulate_touch(str(gesture))
         except ValueError as exc:
             logger.warning("hardware: %s", exc)
+
+    def _on_sim_control(self, event) -> None:
+        """Simulator only: ``heartbeat`` (bool) stops or resumes the laptop's HB lines, to
+        exercise the board's 2 s safety stop; ``sound`` {left, right} adds a steady loudness
+        to each sensor (0..1023), so an alert has a direction; ``reboot`` (true) resets the
+        board as a brown-out would."""
+        if not self.simulate:
+            logger.info("hardware: hw.sim_control ignored (not simulating)")
+            return
+        e = fields(event)
+        if "heartbeat" in e and self.link:
+            self.link.send_heartbeat = bool(e["heartbeat"])
+            logger.info("hardware: simulator heartbeat %s", "on" if e["heartbeat"] else "off")
+        if e.get("reboot") is True and self.fake is not None:
+            logger.info("hardware: simulator reboot")
+            self.fake.reboot()
+        sound = e.get("sound")
+        if isinstance(sound, dict) and self.fake is not None:
+            try:
+                left = min(1023.0, max(0.0, float(sound.get("left", 0))))
+                right = min(1023.0, max(0.0, float(sound.get("right", 0))))
+            except (TypeError, ValueError):
+                logger.warning("hardware: bad simulated sound %r", sound)
+                return
+            self.fake.inject_sound(left, right)
 
     # ------------------------------------------------------------- matrix icon
     def wanted_icon(self) -> str:
@@ -247,6 +351,10 @@ class HardwareService:
         }
         if self.link:
             metrics.update(self.link.metrics)
+            metrics["pending_acks"] = len(self.link.pending)
+            metrics["heartbeat_out"] = self.link.send_heartbeat
+        if self.simulate and self.fake is not None:
+            metrics["sim"] = self.fake.snapshot()
         last = self.metrics["last_levels"]
         if last:
             metrics["left"], metrics["right"] = last["left"], last["right"]

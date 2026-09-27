@@ -57,8 +57,11 @@ class VisionSettings:
     asd_score_s: float = 0.4  # the score is the mean over the newest part of the window
     asd_faces: int = 4  # largest faces scored
     asd_min_face_px: int = 40
-    asd_max_gap_s: float = 0.2  # longest hole in a face's frames a window may have
-    asd_min_fps: float = 12.0  # fewer frames a second than this: no score (vision too slow)
+    # A busy laptop runs vision at 10-16 fps with uneven gaps. Light-ASD resamples to 25 fps and,
+    # on a podcast clip thinned to 10 fps, separated talker from listener as well as at 30 fps
+    # (AUC 0.90-0.91 vs 0.90-0.92); at 12 fps / 0.2 s it gave no score 80% of the time.
+    asd_max_gap_s: float = 0.35  # longest hole in a face's frames a window may have
+    asd_min_fps: float = 8.0  # fewer frames a second than this: no score (vision too slow)
     asd_av_offset_s: float = 0.0  # audio lags video by this much
     asd_max_age_s: float = 0.6  # a score older than this isn't published
 
@@ -78,12 +81,11 @@ class FusionSettings:
     lip_floor_ratio: float = 1.5
     # Talking, not a one-off mouth movement: while speech is heard the face must move in
     # time with it (at least talk_cover_share of the ticks since it started, and now) for
-    # talk_confirm_s if it started within talk_onset_s of the speech starting, otherwise
-    # (it started in the middle of someone's speech) for talk_sustain_s.
+    # talk_confirm_s. A face joining mid-speech also needs repeated mouth swings.
     talk_cover_share: float = 0.7
     talk_confirm_s: float = 0.25
     talk_onset_s: float = 0.4
-    talk_sustain_s: float = 1.5
+    talk_sustain_s: float = 1.5  # window in which to count mid-speech mouth swings
     # A mouth open wider than this (open ratio) in the last second is a yawn or a
     # laugh, not speech.
     lip_open_max: float = 0.6
@@ -102,6 +104,17 @@ class FusionSettings:
     # sits well below that.
     mouth_min_fps: float = 6.0
     hold_s: float = 0.5
+    # Continuity (fusion/speaker.py `_continues`): a face keeps the speech through dips in its
+    # evidence while speech runs on without a pause and nobody else talks, for up to
+    # continuity_s after it last talked on its own evidence; 0 turns it off. Only while
+    # Light-ASD has no fresh score for the face: its verdict, when it has one, stands. On
+    # podcast clips 60-70% of "Someone" words fell inside such dips.
+    continuity_s: float = 3.0
+    # ...but only for a face that talked on its own evidence for at least continuity_min_s and
+    # for continuity_share of this stretch of speech: a silent listener whose lips lined up
+    # with an off-camera voice for a moment (tests/vision/test_live_talker.py) never gets it.
+    continuity_min_s: float = 1.0
+    continuity_share: float = 0.5
     switch_ratio: float = 1.5
     voice_match: float = 0.5
     offscreen_after_s: float = 1.0
@@ -144,10 +157,9 @@ class FusionSettings:
     av_offset_s: float = 0.0  # audio lags video by this much; set by the clap test
     speech_hangover_s: float = 0.4
     # Voice evidence (this utterance's audio.voice_match against the face's print):
-    # a best match to another voice, or a best score below voice_reject when the face
-    # has a session print, vetoes the face; a match to the face's own print lets it
-    # speak with the probable-band mouth bar.
-    voice_reject: float = 0.25
+    # a best match to another voice vetoes the face; a match to the face's own
+    # print lets it speak with the probable-band mouth bar. A weak match is unknown.
+    voice_reject: float = 0.25  # off-screen harvesting's minimum novel-voice margin
     # Session voice prints are only harvested from a face this far in time (and passing
     # every talking check), so a silent face never learns a background voice.
     harvest_min_corr: float = 0.4

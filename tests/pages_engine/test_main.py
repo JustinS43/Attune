@@ -10,7 +10,12 @@ from attune import main as M
 from attune.core import contracts as C
 
 
-def test_parse_args():
+def test_parse_args(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "x.wav").write_bytes(b"RIFF")
+    reel = tmp_path / "data" / "reels" / "film" / "cafe_friends.mp4"
+    reel.parent.mkdir(parents=True)
+    reel.write_bytes(b"")
     o = M.parse_args(
         ["--source", "2", "--audio-file", "x.wav", "--port", "8001", "--no-browser"]
     )
@@ -25,6 +30,34 @@ def test_parse_args():
     engine = M.Engine(o, {"engine": {"data_dir": "data"}, "hardware": {"baud": 115200}})
     assert engine.config["hardware"] == {"baud": 115200, "simulate": True}
     assert M.Engine(M.Options(port=0), {"engine": {"port": 8000}}).port == 0
+
+
+@pytest.mark.parametrize(
+    ("argv", "what"),
+    [
+        (["--source", "missing.mp4"], "no such video file"),
+        (["--audio-file", "missing.wav"], "no such WAV file"),
+    ],
+)
+def test_parse_args_refuses_missing_files(tmp_path, monkeypatch, capsys, argv, what):
+    """A typo in --source must not fall back to a webcam; a missing WAV must not go silent."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        M.parse_args(argv)
+    assert exc.value.code == 2
+    assert what in capsys.readouterr().err
+
+
+def test_bad_config_is_a_config_error(tmp_path):
+    """main() turns this into one "Config error: <file>: <why>" line and exit code 2."""
+    from attune.config import ConfigError
+
+    bad = tmp_path / "bad.toml"
+    bad.write_text("[vision\ncamera_name = \n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="bad.toml"):
+        M.Engine(M.Options(config=str(bad)))
+    with pytest.raises(ConfigError, match="not found"):
+        M.Engine(M.Options(config=str(tmp_path / "missing.toml")))
 
 
 def test_failed_web_start_does_not_claim_running_server(tmp_path, monkeypatch):

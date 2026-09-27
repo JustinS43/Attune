@@ -30,7 +30,7 @@ asd_device = "cuda"             # ~25-80 ms a round; "cpu" is ~150 ms idle but ~
 asd_rate_hz = 5                 # scoring rounds per second, all faces in one batch
 asd_window_s = 1.5
 asd_min_face_px = 40
-asd_min_fps = 12                # vision slower than this: no score, the lip score decides
+asd_min_fps = 8                 # vision slower than this: no score, the lip score decides
 asd_av_offset_s = 0.0           # audio lags video by this much
 
 [fusion]
@@ -41,10 +41,10 @@ lip_floor_s = 15                # per-face noise floor: this face's own recent l
 lip_floor_min_s = 3
 lip_floor_pct = 10              # ...its 10th percentile...
 lip_floor_ratio = 1.5           # ...and a face must also reach 1.5x it
-talk_cover_share = 0.7          # moving in time for 70% of the speech since it started, for
-talk_confirm_s = 0.25           #   0.25 s if it started with the speech (or a turn),
-talk_onset_s = 0.4              #   i.e. within 0.4 s of it,
-talk_sustain_s = 1.5            #   1.5 s if it started in the middle of someone's speech
+talk_cover_share = 0.7          # moving in time for 70% of the current speech run
+talk_confirm_s = 0.25           # minimum duration before assigning a face
+talk_onset_s = 0.4              # starts near speech onset or a turn
+talk_sustain_s = 1.5            # window for repeated mouth swings when joining mid-speech
 lip_open_max = 0.6              # wider open than this = yawn or laugh, not speech
 head_motion_max = 0.8           # face widths/s; faster = blurred lips, not measured
 talk_min_swings = 4             # joining mid-speech: open/close swings needed over talk_sustain_s
@@ -53,7 +53,7 @@ mouth_min_fps = 6.0             # fewer mouth samples a second: mouth not judged
 sync_min_corr = 0.3             # lips in time with the sound: required when there is sound
 av_window_s = 1.5
 require_sync = true             # false only for film reels over unrelated audio
-voice_reject = 0.25             # best voice score below this vetoes a face with a session print
+voice_reject = 0.25             # minimum margin used when learning a new off-screen voice
 harvest_min_corr = 0.4          # learn a face's voice only when this far in time
 learn_offscreen = true          # learn voices heard while every visible face is still as offscreen-N
 offscreen_claim_s = 3.0         # a face talking this long with an offscreen-N voice claims it
@@ -78,11 +78,22 @@ vad_start = 0.5
 vad_end = 0.35
 min_speech_ms = 250
 end_silence_ms = 400
-asr_chunk_ms = 560
+asr_chunk_ms = 32                # feed the recogniser every VAD frame: it decodes each 560 ms chunk
+                                # as soon as its audio is in (A-22; 560 made words wait ~0.45 s more)
+pre_roll_ms = 320               # audio kept before speech starts; padded with silence when shorter
 languages = ["en", "es"]        # empty = auto-detect
 mute_after_reply_s = 0.5
+soft_split_s = 5                # a longer utterance ends at its next pause, so finals (history,
+                                # translation) keep coming during a monologue (10 s: ~12 s late)
+soft_split_gap_s = 0.1          # ...a pause is this much silence (the VAD dips inside words too)
+split_context_s = 120           # a split carries on the recogniser's stream (a fresh one drops the
+                                # first words of quiet speech) until it has heard this much
 max_utterance_s = 30
 target_rms = 0.1
+rescue_max_s = 2.5              # a short utterance heard as nothing is decoded again on the side
+voice_match_every_s = 1.0       # voice match at most this often per utterance (and at its end)...
+voice_match_max_s = 6.0         # ...on its newest 6 s of speech (the whole utterance stalled audio)
+inbox_s = 30                    # audio queued while a step is slow is kept, never dropped
 
 [alerts]
 window_s = 1.0
@@ -108,6 +119,13 @@ name_confidence = 0.8
 timeout_s = 1.5
 max_queue = 32
 reply_context_lines = 6
+reply_delay_s = 1.0              # A-23: suggest replies once the talk pauses, not after every final
+description_max_px = 224         # clothing crops are shrunk to this before the model reads them
+[llm.timeouts]                   # per job kind; others use timeout_s. A slow job is skipped and
+translation = 4.0                # never blocks a translation (it is stopped and runs after it)
+names = 3.0
+replies = 4.0
+descriptions = 4.0
 
 # ---------- Section 3 - Hardware & Services ----------
 [hardware]
@@ -132,6 +150,7 @@ presets = [
 [history]
 db_path = "data/history.db"
 retention_hours = 24             # rows older than this are deleted
+orphan_draft_s = 10              # a draft caption whose final never came is saved after this long
 
 # ---------- Section 4 - Pages ----------
 [pages]
@@ -158,12 +177,15 @@ decoder = "models/nemotron/decoder.int8.onnx"
 joiner = "models/nemotron/joiner.int8.onnx"
 provider = "cpu"
 num_threads = 2
-flush_s = 0.8
+flush_s = 0.4                   # silence after a final: 0.4 decodes every last word, 0.8 cost ~0.2 s
+word_settle_s = 1.5             # a split mid-talk keeps the last word for the next utterance
+                                # (it may be half decoded) unless this much audio came after it
 
 [whisper]
 model_path = "models/faster-whisper-large-v3-turbo"
 device = "cpu"
 compute_type = "int8"
+draft_interval_ms = 560       # Whisper re-decodes the growing utterance; 32 ms would fall behind live audio
 
 [voice]
 model_path = "models/cam++.onnx"

@@ -20,6 +20,10 @@ Enrollment station (V-23): `enroll.station` commands get the sending page's `cli
 `enroll_state`, `enroll_preview`, `enroll_level` and `enroll_mismatch` go only to that page
 (if it reconnects, the next phone to say hello takes the save over). Previews use a one-slot
 buffer like frames, so a slow phone skips them instead of queueing.
+
+A page that says hello (first time or after a reconnect) gets the recent captions again
+(A-22), so nothing said while it was away is lost: the phone and console get every caption
+the hub remembers, the lens only those still on screen (`bubble_fade_s` + 3 s).
 """
 
 from __future__ import annotations
@@ -35,10 +39,11 @@ import struct
 import threading
 import time
 from collections import OrderedDict, deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import numpy as np
 from starlette.websockets import WebSocket
@@ -57,6 +62,47 @@ class _Drop:
 
 
 _DROP = _Drop()
+
+
+def host_of(value: str | None) -> str:
+    """'http://Host:8000', 'host:8000' or '[::1]:8000' -> 'host' / '::1' ('' if unparsable)."""
+    if not value:
+        return ""
+    text = value.strip()
+    if "://" not in text:
+        text = "//" + text
+    try:
+        return (urlsplit(text).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def is_loopback_host(host: str) -> bool:
+    """localhost, *.localhost, 127.x.x.x and ::1: names that only ever reach this laptop."""
+    return (
+        host in ("localhost", "::1")
+        or host.endswith(".localhost")
+        or (host.startswith("127.") and host.replace(".", "").isdigit())
+    )
+
+
+def origin_allowed(origin: str | None, host: str | None, allowed: Iterable[str] = ()) -> bool:
+    """May a page from `origin` use the hub? `host` is the Host header of the request (P-38).
+
+    A browser always sends `Origin` on a WebSocket. Allowed: a loopback origin, the address
+    the page itself used to reach the engine (the phone on the LAN), or one listed in
+    `[pages] allowed_origins`. So other websites open in the same browser can't read
+    captions and faces or send commands. Clients without `Origin` are not browsers.
+    """
+    if origin is None:
+        return True  # not a browser: every browser sends Origin on a WebSocket
+    origin = origin.strip()
+    if origin in allowed:
+        return True
+    if origin.lower() == "null" or "://" not in origin:
+        return False  # sandboxed frames, file:// pages, junk
+    name = host_of(origin)
+    return bool(name) and (is_loopback_host(name) or name == host_of(host))
 
 
 def to_jsonable(obj: Any) -> Any:
@@ -114,7 +160,13 @@ def load_people(people_dir: Path) -> list[dict[str, Any]]:
                 "name": meta.get("name", folder.name),
                 "consent_t": meta.get("consent_t"),
                 "has_face": (folder / "face.npy").is_file(),
-                "has_voice": any(p.name.startswith("voice.") for p in folder.iterdir()),
+                "has_voice": (folder / "voice.json").is_file(),
+                "source": meta.get("source", "manual"),
+                "tier": meta.get(
+                    "tier", "close" if meta.get("source", "manual") == "manual" else "other"
+                ),
+                "seen_count": meta.get("seen_count", 0),
+                "last_seen_t": meta.get("last_seen_t", 0),
             }
         )
     return people
@@ -209,6 +261,7 @@ class Hub:
         self._paused = False
         self.captions: OrderedDict[str, dict] = OrderedDict()
         self.translations: OrderedDict[str, str] = OrderedDict()
+        self.caption_t: dict[str, float] = {}  # when each remembered caption last changed
         self.event_log: deque[dict] = deque(maxlen=50)
         self.people: list[dict] = []
         self.latest_status: dict | None = None
@@ -233,6 +286,9 @@ class Hub:
         self.frames_encoded = 0
         self.encode_ms: float | None = None  # moving average, written by the encoder only
         self._health_mark = (time.monotonic(), 0)
+        # P-38: browser pages from other websites are refused (see origin_allowed)
+        self.allowed_origins = [str(o).strip() for o in pages.get("allowed_origins", []) or []]
+        self._refused_origins: set[str] = set()
 
     # ------------------------------------------------------------------ lifecycle
     def connect(self) -> None:
@@ -390,8 +446,10 @@ class Hub:
             msg["translation"] = self.translations[utt]
         self.captions[utt] = msg
         self.captions.move_to_end(utt)
+        self.caption_t[utt] = self.clock()
         while len(self.captions) > CAPTION_MEMORY:
-            self.captions.popitem(last=False)
+            gone, _ = self.captions.popitem(last=False)
+            self.caption_t.pop(gone, None)
         self.broadcast(C.WS_CAPTION, msg)
 
     def _on_caption_retract(self, ev: Any) -> None:
@@ -400,6 +458,7 @@ class Hub:
         if utt is None:
             return
         self.captions.pop(str(utt), None)
+        self.caption_t.pop(str(utt), None)
         self.translations.pop(str(utt), None)
         self.broadcast(C.WS_CAPTION_RETRACT, {"utt_id": utt})
 
@@ -414,6 +473,7 @@ class Hub:
         if caption is not None:
             caption = {**caption, "translation": text}
             self.captions[utt] = caption
+            self.caption_t[utt] = self.clock()
             self.broadcast(C.WS_CAPTION, caption)
 
     def _on_relay(self, msg_type: str, ev: Any) -> None:
@@ -561,6 +621,7 @@ class Hub:
     def _on_forget(self, ev: Any) -> None:
         self.save_pending = None
         self.captions.clear()
+        self.caption_t.clear()
         self.translations.clear()
         self.event_log.clear()
         self._log_event("Session forgotten")
@@ -649,6 +710,7 @@ class Hub:
                 "config": self.welcome_config,
             },
         )
+        self._replay_captions(client, role)
         if role in C.WS_AUDIENCE[C.WS_PEOPLE]:
             client.push(C.WS_PEOPLE, {"people": self.people})
         if role in C.WS_AUDIENCE[C.WS_HW_LINK] and self._hw_link is not None:
@@ -666,6 +728,19 @@ class Hub:
                 client.push(C.WS_STATUS, self.latest_status)
             for entry in list(self.event_log):
                 client.push(C.WS_EVENT_LOG, entry)
+
+    def _replay_captions(self, client: Client, role: str) -> None:
+        """Send a page that just connected the captions it missed (A-22)."""
+        if role not in C.WS_AUDIENCE[C.WS_CAPTION]:
+            return
+        if role == "lens":
+            # only what would still be on the glasses, so a reconnect never floods them
+            since = self.clock() - float(self.welcome_config["bubble_fade_s"]) - 3.0
+        else:
+            since = float("-inf")
+        for utt, msg in list(self.captions.items()):
+            if self.caption_t.get(utt, float("-inf")) >= since:
+                client.push(C.WS_CAPTION, msg)
 
     async def sender(self, client: Client) -> None:
         """Send one page its queued JSON messages, then its newest frame."""
@@ -697,6 +772,17 @@ class Hub:
 
     async def endpoint(self, websocket: WebSocket) -> None:
         """The `/ws` route."""
+        origin = websocket.headers.get("origin")
+        if not origin_allowed(origin, websocket.headers.get("host"), self.allowed_origins):
+            if origin not in self._refused_origins and len(self._refused_origins) < 50:
+                self._refused_origins.add(str(origin))
+                log.warning(
+                    "Refused a WebSocket from %s: only the laptop's own pages may connect "
+                    "(add it to [pages] allowed_origins if it is yours)",
+                    origin,
+                )
+            await websocket.close(code=1008)
+            return
         await websocket.accept()
         client = self.add_client(websocket)
         task = asyncio.create_task(self.sender(client))

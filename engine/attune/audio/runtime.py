@@ -36,9 +36,16 @@ def engine_clock(config: dict) -> Callable[[], float]:
 class Worker:
     """Bounded, nonblocking bus inbox with health and stale-result invalidation."""
 
-    def __init__(self, bus: Any, part: str, handler: Callable, tick: Callable | None = None):
+    def __init__(
+        self,
+        bus: Any,
+        part: str,
+        handler: Callable,
+        tick: Callable | None = None,
+        maxsize: int = 256,
+    ):
         self.bus, self.part, self.handler, self.tick = bus, part, handler, tick
-        self.inbox: queue.Queue = queue.Queue(maxsize=256)
+        self.inbox: queue.Queue = queue.Queue(maxsize=maxsize)
         self.controls: queue.SimpleQueue = queue.SimpleQueue()
         self.cleanup: Callable | None = None
         self.health: Callable[[], dict] | None = None
@@ -50,11 +57,14 @@ class Worker:
         self._subscriptions: list = []
         self._lock = threading.RLock()
 
-    def subscribe(self, topic: str) -> None:
-        """Register a fast callback, retaining an unsubscribe hook when supported."""
+    def subscribe(self, topic: str, accept: Callable[[Any], bool] | None = None) -> None:
+        """Register a fast callback, retaining an unsubscribe hook when supported.
+
+        `accept` filters events on the publisher's thread, before they take inbox room.
+        """
 
         def receive(event: Any) -> None:
-            if self.closed.is_set():
+            if self.closed.is_set() or (accept is not None and not accept(event)):
                 return
             # enroll.result is rare and must never be lost to an audio backlog: it starts the
             # voice step of an enrollment the person consented to (P-29)

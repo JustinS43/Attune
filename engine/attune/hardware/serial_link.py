@@ -151,6 +151,30 @@ class ClockMap:
         return ms / 1000.0 + self.offset
 
 
+HEARTBEAT_MIN_S, HEARTBEAT_MAX_S = 0.1, 1.0  # the board stops everything after 2 s without one
+
+
+def heartbeat_period(value) -> float:
+    """``[hardware] heartbeat_s``, kept between 0.1 s (no flood) and 1 s (well inside the
+    board's 2 s safety stop); a bad value is logged and replaced."""
+    try:
+        hb = float(value)
+    except (TypeError, ValueError):
+        logger.warning("hardware: heartbeat_s = %r is not a number; using 0.5 s", value)
+        return 0.5
+    if not HEARTBEAT_MIN_S <= hb <= HEARTBEAT_MAX_S:
+        fixed = min(HEARTBEAT_MAX_S, max(HEARTBEAT_MIN_S, hb))
+        logger.warning(
+            "hardware: heartbeat_s = %s is outside %.1f..%.1f s; using %.1f s",
+            value,
+            HEARTBEAT_MIN_S,
+            HEARTBEAT_MAX_S,
+            fixed,
+        )
+        return fixed
+    return hb
+
+
 class SerialLink:
     """Owns the connection; calls ``on_message(msg, t)`` and ``on_link(state)``."""
 
@@ -170,7 +194,7 @@ class SerialLink:
         self.on_ready = on_ready
         self.connect = connect
         self.ready_timeout_s = float(cfg.get("ready_timeout_s", 3))
-        self.heartbeat_s = float(cfg.get("heartbeat_s", 0.5))
+        self.heartbeat_s = heartbeat_period(cfg.get("heartbeat_s", 0.5))
         self.stale_s = float(cfg.get("stale_s", 3.0))
         self.scan_s = float(cfg.get("scan_s", 1.0))
         self.clockmap = ClockMap()
@@ -185,7 +209,10 @@ class SerialLink:
             "reconnects": 0,
             "last_ack_ms": None,
             "errors": 0,
+            "board_restarts": 0,  # the board's clock went back: it reset (brown-out?)
+            "ready_again": 0,  # READY while linked: a reset, or a heartbeat gap it saw
         }
+        self._board_ms: int | None = None  # newest LV millis() on this connection
         self.last_error = ""
         self._n = 0
         self._n_lock = threading.Lock()
@@ -264,6 +291,7 @@ class SerialLink:
     def _handshake(self, transport: Transport) -> bool:
         """Wait for READY; accept a board that is already streaming without it."""
         self.clockmap.reset()
+        self._board_ms = None  # opening the port resets an UNO: a fresh clock is expected
         deadline = time.monotonic() + self.ready_timeout_s
         next_hb = 0.0
         alive = False
@@ -350,9 +378,17 @@ class SerialLink:
         arrival = self.clock()
         t = arrival
         if isinstance(msg, p.Levels):
+            self._check_board_clock(msg.ms)
             t = self.clockmap.to_engine(msg.ms, arrival)
         elif isinstance(msg, p.Ready):
             # the board rebooted (brown-out, reset button) or re-announced after a loss
+            if self.connected:
+                self.metrics["ready_again"] += 1
+                logger.info(
+                    "hardware: board said READY again (%d so far): a reset, or it missed "
+                    "heartbeats for 2 s",
+                    self.metrics["ready_again"],
+                )
             self.clockmap.reset()
             self._ready(msg, transport.name)
             return
@@ -367,6 +403,19 @@ class SerialLink:
                 self.pending.pop(msg.n, None)
             logger.warning("hardware: board error %s", msg.text)
         self.on_message(msg, t)
+
+    def _check_board_clock(self, ms: int) -> None:
+        """LV carries the board's millis(); if it jumps back the board restarted by itself."""
+        last, self._board_ms = self._board_ms, ms
+        if last is not None and ms + 500 < last:
+            self.metrics["board_restarts"] += 1
+            self.last_error = "board restarted"
+            logger.warning(
+                "hardware: the board restarted (its clock went from %d ms back to %d ms). "
+                "If this happens when the servo moves, its 5 V supply is browning out",
+                last,
+                ms,
+            )
 
     def _set_link(self, connected: bool) -> None:
         if connected == self.state["connected"] and not connected:

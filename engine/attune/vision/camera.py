@@ -98,18 +98,19 @@ def pick_camera(
     exclude: Callable[[CameraInfo], bool] | None = None,
 ) -> CameraInfo | None:
     cams = [cam for cam in list_cameras() if not (exclude and exclude(cam))]
+    # A camera asked for by name wins on every platform; a reader that must not fall back
+    # (the enrollment station) gets that camera or nothing.
+    for cam in cams:
+        if _matches(name, cam.name):
+            return cam
+    if not fallback_any:
+        return None
     if sys.platform == "darwin":
         # USB VID/PID identifies external webcams without depending on their brand.
         external = [cam for cam in cams if _is_external(cam)]
         if external:
             return external[0]
-        return cams[0] if fallback_any and cams else None
-    for cam in cams:
-        if name and name.lower() in cam.name.lower():
-            return cam
-    if fallback_any and cams:
-        return cams[0]
-    return None
+    return cams[0] if cams else None
 
 
 def _matches(name: str, cam_name: str) -> bool:
@@ -121,7 +122,9 @@ def _is_external(cam: CameraInfo) -> bool:
 
 
 def _is_preferred(cam: CameraInfo, name: str) -> bool:
-    return _is_external(cam) if sys.platform == "darwin" else not name or _matches(name, cam.name)
+    if _matches(name, cam.name):
+        return True
+    return _is_external(cam) if sys.platform == "darwin" else not name
 
 
 class Camera:

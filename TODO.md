@@ -39,6 +39,10 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] V-21 Live talker detection: per-face noise floor, no captions to a silent face (#57)
 - [x] V-22 Light-ASD active speaker model decides who is talking (#58)
 - [x] V-23 Enrollment station: save a face at the laptop camera (OV02E10) with a live phone preview, the glasses' quality gate and 8-most-varied rule, an identity check against the glasses face, and frame sharing when the main camera holds the laptop camera (#60)
+- [x] V-24 Attribution without waiting: the first words of an utterance are held back (up to 300 ms) only while a mouth on screen is moving or a known voice may still be matched, otherwise shown at once (#62)
+- [ ] V-25 Live speaker gate rehearsal: use the built-in camera when no external camera is present, compare Light-ASD on/off on a labeled local clip, and check speech bubble placement in the lens demo — camera access and local model weights pending; runbook in tests/vision/README.md
+- [x] V-26 Use the latest voice verdict so a stale match cannot keep an off-screen name or direction; keep weak identity scores inconclusive; honor a named built-in camera on macOS for the enrollment station (#68)
+- [ ] V-27 Automatic contact memory: persist engaged faces, deduplicate and rank up to 150, replace weak automatic profiles — code and unit tests done; live camera check left
 
 ## Section 2 – Audio & Language
 
@@ -63,13 +67,20 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] A-19 Hot-plug recovery: re-initialise PortAudio after a mic loss, fall back, return to `[audio] device_name` between utterances; camera returns to `[vision] camera_name` after replug (Vision file) · M2 — unit-tested with fake devices; a real unplug/replug is still to check on the rig (#52)
 - [x] A-20 Make Windows capture simulation tests portable across macOS and Linux (#55)
 - [ ] A-21 Station voice print from the laptop mic, a cross-mic threshold, and a bounded glasses-mic refinement of saved voice prints (#60) — built, thresholds from a simulated two-mic study; a live two-mic recording in a quiet room is left
+- [x] A-22 Caption latency and completeness: words on screen ~0.4 s sooner, no lost long monologues or short replies, finals at gaps, pauses, replies and language switches; `scripts/bench_captions.py` measures it (#62)
+- [x] A-23 Translation and local-model speed: no Ollama timeouts, translations never wait behind replies or descriptions (#62)
+- [ ] A-24 Quiet speech and noisy rooms: gain before the VAD, a recogniser gain that rises after a loud start, a babble-noise bench (synthetic hall babble at 15/10/5/0 dB SNR) and a measured choice on a Whisper second pass for finals — in progress
+- [ ] A-25 Automatic voice association and contextual names: persist harvested voice prints, offer repeated name evidence — code and unit tests done; live two-mic check left
+- [x] A-26 Pace local Whisper drafts separately from frame-rate Nemotron to preserve live captions on CPU · M2 (#77)
+- [x] A-27 A voice print from another voice model (another size, or another model's tag) is ignored at load with one warning, never compared (#80)
+- [x] A-28 A sounding alarm stays on while the glasses tap: tapped windows can't show that it stopped, so they no longer run down the 15 s quiet-clear (it cycled 14 s on, 10 s off); it ends with "Got it" or 15 s of heard quiet (#89)
 
 ## Section 3 – Hardware & Services
 
-- [ ] H-01 Firmware: READY with the I²C driver probe, LV every 50 ms, HB · M0 — written in #19; compile + bench check on the rig left
+- [x] H-01 Firmware: READY with the I²C driver probe, LV every 50 ms, HB · M0 — written in #19; bench-checked on the UNO R3 (#88)
 - [ ] H-02 Firmware: touch gestures (tap, hold, double) · M0 — written in #19; compile + bench check on the rig left
-- [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2 — written in #19; compile + bench check on the rig left
-- [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2 — written in #19; compile + bench check on the rig left
+- [ ] H-03 Firmware: patterns T3, T4, BELL, NAME, OK, NO, LOST with soft start and duty limits · M2 — written in #19; taps and timing bench-checked on the R3 (#88); LEDs not yet watched
+- [ ] H-04 Firmware: 2 s safety stop, LED matrix icons, CFG · M2 — written in #19; safety stop and CFG bench-checked on the R3 (#88); LED 13 codes not yet watched
 - [x] H-05 Serial link: find by USB ID, no DTR reset, READY wait, HB, auto-reconnect; publishes `sensors.*` and `hw.link` · M0 (#19)
 - [x] H-06 Touch router (alert > name > nothing; double tap = pause); publishes `touch.action` · M2 (#19) — P-29: double tap = save this person, triple tap = pause
 - [x] H-07 ElevenLabs streaming voice (key from .env) · M2 (#19)
@@ -78,10 +89,12 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] H-10 SQLite schema (data/history.db): tables, full-text search (FTS5), talk-time query, auto-delete after 24 h · M1 (#19)
 - [x] H-11 History writer on its own thread (captions keep running if it fails), and forget session · M1 (#19)
 - [x] H-12 History queries and API router (`/api/history/...`) · M2 (#19)
-- [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — wiring + T-H1–T-H8 checklist ready in #19; assembly and bench tests left
+- [ ] H-13 Rig assembly and bench tests T-H1 to T-H8, logged in docs/hardware/wiring.md · M0 – M2 — rig assembled; T-H1 passed, T-H3–T-H7 partly logged (#88); T-H2, T-H8 and the hands-on parts left
 - [x] H-14 Tests in tests/hardware_services (protocol parsing, touch router, history with a test DB) · M2 (#19)
 - [x] H-15 CAD rig page matches the real kit: UNO R3, servo tapper, no motor driver (#43)
 - [x] H-16 Firmware runs on UNO R3 with the servo tapper; status on LED 13 (#45)
+- [x] H-17 Test patterns stop after one cycle; board restarts (brown-out) noticed and logged; heartbeat kept within 0.1–1 s; simulator reboot/heartbeat/sound controls; speech_out device "none" (#61)
+- [x] H-18 Firmware 1.1.1: no false link loss (the watchdog's time math wrapped on ~1 % of heartbeats and stopped a playing alarm about once a minute) and no skipped one-shot patterns; the engine plays a real alert's T3/T4 again when the board says READY (#88)
 
 ## Section 4 – Pages, Engine & Demo
 
@@ -120,6 +133,15 @@ How to use this list (full rules in [AGENTS.md](AGENTS.md#the-to-do-list)):
 - [x] P-33 Clear stale live lens frames on source switch and reduce frame copy work (#53)
 - [x] P-34 Remember Me captures and displays the whole face with more room (#54)
 - [x] P-35 Phone station screens: consent, laptop camera preview with an oval and hints, progress, read a sentence with a level meter, done or retry (#60)
+- [x] P-36 Captions on the lens and phone survive a reconnect (the hub replays recent captions on hello) and the phone drops retracted segments (#62)
+- [x] P-37 End-to-end suite (tests/e2e): real engines in replay mode, every page in headless Edge; captions, alerts, camera/pause, reconnect, privacy, robustness, soak (#61)
+- [x] P-38 Only the laptop's own pages reach the engine: WebSocket origin check, Host guard (DNS rebinding), no API schema (#61)
+- [x] P-39 Phone and demo fixes from the e2e run: tab bar indicator, camera switch and state, no "UND" tag, hidden demo panes out of the tab order, Apricot eyebrow contrast (#61)
+- [x] P-40 Clear start-up errors: a missing --source/--audio-file stops at once (never a webcam fallback), one-line config errors with exit code 2 (#61)
+
+- [x] P-41 ElevenLabs key and voice ID in Settings, with local .env persistence and masked key status (#67)
+- [x] P-42 Pinned face, mouth, voice, and Whisper model downloads for the live speaker demo · M3 (#74)
+- [ ] P-43 People pages and contact continuation: show close/familiar/other, save photo contacts, continue into face and voice enrollment — code done; live browser check left
 
 ## Gates and end-to-end checks (whole team)
 
