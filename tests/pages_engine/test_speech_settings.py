@@ -34,7 +34,7 @@ def test_save_preserves_other_env_entries_and_never_returns_key(settings):
         URL, headers=HEADERS, json={"api_key": "test-key", "voice_id": "voice123"}
     )
     assert response.status_code == 200
-    assert response.json()["restart_required"] is True
+    assert response.json()["restart_required"] is False
     values = dotenv_values(path)
     assert values["OTHER_VALUE"] == "untouched"
     assert values["ELEVENLABS_API_KEY"] == "test-key"

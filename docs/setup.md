@@ -6,6 +6,48 @@
 
 ## Running the engine
 
+### Local models for the speaker demo
+
+With permission to download model weights, run this from the repo root:
+
+```bash
+python scripts/download_models.py --yes buffalo_l face_landmarker light_asd \
+    cam_plus_plus whisper_config.json whisper_model.bin \
+    whisper_preprocessor_config.json whisper_tokenizer.json whisper_vocabulary.json
+python scripts/download_models.py --check
+```
+
+Use `--root /path/to/checkout` when the running engine is in another checkout.
+The downloader pins sizes and SHA-256 hashes and verifies files before installing them.
+It extracts only the face detector and recognizer from Buffalo_L; its age and gender
+models are not installed. InsightFace's Buffalo_L weights are for non-commercial
+research use only. Model weights stay in the ignored `models/` folder.
+
+The live demo needs the glasses camera and a microphone: name them in `config/attune.toml`
+(`[vision] camera_name`, `[audio] device_name`), and on macOS allow both under System
+Settings > Privacy & Security. `cam_plus_plus` is 3D-Speaker's CAM++ export, the one the
+voice thresholds were tuned on; if `--check` reports it wrong, you have another export
+(WeSpeaker's, say): fetch it again, then re-enroll voices, because prints from different
+models never match. Without a saved person, the demo can show speech placement but cannot
+verify saved-name accuracy.
+
+On a CPU-only laptop, the default large Whisper model may decode too slowly for a
+live rehearsal. For a diagnostic run, download the optional multilingual Base model
+and point a local config at it:
+
+```bash
+python scripts/download_models.py --yes whisper_cpu_config.json \
+    whisper_cpu_model.bin whisper_cpu_tokenizer.json whisper_cpu_vocabulary.txt
+```
+
+```toml
+[whisper]
+model_path = "models/faster-whisper-base"
+```
+
+This does not change the project's default model or its quality target. `--check`
+verifies required models by default; pass optional model names to check those too.
+
 Run everything from the repo root, so `config/`, `models/` and `data/` resolve:
 
 ```bash
@@ -99,7 +141,8 @@ can't use them):
 
 `tests/e2e/` starts real engines in replay mode on port 8013 and drives every page in a
 headless Microsoft Edge: captions in order on the glasses and the phone, alerts to the
-rig, camera and pause, reconnects, privacy, bad setups and a soak. See
+rig, camera and pause, reconnects, privacy, bad setups, the laptop station's phone screens
+and a soak. See
 [tests/e2e/README.md](../tests/e2e/README.md):
 
 ```bash
@@ -118,8 +161,9 @@ python tests/e2e/run_e2e.py pages      # one scenario
 ## ElevenLabs settings
 
 On the laptop, open `/phone/`, then **Settings → Speak for me → ElevenLabs voice**.
-Enter your API key and optional voice ID, choose **Save voice settings**, then restart
-Attune. Leave the key blank to keep it; leave the voice ID blank for the default voice.
+Enter your API key and optional voice ID, then choose **Save voice settings**. The
+new details apply to the next spoken reply without restarting Attune. Leave the
+key blank to keep it; leave the voice ID blank for the default voice.
 The saved key is never returned to the browser. It is cleared from the input after
 submission and is not stored in browser storage or sent through the event bus.
 
@@ -128,7 +172,8 @@ working directory's `.env`, preserving other entries. Direct `.env` editing stil
 works. Nonblank environment variables retain precedence; the form indicates when
 they manage a value. Secrets are only editable from the laptop using `localhost`
 or a loopback address; a remote phone shows instructions to use the laptop.
-Demo mode disables credential entry. Saving does not contact ElevenLabs or verify
+Demo mode disables credential entry. A static preview cannot save settings; use
+the live Attune page on the laptop. Saving does not contact ElevenLabs or verify
 that the account has credits or access to the chosen voice.
 
 The page uses `GET /api/settings/elevenlabs` for nonsecret status and

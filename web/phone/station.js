@@ -538,6 +538,8 @@ export function createStation({ host, send, onStarted = () => {} }) {
       config = { source: enroll?.source || 'glasses', sentence: enroll?.sentence || '' };
     },
     enabled: () => config.source === 'station',
+    prefill: name => { draft.name = name || ''; draft.consent = false; },
+    currentSessionId: () => s?.session || null,
     isOpen: () => !overlay.hidden,
     renderStart,
     start,

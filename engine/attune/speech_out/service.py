@@ -19,7 +19,7 @@ from collections.abc import Iterator
 
 from attune.hardware.common import fields, section, shared_clock
 
-from .elevenlabs_tts import ElevenLabsTTS
+from .elevenlabs_tts import ElevenLabsTTS, load_credentials
 from .kokoro_tts import KokoroTTS
 from .player import NullPlayer, SoundDevicePlayer, is_silent_device
 
@@ -38,6 +38,8 @@ class SpeechOutService:
         self.fallback_after_s = float(self.cfg.get("fallback_after_s", 1.5))
         self.max_chars = int(self.cfg.get("max_chars", 400))
         self.elevenlabs = elevenlabs
+        self._managed_elevenlabs = elevenlabs is None
+        self._elevenlabs_credentials: tuple[str | None, str | None] | None = None
         self.kokoro = kokoro
         self.player = player
         self.jobs: queue.Queue = queue.Queue(maxsize=int(self.cfg.get("queue_max", 5)))
@@ -59,9 +61,10 @@ class SpeechOutService:
     # ------------------------------------------------------------- lifecycle
     def start(self) -> None:
         self.clock = shared_clock(self.config)
-        if self.elevenlabs is None:  # pass False to disable
+        if self._managed_elevenlabs:  # pass False to disable
             try:
                 self.elevenlabs = ElevenLabsTTS.from_env(self.cfg)
+                self._elevenlabs_credentials = self._current_credentials()
             except Exception as exc:  # noqa: BLE001 - SDK import/setup problem
                 logger.warning("speech_out: ElevenLabs unavailable: %s", type(exc).__name__)
                 self.elevenlabs = None
@@ -155,6 +158,7 @@ class SpeechOutService:
             except queue.Empty:
                 job = None
             if job is not None:
+                self._refresh_elevenlabs()
                 # Old network producers retain their cancelled event after a new reply starts.
                 self.cancel = threading.Event()
                 if self._stop.is_set():
@@ -168,6 +172,26 @@ class SpeechOutService:
             if time.monotonic() - last_status >= 1.0:
                 last_status = time.monotonic()
                 self.bus.publish("status.part", self.status())
+
+    def _current_credentials(self) -> tuple[str | None, str | None]:
+        key, voice = load_credentials()
+        return key, self.cfg.get("elevenlabs_voice_id") or voice
+
+    def _refresh_elevenlabs(self) -> None:
+        """Apply local credential changes before the next queued reply."""
+        if not self._managed_elevenlabs or not self.cfg.get("elevenlabs", True):
+            return
+        credentials = self._current_credentials()
+        if credentials == self._elevenlabs_credentials:
+            return
+        try:
+            updated = ElevenLabsTTS.from_env(self.cfg)
+        except Exception as exc:  # noqa: BLE001 - keep the offline voice available
+            logger.warning("speech_out: ElevenLabs unavailable: %s", type(exc).__name__)
+            self.elevenlabs = None
+            return
+        self.elevenlabs = updated
+        self._elevenlabs_credentials = credentials
 
     def speak(self, text: str, lang: str | None = None) -> str | None:
         """Speak one reply (blocking, on the worker thread). Returns the voice used."""

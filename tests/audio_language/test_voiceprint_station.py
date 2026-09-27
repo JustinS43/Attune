@@ -57,7 +57,9 @@ def test_station_scores_are_shifted_onto_the_voice_match_scale(tmp_path):
     assert v.sources == {"sam": STATION, "ana": GLASSES}
     scores = v.scores(vec(2))
     assert scores["sam"] == pytest.approx(0.42 + 0.1, abs=0.01)  # + (0.5 - 0.4)
-    assert scores["ana"] == pytest.approx(float(vec(2) @ vec(5)))  # glasses print: unshifted
+    assert scores["ana"] == pytest.approx(
+        float(vec(2) @ vec(5))
+    )  # glasses print: unshifted
     assert v.match(clip(2)) == ("sam", pytest.approx(0.52, abs=0.01))
 
 
@@ -133,7 +135,9 @@ def test_refinement_adds_a_capped_bank_and_never_replaces_the_base_print(tmp_pat
 def test_the_bank_has_its_own_line_and_never_vouches_for_itself(tmp_path):
     write_print(tmp_path, "sam", vec(0), 1.0, STATION, [vec(2)])
     v = prints(tmp_path, {**OPTIONS, "bank_match": 0.6})
-    assert v.scores(vec(2))["sam"] == pytest.approx(1.0 - 0.1)  # bank, shifted by 0.5 - 0.6
+    assert v.scores(vec(2))["sam"] == pytest.approx(
+        1.0 - 0.1
+    )  # bank, shifted by 0.5 - 0.6
     # voice 3 is close to the bank (0.97) but not to the base print (0.17 + 0.1): not learned
     assert v.harvest("sam", clip(3)) == "not like their print"
     assert len(v.adapted["sam"]) == 1
@@ -154,6 +158,19 @@ def test_strangers_still_get_session_prints_only(tmp_path):
     assert not v.session
 
 
+def test_automatic_face_can_keep_harvested_voice_without_audio(tmp_path):
+    v = prints(tmp_path)
+    assert v.harvest("track-4", clip(0)) == "session"
+    assert v.remember_auto("auto-123", "track-4")
+    record = json.loads((tmp_path / "auto-123" / "voice.json").read_text())
+    assert record["automatic"] is True and record["consent"] is False
+    assert "audio" not in record and "track-4" not in v.session
+    again = prints(tmp_path)
+    assert again.match(clip(0))[0] == "auto-123"
+    again.delete("auto-123")
+    assert not (tmp_path / "auto-123" / "voice.json").exists()
+
+
 def test_audio_service_loads_a_station_print_and_passes_talkers(config, bus, tmp_path):
     root = tmp_path / "people"
     v = VoicePrints(root, extract, 0.5, 5, 1, options=OPTIONS)
@@ -168,16 +185,45 @@ def test_audio_service_loads_a_station_print_and_passes_talkers(config, bus, tmp
     assert "sam" not in v.enrolled
     event = {"person_id": "sam", "part": "voice", "ok": True, "source": "station"}
     service._handle("enroll.result", event, 0)
-    assert v.sources.get("sam") == STATION  # recognised on the glasses mic straight away
+    assert (
+        v.sources.get("sam") == STATION
+    )  # recognised on the glasses mic straight away
     # a glasses-flow voice result is not reloaded here (the audio service wrote it itself)
-    service._handle("enroll.result", event | {"person_id": "ana", "source": "glasses"}, 0)
+    service._handle(
+        "enroll.result", event | {"person_id": "ana", "source": "glasses"}, 0
+    )
     assert "ana" not in v.enrolled
     service.ring.append(0, np.full(3 * 16000, 1.0, np.float32))
     service.speech_intervals.append((0, 3))
-    service._handle("voice.harvest", {"person_id": "sam", "t0": 0, "t1": 3, "talkers": 2}, 0)
+    service._handle(
+        "voice.harvest", {"person_id": "sam", "t0": 0, "t1": 3, "talkers": 2}, 0
+    )
     service._handle("voice.harvest", {"person_id": "sam", "t0": 0, "t1": 3}, 0)
     assert seen == [("sam", 2), ("sam", 1)]
     assert len(v.adapted["sam"]) == 1
+
+
+def test_audio_service_attaches_later_harvest_to_automatic_face(config, bus, tmp_path):
+    root = tmp_path / "people"
+    voices = VoicePrints(root, extract, 0.5, 5, 1, options=OPTIONS)
+    service = AudioService(bus, config, voices=voices, mic=False)
+    service.clock = lambda: 0
+    service._handle(
+        "enroll.result",
+        {
+            "person_id": "auto-abc",
+            "part": "face",
+            "ok": True,
+            "track_id": 4,
+            "source": "auto",
+        },
+        0,
+    )
+    service.ring.append(0, clip(0, 3))
+    service.speech_intervals.append((0, 3))
+    service._handle("voice.harvest", {"person_id": "track-4", "t0": 0, "t1": 3}, 0)
+    assert voices.match(clip(0))[0] == "auto-abc"
+    assert (root / "auto-abc" / "voice.json").exists()
 
 
 CAM = Path(__file__).resolve().parents[2] / "models" / "cam++.onnx"
@@ -208,3 +254,67 @@ def test_cam_prints_do_not_depend_on_the_clip_length():
         va, vb = va / np.linalg.norm(va), vb / np.linalg.norm(vb)
         assert float(va @ vb) < 0.6, n  # two voices stay apart at every length
         assert float(va @ base) > 0.9, n  # one voice stays itself
+
+
+class SizedExtractor:
+    """A fake CAM++ that makes 192-value prints and says so, like the real extractor."""
+
+    dim = 192
+
+    def __call__(self, samples):
+        v = np.zeros(192, np.float32)
+        v[int(samples[0]) % 192] = 1.0
+        return v
+
+
+def test_a_print_from_another_voice_model_is_ignored_with_one_warning(tmp_path, caplog):
+    other = np.zeros(512, np.float32)
+    other[3] = 1.0
+    write_print(
+        tmp_path, "mac", other, 1.0, GLASSES, [other]
+    )  # a 512-value WeSpeaker print
+    mine = np.zeros(192, np.float32)
+    mine[7] = 1.0
+    write_print(tmp_path, "sam", mine, 1.0, STATION)
+    with caplog.at_level("WARNING"):
+        prints = VoicePrints(tmp_path, SizedExtractor(), 0.5, 5, 1)
+        prints.load("mac")  # a reload warns no more
+    assert set(prints.enrolled) == {"sam"}
+    warnings = [r for r in caplog.records if "another voice model" in r.getMessage()]
+    assert len(warnings) == 1 and "re-enroll" in warnings[0].getMessage()
+    assert (tmp_path / "mac" / "voice.json").exists()  # the file stays
+    person, score = prints.match(np.full(16000, 7.0, np.float32))
+    assert person == "sam" and score == pytest.approx(1.0)
+
+
+def test_without_a_known_size_the_first_voice_heard_sets_it(tmp_path, caplog):
+    other = np.zeros(512, np.float32)
+    other[3] = 1.0
+    write_print(tmp_path, "mac", other, 1.0, GLASSES)
+    mine = np.zeros(192, np.float32)
+    mine[7] = 1.0
+    write_print(tmp_path, "sam", mine, 1.0, STATION)
+
+    def extract(samples):  # no .dim
+        return SizedExtractor()(samples)
+
+    prints = VoicePrints(tmp_path, extract, 0.5, 5, 1)
+    assert set(prints.enrolled) == {"mac", "sam"}
+    with caplog.at_level("WARNING"):
+        person, _ = prints.match(np.full(16000, 7.0, np.float32))  # no ValueError
+    assert person == "sam" and set(prints.enrolled) == {"sam"}
+    assert any("another voice model" in r.getMessage() for r in caplog.records)
+
+
+def test_a_print_of_the_same_size_from_another_model_is_ignored_by_its_tag(tmp_path):
+    v = np.zeros(192, np.float32)
+    v[7] = 1.0
+    write_print(tmp_path, "mac", v, 1.0, GLASSES, model="wespeaker")
+    write_print(tmp_path, "old", v, 1.0, GLASSES)  # no tag: an older file, kept
+    extractor = SizedExtractor()
+    extractor.model_id = "3dspeaker"
+    prints = VoicePrints(tmp_path, extractor, 0.5, 5, 1)
+    assert set(prints.enrolled) == {"old"}
+    prints.enroll("new", np.full(5 * 16000, 9.0, np.float32), True, 2.0)
+    record = json.loads((tmp_path / "new" / "voice.json").read_text())
+    assert record["model"] == "3dspeaker"

@@ -47,13 +47,43 @@ def test_name_lifecycle_expiry_and_wrong_speaker(config):
     assert names.eligible(caption())
 
 
+def test_contextual_name_needs_repeated_address_and_confirmation(config):
+    names = Names(config["llm"])
+    target = {"kind": "face", "track_id": 7, "person_id": "auto-abc"}
+    first = caption("Hi Sam", kind="you") | {"utt_id": "first"}
+    second = caption("Thanks Sam", kind="you") | {"utt_id": "second"}
+    assert names.contextual(first, 1, target) is None
+    assert (
+        names.contextual(first, 2, target) is None
+    )  # one utterance cannot count twice
+    proposal = names.contextual(second, 3, target)
+    assert proposal["name"] == "Sam" and proposal["track_id"] == 7
+    assert names.answer(proposal["proposal_id"], True, 4)["state"] == "confirmed"
+
+
+def test_contextual_name_ignores_a_saved_manual_contact(config):
+    names = Names(config["llm"])
+    target = {"kind": "face", "track_id": 7, "person_id": "maya-123"}
+    assert names.contextual(caption("Hi Sam", kind="you"), 1, target) is None
+
+
+def test_another_speakers_greeting_does_not_name_them(config):
+    names = Names(config["llm"])
+    target = {"kind": "face", "track_id": 7, "person_id": "auto-abc"}
+    assert names.evidence(caption("Hi Sam", track=7), target) is None
+    assert names.contextual(caption("Hi Sam", track=7), 1, target) is None
+
+
 def test_description_allowlist_duplicates_and_png():
     d = Descriptions()
     assert d.result(1, {"color": "young", "garment": "shirt"}) is None
     answer = {"color": "blue", "garment": "jacket", "accessory": None}
     assert d.result(1, answer)["label"] == "Person in blue jacket"
     assert d.result(2, answer)["label"] == "Person in blue jacket, 2"
-    assert d.result(3, answer | {"accessory": "hat"})["label"] == "Person in blue jacket, hat"
+    assert (
+        d.result(3, answer | {"accessory": "hat"})["label"]
+        == "Person in blue jacket, hat"
+    )
     import base64
 
     assert base64.b64decode(png(np.zeros((2, 3, 3), np.uint8))).startswith(b"\x89PNG")
@@ -68,7 +98,9 @@ def test_translation_and_reply_validation():
     }
     assert translation_result(c, {"text_en": 3}) is None
     assert reply_result({"options": ["yes", "yes", "no"]}) is None
-    assert reply_result({"options": ["Yes", "No", "Please repeat"]})["options"][0] == "Yes"
+    assert (
+        reply_result({"options": ["Yes", "No", "Please repeat"]})["options"][0] == "Yes"
+    )
 
 
 def test_ollama_priority_payload_and_cancel(config):
@@ -127,7 +159,9 @@ def test_service_forget_drops_language_results(config, bus):
     client = Client()
     s = LLMService(bus, config, client=client)
     s.clock = lambda: 0
-    s._handle("vision.appearance", {"track_id": 1, "crop": np.zeros((1, 1, 3), np.uint8)}, 0)
+    s._handle(
+        "vision.appearance", {"track_id": 1, "crop": np.zeros((1, 1, 3), np.uint8)}, 0
+    )
     future = client.future
     s._handle("session.forget", {}, 1)
     future.set_result({"color": "blue", "garment": "shirt", "accessory": None})
@@ -147,7 +181,11 @@ def test_real_ollama_load_response_warms_client(config):
 
     def transport(payload):
         calls.append(payload)
-        return {"message": {"role": "assistant", "content": ""}, "done_reason": "load", "done": True}
+        return {
+            "message": {"role": "assistant", "content": ""},
+            "done_reason": "load",
+            "done": True,
+        }
 
     client = OllamaClient(config["llm"], transport)
     client.start()
@@ -226,18 +264,23 @@ def test_canceling_running_reply_keeps_model_healthy(config):
         client.stop()
 
 
-@pytest.mark.parametrize("text", ["I'm tired", "I'm Sam's sister", "I'm Sam’s sister", "This is Sam"])
+@pytest.mark.parametrize(
+    "text", ["I'm tired", "I'm Sam's sister", "I'm Sam’s sister", "This is Sam"]
+)
 def test_name_must_be_grounded_in_a_self_introduction(config, text):
     answer = {"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99}
     assert Names(config["llm"]).propose(caption(text), answer, 0) is None
 
 
-@pytest.mark.parametrize("text,name", [
-    ("Hello, I'm Sam.", "Sam"),
-    ("My name is Maya Chen", "Maya Chen"),
-    ("Me llamo Ana María.", "Ana María"),
-    ("Call me Jean-Luc.", "Jean-Luc"),
-])
+@pytest.mark.parametrize(
+    "text,name",
+    [
+        ("Hello, I'm Sam.", "Sam"),
+        ("My name is Maya Chen", "Maya Chen"),
+        ("Me llamo Ana María.", "Ana María"),
+        ("Call me Jean-Luc.", "Jean-Luc"),
+    ],
+)
 def test_explicit_introductions_accept_grounded_names(config, text, name):
     answer = {"is_intro": True, "name": name, "whose": "speaker", "confidence": 0.99}
     assert Names(config["llm"]).propose(caption(text), answer, 0)["name"] == name
@@ -266,14 +309,22 @@ def test_forget_received_after_queued_name_answer_cannot_confirm(config, bus):
     proposal = service.names.propose(caption(), answer, 0)
     service.worker.subscribe("command")
     service.worker.subscribe("session.forget")
-    bus.publish("command", {"name": "name.answer", "args": {"proposal_id": proposal["proposal_id"], "accept": True}})
+    bus.publish(
+        "command",
+        {
+            "name": "name.answer",
+            "args": {"proposal_id": proposal["proposal_id"], "accept": True},
+        },
+    )
     bus.publish("session.forget", {})
     service.worker.start()
     try:
         wait_for(lambda: not service.names.pending)
     finally:
         service.worker.stop()
-    assert not [topic for topic, _ in bus.events if topic in {"name.proposal", "hw.pattern"}]
+    assert not [
+        topic for topic, _ in bus.events if topic in {"name.proposal", "hw.pattern"}
+    ]
     assert not service.names.confirmed
 
 
@@ -301,7 +352,9 @@ def test_only_latest_reply_remains_pending(config, bus):
     assert len(service.jobs) == 1
     latest.set_result({"options": ["Fine", "Good", "Not bad"]})
     service._tick()
-    assert bus.events == [("reply.suggestions", {"options": ["Fine", "Good", "Not bad"]})]
+    assert bus.events == [
+        ("reply.suggestions", {"options": ["Fine", "Good", "Not bad"]})
+    ]
 
 
 def test_old_introduction_cannot_name_a_reappearing_track(config, bus):
@@ -311,10 +364,16 @@ def test_old_introduction_cannot_name_a_reappearing_track(config, bus):
     service._handle("caption", caption(), 0)
     old_name = next(future for kind, future in client.futures if kind == "names")
     service._handle("vision.track_lost", {"track_id": 1}, 0)
-    service._handle("vision.appearance", {"track_id": 1, "crop": np.zeros((1, 1, 3), np.uint8)}, 0)
-    old_name.set_result({"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99})
+    service._handle(
+        "vision.appearance", {"track_id": 1, "crop": np.zeros((1, 1, 3), np.uint8)}, 0
+    )
+    old_name.set_result(
+        {"is_intro": True, "name": "Sam", "whose": "speaker", "confidence": 0.99}
+    )
     service._tick()
-    assert not [topic for topic, _ in bus.events if topic in {"name.proposal", "hw.pattern"}]
+    assert not [
+        topic for topic, _ in bus.events if topic in {"name.proposal", "hw.pattern"}
+    ]
 
 
 def test_llm_health_reports_offline_and_recovery(config, bus):
@@ -325,7 +384,11 @@ def test_llm_health_reports_offline_and_recovery(config, bus):
     assert service._health()["detail"] == "local model offline"
     client.warm, client.error = True, ""
     service._error = "old job failed"
-    assert service._health() == {"ok": True, "detail": "ready", "metrics": {"warm": True, "pending": 0}}
+    assert service._health() == {
+        "ok": True,
+        "detail": "ready",
+        "metrics": {"warm": True, "pending": 0},
+    }
 
 
 def test_warm_up_gets_the_model_load_timeout(monkeypatch):

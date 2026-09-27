@@ -185,6 +185,7 @@ word_settle_s = 1.5             # a split mid-talk keeps the last word for the n
 model_path = "models/faster-whisper-large-v3-turbo"
 device = "cpu"
 compute_type = "int8"
+draft_interval_ms = 560       # Whisper re-decodes the growing utterance; 32 ms would fall behind live audio
 
 [voice]
 model_path = "models/cam++.onnx"

@@ -222,3 +222,15 @@ def test_a_translation_is_queued_at_once_even_while_replies_wait(config, bus):
     service.clock = lambda: 0.0
     service._handle("caption", final("¿Dónde está la estación?", "u1", "es"), 0)
     assert [k for k, _, _ in client.jobs] == ["translation"]
+
+
+def test_a_skipped_slow_job_is_not_reported_as_a_failure(config, bus, caplog):
+    client = Pending()
+    service = LLMService(bus, config, client=client)
+    service.clock = lambda: 0.0
+    service._handle("caption", final("¿Dónde está la estación?", "u1", "es"), 0)
+    client.jobs[0][2].set_exception(TimeoutError("timed out"))
+    with caplog.at_level("ERROR"):
+        service._tick()
+    assert service._error == "" and not caplog.records
+    assert all(kind != "translation" for _, kind, _, _ in service.jobs)

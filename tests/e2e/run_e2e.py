@@ -1338,6 +1338,7 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
                         "t_min": round((now - t0) / 60, 2),
                         **ps,
                         "gpu_mb": h.gpu_used_mb(),
+                        "gpu_proc_mb": h.gpu_process_mb(pid),
                         "fps": st.get("fps"),
                         "caption_delay": st.get("caption_delay"),
                         "rates": rates,
@@ -1375,14 +1376,35 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
             )
         )
         if len(samples) >= 4:
-            first = samples[1]  # after warm-up
-            last = samples[-1]
-            growth = last.get("private_mb", 0) - first.get("private_mb", 0)
+            # models load lazily in the first minutes (a one-off step); a leak keeps growing
+            warm_min = min(3.0, minutes / 3)
+            warm = next((i for i, s in enumerate(samples) if s["t_min"] >= warm_min), 1)
+            first, base, last = samples[0], samples[warm], samples[-1]
+
+            def grew(key: str) -> tuple[float, str]:
+                a, b, z = first.get(key), base.get(key), last.get(key)
+                if b is None or z is None:
+                    return 0.0, f"{key} not measured"
+                return z - b, (
+                    f"{a} at {first['t_min']} min, {b} at {base['t_min']} min, "
+                    f"{z} at {last['t_min']} min ({z - b:+.0f} after warm-up)"
+                )
+
+            growth, detail = grew("private_mb")
             out.append(
                 check(
-                    "soak: engine memory growth under 200 MB",
+                    "soak: engine memory steady after warm-up (under 200 MB growth)",
                     growth < 200,
-                    f"{first.get('private_mb')} -> {last.get('private_mb')} MB private ({growth:+.0f})",
+                    f"private MB: {detail}",
+                )
+            )
+            t_growth, t_detail = grew("threads")
+            h_growth, h_detail = grew("handles")
+            out.append(
+                check(
+                    "soak: engine threads and handles steady after warm-up",
+                    t_growth < 20 and h_growth < 300,
+                    f"threads: {t_detail}; handles: {h_detail}",
                 )
             )
             fps = [s["fps"] for s in samples if s.get("fps")]
@@ -1401,12 +1423,16 @@ def scen_soak(run: Run, minutes: float) -> list[Check]:
                     cap_rates,
                 )
             )
-            gpu = [s["gpu_mb"] for s in samples if s.get("gpu_mb")]
+            # the engine's own GPU memory when Windows can tell; otherwise the whole GPU,
+            # which also moves with every other engine on the laptop
+            own = all(s.get("gpu_proc_mb") is not None for s in samples)
+            key = "gpu_proc_mb" if own else "gpu_mb"
+            g_growth, g_detail = grew(key)
             out.append(
                 check(
-                    "soak: GPU memory steady (< 300 MB growth)",
-                    gpu and gpu[-1] - gpu[1] < 300,
-                    f"{gpu[1] if len(gpu) > 1 else None} -> {gpu[-1] if gpu else None} MB",
+                    "soak: engine GPU memory steady after warm-up (under 300 MB growth)",
+                    g_growth < 300,
+                    f"{'this engine' if own else 'whole GPU (shared)'}: {g_detail}",
                 )
             )
         out += page.get("checks") or [
