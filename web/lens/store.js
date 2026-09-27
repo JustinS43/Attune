@@ -224,6 +224,7 @@ const ALERT_META = {
   smoke: { label: 'Smoke alarm', icon: 'flame', level: 'urgent' },
   co: { label: 'CO alarm', icon: 'co', level: 'urgent' },
   doorbell: { label: 'Doorbell', icon: 'bell', level: 'attention' },
+  knock: { label: 'Door knock', icon: 'door', level: 'attention' },
   bike: { label: 'Bike bell', icon: 'bike', level: 'info' },
   name: { label: 'Someone called you', icon: 'voice', level: 'attention' },
   vehicle: { label: 'Vehicle', icon: 'truck', level: 'attention' },

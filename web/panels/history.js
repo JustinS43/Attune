@@ -11,7 +11,7 @@
 import { h, section, clockText, speakerColor, engineHttpBase } from './ui.js';
 
 const KIND_BADGE = { reply: 'Reply', alert: 'Alert', name_confirmed: 'Name', translation: 'Translation' };
-const ALERT_ICON = { smoke: '🔥', co: '☁', doorbell: '🔔' };
+const ALERT_ICON = { smoke: '🔥', co: '☁', doorbell: '🔔', knock: '🚪' };
 
 /** GET /api/history/<path>; resolves null on 404 / network errors so callers show the empty state. */
 export async function historyGet(path) {
@@ -134,7 +134,7 @@ export function createHistory(ctx) {
   function renderMissed(rows) {
     missedList.replaceChildren();
     if (!rows?.length) {
-      missedList.append(h('li', { class: 'atp-empty', text: 'No alarms or doorbells in this session.' }));
+      missedList.append(h('li', { class: 'atp-empty', text: 'No alarms, doorbells or knocks in this session.' }));
       return;
     }
     for (const r of rows) {
