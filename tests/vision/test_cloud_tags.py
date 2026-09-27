@@ -162,10 +162,7 @@ def test_a_quick_reply_gets_its_own_bubble_on_the_right_face():
     turns = two_turns()
     local = Conv(turns, cloud=False)
     local.utterance("u1", 0.0, 4.3)
-    local.run(6.0)
-    # today: Light-ASD's window is late, so the reply's first words stay in A's bubble
-    lost = [w for w, s in local.owner_of_words().items() if not local.right(w, s)]
-    assert lost and all(local.truth[w] == 2 for w in lost)
+    local.run(6.0)  # local only, Light-ASD's late window can leave the reply in A's bubble
 
     conv = Conv(turns)
     conv.utterance("u1", 0.0, 4.3)
@@ -178,6 +175,7 @@ def test_a_quick_reply_gets_its_own_bubble_on_the_right_face():
     finals = conv.finals()
     assert [c.speaker.track_id for c in finals] == [1, 2]  # two bubbles, one per face
     assert finals[0].utt_id == "u1"
+    assert conv.score() >= local.score()
 
 
 def test_turns_back_and_forth_keep_their_faces():
@@ -195,19 +193,35 @@ def test_turns_back_and_forth_keep_their_faces():
 
 def test_a_reply_in_the_middle_of_a_shown_caption_is_cut_out_when_the_final_comes():
     # A, a quick "yeah" from B, A again: one utterance for the local recogniser. The drafts
-    # (no tags yet) show B's words in A's bubble; the final's tags cut them out into their own.
+    # carry no tags; the final's tags give B's words their own bubble.
     turns = [Turn(1, 0.0, 2.5), Turn(2, 2.6, 3.4), Turn(1, 3.5, 5.0)]
     conv = Conv(turns)
     conv.cloud_final(1.5, "s1", 1.0, {1: "1"})  # an earlier pause: A is bound already
     conv.utterance("u1", 0.0, 5.0)
     conv.cloud_final(5.6, "s1", 5.0, {1: "1", 2: "2"})
     conv.run(7.0)
-    last_draft = [c for _, c in conv.captions if not c.final][-1]
-    assert last_draft.speaker.track_id == 1 and "2.1.0" in last_draft.text
     finals = conv.finals()
     assert [c.speaker.track_id for c in finals] == [1, 2, 1]
     assert conv.score() == 1.0
     assert finals[0].utt_id == "u1"
+
+
+def test_a_shown_piece_is_cut_where_the_final_s_tags_hear_another_voice():
+    # a draft showed A's, B's and A's words as one piece (locked: already shown)
+    a_spk, b_spk = T.Speaker("face", 1, None, "A"), T.Speaker("face", 2, None, "B")
+    words = [(f"w{i}", i * 0.3, i * 0.3 + 0.25) for i in range(10)]
+    tags = _tags(*[(w, t0, t1, "2" if i in (4, 5) else "1") for i, (w, t0, t1) in enumerate(words)])
+    evidence = [b_spk if i in (4, 5) else a_spk for i in range(10)]  # the cloud's evidence
+    shown = _Group(a_spk, list(words), ["u1"], True, evidence)
+    pieces = tags.protect([shown])
+    assert [[w[0] for w in g.words] for g in pieces] == [
+        [f"w{i}" for i in range(4)],
+        ["w4", "w5"],
+        [f"w{i}" for i in range(6, 10)],
+    ]
+    assert [g.speaker.track_id for g in pieces] == [1, 2, 1]
+    assert pieces[0].prev == ["u1"] and pieces[1].prev == pieces[2].prev == []  # id stays first
+    assert pieces[1].locked  # B's two words are a turn: smoothing leaves them
 
 
 def _tags(*words):
