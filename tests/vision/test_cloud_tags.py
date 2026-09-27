@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import pytest
 from attune.fusion.cloud_tags import CloudTags, CloudTagSettings
 from attune.fusion.service import FusionService
-from attune.fusion.speaker import SpeakerFusion
+from attune.fusion.speaker import SpeakerFusion, _Group
 from attune.vision import types as T
 from attune.vision.settings import FusionSettings
 from attune.vision.types import Track, Tracks
@@ -208,6 +208,42 @@ def test_a_reply_in_the_middle_of_a_shown_caption_is_cut_out_when_the_final_come
     assert [c.speaker.track_id for c in finals] == [1, 2, 1]
     assert conv.score() == 1.0
     assert finals[0].utt_id == "u1"
+
+
+def _tags(*words):
+    """CloudTags holding these cloud words (word, t0, t1, tag) of one stream."""
+    tags = CloudTags()
+    tags.on_state({"enabled": True, "state": "on"})
+    tags.on_words({"stream_id": "s1", "words": list(words), "final": True, "t_end": 9.0}, 9.0)
+    return tags
+
+
+def test_overlapping_words_match_the_cloud_word_with_the_same_text():
+    tags = _tags(("near", 1.0, 1.45, "1"), ("could", 1.1, 1.5, "2"))
+    a, b = tags.speaker_of[("s1", "1")], tags.speaker_of[("s1", "2")]
+    assert tags.cloud_speaker_at(1.2, "near") == a  # both cover 1.2 s: the text decides
+    assert tags.cloud_speaker_at(1.2, "Could,") == b
+    assert tags.cloud_speaker_at(1.2) == b  # no text: the newest start on a tie
+
+
+def test_inside_someone_s_sentence_a_turn_needs_two_words():
+    a_spk, b_spk = T.Speaker("face", 1, None, "A"), T.Speaker("face", 2, None, "B")
+    words = [(f"w{i}", i * 0.5, i * 0.5 + 0.45) for i in range(8)]
+
+    def groups(other):
+        pieces = [(a_spk, words[:3]), (b_spk, words[3 : 3 + other]), (a_spk, words[3 + other :])]
+        return [_Group(spk, list(ws), [], False, [spk] * len(ws)) for spk, ws in pieces]
+
+    one = _tags(*[(w, t0, t1, "2" if i == 3 else "1") for i, (w, t0, t1) in enumerate(words)])
+    assert not one.protect(groups(1))[1].locked  # one 0.45 s word tagged B: not a turn
+    two = _tags(*[(w, t0, t1, "2" if i in (3, 4) else "1") for i, (w, t0, t1) in enumerate(words)])
+    assert two.protect(groups(2))[1].locked  # two words: a real interjection keeps its bubble
+    end = _tags(*[(w, t0, t1, "2" if i == 7 else "1") for i, (w, t0, t1) in enumerate(words)])
+    last = [
+        _Group(a_spk, words[:7], [], False, [a_spk] * 7),
+        _Group(b_spk, words[7:], [], False, [b_spk]),
+    ]
+    assert end.protect(last)[1].locked  # a one-word reply at the end is a turn
 
 
 def test_one_wrongly_tagged_word_does_not_split_a_bubble():

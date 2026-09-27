@@ -28,10 +28,12 @@ afresh, and Google revises tags as it hears more. So:
   else the off-screen voice the voice prints name; else their own dock bubble, "Someone"
   (person id `session-cloud-N`: session-only, wiped by forget session like any stranger).
 - **Turns.** `protect` locks a caption piece of one cloud speaker between pieces of others once
-  it lasts `turn_min_s`: the smoothing that folds short pieces into a neighbour leaves it, and
-  `placed` tells `_snap` not to move a change the cloud put there. The drafts carry no tags
-  (Google tags final results), so a piece already shown is cut where the final's tags hear
-  another voice for `turn_min_s`: a reply in the middle of it gets its own bubble.
+  it lasts `turn_min_s` (inside one other voice's speech, also two words: a single wrongly
+  tagged word in someone's sentence is not a turn). The smoothing that folds short pieces into
+  a neighbour leaves it, and `placed` tells `_snap` not to move a change the cloud put there.
+  The drafts carry no tags (Google tags final results), so a piece already shown is cut where
+  the final's tags hear another voice that long: a reply in the middle of it gets its own
+  bubble.
 - **Finals.** While the state is "on", `wait` holds a final caption up to `final_wait_ms` until
   the cloud has heard past its last word (the draft stays on screen). In any other state it
   never waits. A final caption is never changed after it is sent: later tags only improve the
@@ -105,6 +107,10 @@ def _span(t0: float, t1: float) -> float:
 
 def _mid(w) -> float:
     return (float(w[1]) + float(w[2])) / 2
+
+
+def _norm(text: str) -> str:
+    return "".join(c for c in text.lower() if c.isalnum() or c == "'")
 
 
 def _most(words: list, evidence: list[Speaker]) -> Speaker:
@@ -222,7 +228,7 @@ class CloudTags:
         return self._n
 
     def _map_tags(self, stream: str) -> None:
-        """Give each tag of `stream` a cloud speaker: an older one it overlaps (a restart), or new."""
+        """Give each tag of `stream` a cloud speaker: an older one it overlaps (restart), or new."""
         tags: dict[str, list[_Word]] = {}
         for w in self.words[stream].values():
             tags.setdefault(w.tag, []).append(w)
@@ -376,8 +382,10 @@ class CloudTags:
                 spk.label = labels.get(spk.track, spk.label)
 
     # ------------------------------------------------------------------ caption words
-    def _word_at(self, t: float) -> _Word | None:
-        """The cloud word nearest `t` (within word_match_s); the newest stream's on a tie."""
+    def _word_at(self, t: float, text: str | None = None) -> _Word | None:
+        """The cloud word at `t` (within word_match_s): the same word if one is there, else the
+        nearest; the newest stream's on a tie. In overlapping speech two voices' words cover
+        the same moment, and the text tells them apart."""
         if self._index is None:
             rank = {s: i for i, s in enumerate(self.order)}
             self._index = sorted(
@@ -387,23 +395,29 @@ class CloudTags:
             self._starts = [w.t0 for w in self._index]
         tol = self.s.word_match_s
         lo, hi = bisect_left(self._starts, t - 5.0), bisect_right(self._starts, t + tol)
-        best, best_gap = None, None
+        want = _norm(text) if text else None
+        best, best_key = None, None
         for w in self._index[lo:hi]:
             gap = 0.0 if w.t0 <= t <= w.t1 else min(abs(t - w.t0), abs(t - w.t1))
-            if gap <= tol and (best_gap is None or gap <= best_gap):
-                best, best_gap = w, gap
+            key = (want is not None and _norm(w.word) != want, gap)
+            if gap <= tol and (best_key is None or key <= best_key):
+                best, best_key = w, key
         return best
 
-    def cloud_speaker_at(self, t: float) -> int | None:
-        """The cloud speaker heard at time t, if the cloud tagged a word there."""
-        w = self._word_at(t)
+    def cloud_speaker_at(self, t: float, text: str | None = None) -> int | None:
+        """The cloud speaker heard at time t (saying `text`), if the cloud tagged a word there."""
+        w = self._word_at(t, text)
         return None if w is None else self.speaker_of.get((w.stream, w.tag))
+
+    def _speaker_of(self, w) -> int | None:
+        """The cloud speaker of a caption word (word, t0, t1)."""
+        return self.cloud_speaker_at(_mid(w), str(w[0]))
 
     def evidence(self, fusion, words: list, local: list[Speaker], now: float) -> list[Speaker]:
         """Each caption word's speaker with the cloud's tags applied (see the module docstring)."""
         if not self.words or not words:
             return local
-        cs = [self.cloud_speaker_at(_mid(w)) for w in words]
+        cs = [self._speaker_of(w) for w in words]
         if all(n is None or n not in self.speakers for n in cs):
             return local
         self.bind(fusion, now)
@@ -502,7 +516,7 @@ class CloudTags:
         total = 0.0
         for w in words:
             d = _span(float(w[1]), float(w[2]))
-            n = self.cloud_speaker_at(_mid(w))
+            n = self._speaker_of(w)
             share[n] = share.get(n, 0.0) + d
             total += d
         if not share:
@@ -521,7 +535,7 @@ class CloudTags:
             return [g]
         runs: list[list] = []  # [cloud speaker, first word, last word]; untagged words join
         for i, w in enumerate(g.words):
-            n = self.cloud_speaker_at(_mid(w))
+            n = self._speaker_of(w)
             if runs and (n is None or runs[-1][0] in (None, n)):
                 runs[-1][0] = runs[-1][0] if n is None else n
                 runs[-1][2] = i
@@ -529,9 +543,12 @@ class CloudTags:
                 runs.append([n, i, i])
         home, _ = self._majority(g.words)
         pieces: list[list] = []  # [key, first word, last word]
-        for n, i0, i1 in runs:
+        for k, (n, i0, i1) in enumerate(runs):
             span = float(g.words[i1][2]) - float(g.words[i0][1])
-            key = n if n not in (None, home) and span >= self.s.turn_min_s else "home"
+            before = runs[k - 1][0] if k else None
+            after = runs[k + 1][0] if k + 1 < len(runs) else None
+            turn = self._is_turn(n, span, i1 - i0 + 1, before, after)
+            key = n if n not in (None, home) and turn else "home"
             if pieces and pieces[-1][0] == key:
                 pieces[-1][2] = i1
             else:
@@ -563,11 +580,21 @@ class CloudTags:
             n, share = who[i]
             if n is None or share < self.s.bind_share or g.speaker.kind == "someone":
                 continue
-            if float(g.words[-1][2]) - float(g.words[0][1]) < self.s.turn_min_s:
-                continue
-            if all(who[k][0] != n for k in (i - 1, i + 1) if 0 <= k < len(groups)):
+            before = who[i - 1][0] if i else None
+            after = who[i + 1][0] if i + 1 < len(groups) else None
+            span = float(g.words[-1][2]) - float(g.words[0][1])
+            if n not in (before, after) and self._is_turn(n, span, len(g.words), before, after):
                 g.locked = True
         return groups
+
+    def _is_turn(self, n, span: float, words: int, before, after) -> bool:
+        """Is a run of voice `n` (`span` s, `words` words) between these neighbours a turn?
+
+        It lasts turn_min_s; inside one other voice's speech (the same voice on both sides)
+        it also has two words: a single wrongly tagged word in someone's sentence is not a turn.
+        """
+        inside = before is not None and before == after and before != n
+        return span >= self.s.turn_min_s and (words >= 2 or not inside)
 
     def placed(self, a: list, b: list) -> bool:
         """Did the cloud put the change between these two runs of words (different voices)?"""
