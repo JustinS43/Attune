@@ -40,7 +40,7 @@ function pass(keys) {
   const s = out.toString();
   return s ? `?${s}` : '';
 }
-lens.src = `../lens/${pass(['source', 'mode', 'engine', 'assets'])}`;
+lens.src = `../lens/${pass(['source', 'mode', 'labels', 'engine', 'assets'])}`;
 phone.src = `../phone/${pass(['engine', 'palette', 'demo'])}`;
 
 // ------------------------------------------------------------------ views
