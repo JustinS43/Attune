@@ -14,6 +14,7 @@
 
 import { W, H, setRegion, setGlassStyle, regionOutline } from '../hud.js';
 import { createBubbleLayer } from '../bubbles.js';
+import { createBubbleLayer as createCenteredBubbleLayer } from '../bubbles-centered.js';
 import { drawAlerts, drawStatus, drawToasts, drawPaused, createStack } from '../alerts.js';
 
 export const ORION_REGION = { x: (W - 1330) / 2, y: (H - 960) / 2, w: 1330, h: 960 };
@@ -40,7 +41,28 @@ function getEdgeMask() {
 }
 
 export function createColorMode() {
-  const bubbles = createBubbleLayer();
+  let classic = createBubbleLayer();
+  let centered = createCenteredBubbleLayer();
+  let active = classic;
+  let style = 'classic';
+  const bubbles = {
+    render(ctx, view, env) {
+      const next = view.config.caption_style === 'centered' ? 'centered' : 'classic';
+      if (next !== style) {
+        if (next === 'centered') centered = createCenteredBubbleLayer();
+        else classic = createBubbleLayer();
+        style = next;
+      }
+      active = style === 'centered' ? centered : classic;
+      if (active === centered) setGlassStyle('additive');
+      const placed = active.render(ctx, view, env);
+      if (active === centered) setGlassStyle('bright');
+      return placed;
+    },
+    debug: () => active.debug(),
+    debugDocks: () => active.debugDocks(),
+    get cards() { return active.cards; },
+  };
   const stack = createStack(); // toasts, alerts and proposals glide when one arrives or leaves
   let obstacles = [];
   return {

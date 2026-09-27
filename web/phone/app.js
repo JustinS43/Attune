@@ -23,6 +23,16 @@ const toast = document.querySelector('#toast');
 const alertBanner = document.querySelector('#alert-banner');
 const hint = document.querySelector('.desktop-hint');
 const params = new URLSearchParams(location.search);
+const CAPTION_STYLE_KEY = 'attune.caption_style';
+function savedCaptionStyle() {
+  try {
+    const style = localStorage.getItem(CAPTION_STYLE_KEY);
+    return style === 'centered' || style === 'classic' ? style : null;
+  } catch { return null; }
+}
+function rememberCaptionStyle(style) {
+  try { localStorage.setItem(CAPTION_STYLE_KEY, style); } catch { /* storage may be disabled */ }
+}
 
 const DEFAULT_PRESETS = ['Nice to meet you', 'Can you repeat that?', 'One moment', 'Thank you', 'I read captions, go ahead'];
 const ALERT_TEXT = { smoke: 'Smoke alarm', co: 'Carbon monoxide alarm', doorbell: 'Doorbell', knock: 'Door knock' };
@@ -39,6 +49,7 @@ if (palette === 'apricot') {
 const state = {
   screen: 'home', theme: 'light', paused: false, powered: true, cameraOn: true,
   features: { captions: true, names: true, alerts: true, translation: true },
+  captionStyle: savedCaptionStyle() || 'classic',
   people: [
     { id: 'maya', name: 'Maya Chen', seen: 12, color: '', tier: 'close', source: 'manual' },
     { id: 'leo', name: 'Leo Martin', seen: 8, color: 'blue', tier: 'familiar', source: 'auto' }
@@ -785,7 +796,17 @@ function renderSettings() {
     choice.setAttribute('aria-pressed', String(theme === state.theme));
     mode.append(choice);
   }
-  content.append(mode, speechSettings({demo: params.has('demo')}), el('h2', 'setting-label', 'Live features'));
+  content.append(mode, speechSettings({demo: params.has('demo')}));
+  content.append(el('h2', 'setting-label', 'Colour caption layout'));
+  const captionStyles = el('div', 'segmented');
+  for (const [style, label] of [['classic', 'Classic bubbles'], ['centered', 'Centered captions']]) {
+    const choice = button(label, style === state.captionStyle ? 'selected' : '', 'caption-style');
+    choice.dataset.style = style;
+    choice.setAttribute('aria-pressed', String(style === state.captionStyle));
+    captionStyles.append(choice);
+  }
+  content.append(captionStyles, el('p', 'note', 'Classic bubbles follow people. Centered captions stay near the bottom of the Colour glasses view.'));
+  content.append(el('h2', 'setting-label', 'Live features'));
   const features = el('div', 'card setting-group');
   features.append(
     settingToggle('Captions', state.live ? 'On this phone' : '', 'captions', 'wave'),
@@ -1014,11 +1035,23 @@ function onMessage(msg) {
       if (typeof msg.camera_on === 'boolean') state.cameraOn = msg.camera_on;
       if (Array.isArray(msg.config?.presets)) state.presets = msg.config.presets;
       if (typeof msg.config?.name_labels === 'boolean') state.features.names = msg.config.name_labels;
+      if (['classic', 'centered'].includes(msg.config?.caption_style)) {
+        state.captionStyle = msg.config.caption_style;
+        const saved = savedCaptionStyle();
+        if (saved && saved !== state.captionStyle) {
+          state.captionStyle = saved;
+          link.send('switch.set', {key: 'caption_style', value: saved});
+        }
+      }
       station.configure(msg.config?.enroll);
       refresh();
       break;
     case 'lens_settings':
       if (typeof msg.name_labels === 'boolean') state.features.names = msg.name_labels;
+      if (['classic', 'centered'].includes(msg.caption_style)) {
+        state.captionStyle = msg.caption_style;
+        rememberCaptionStyle(msg.caption_style);
+      }
       if (state.screen === 'settings') refresh();
       break;
     case 'paused':
@@ -1199,6 +1232,15 @@ document.addEventListener('click', async event => {
   if (!control) return;
   const action = control.dataset.action ?? control.dataset.nav;
   if (['home','people','contact-new','history','speak','enroll','settings','live'].includes(action)) return navigate(action);
+  if (action === 'caption-style') {
+    const style = control.dataset.style;
+    if (!['classic', 'centered'].includes(style)) return;
+    state.captionStyle = style;
+    rememberCaptionStyle(style);
+    if (state.live) link.send('switch.set', {key: 'caption_style', value: style});
+    refresh();
+    return;
+  }
   if (action === 'people-tier-view') { state.peopleTier = control.dataset.tier; refresh(); return; }
   if (action === 'recognize-contact') {
     const contact = state.contacts.find(item => item.id === control.dataset.personId);

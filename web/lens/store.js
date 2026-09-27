@@ -9,7 +9,17 @@
 
 import { W, H, K, clamp, follow, wrapChars, nowS } from './hud.js';
 
-export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 4, name_labels: true };
+export const DEFAULT_CONFIG = { bubble_chars: 42, bubble_lines: 2, bubble_fade_s: 4, name_labels: true, caption_style: 'classic' };
+const CAPTION_STYLE_KEY = 'attune.caption_style';
+function savedCaptionStyle() {
+  try {
+    const style = localStorage.getItem(CAPTION_STYLE_KEY);
+    return style === 'classic' || style === 'centered' ? style : null;
+  } catch { return null; }
+}
+function rememberCaptionStyle(style) {
+  try { localStorage.setItem(CAPTION_STYLE_KEY, style); } catch { /* storage may be disabled */ }
+}
 
 const PALETTE = ['#FF8FA3', '#FFB86B', '#C4A7FF', '#7CC8FF', '#86E3B0', '#FFD36E', '#5FE0D8', '#B8F07A'];
 export const NEUTRAL = '#E6EAF0';
@@ -44,7 +54,7 @@ export function createStore() {
     paused: false,
     tPaused: -1e9, // wall time of the last pause change
     sessionId: null,
-    config: { ...DEFAULT_CONFIG },
+    config: { ...DEFAULT_CONFIG, caption_style: savedCaptionStyle() || 'classic' },
     scene: { faces: [], offscreen: [], you_speaking: false },
     captions: new Map(),
     proposals: new Map(),
@@ -86,10 +96,15 @@ export function createStore() {
             if (Number.isFinite(msg.config[k]) && msg.config[k] > 0) s.config[k] = msg.config[k];
           }
           if (typeof msg.config.name_labels === 'boolean') s.config.name_labels = msg.config.name_labels;
+          if (['classic', 'centered'].includes(msg.config.caption_style)) s.config.caption_style = msg.config.caption_style;
         }
         break;
       case 'lens_settings':
         if (typeof msg.name_labels === 'boolean') s.config.name_labels = msg.name_labels;
+        if (['classic', 'centered'].includes(msg.caption_style)) {
+          s.config.caption_style = msg.caption_style;
+          rememberCaptionStyle(msg.caption_style);
+        }
         break;
       case 'paused':
         if (s.paused !== !!msg.paused) s.tPaused = wall();

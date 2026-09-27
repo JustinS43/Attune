@@ -69,6 +69,7 @@ def test_hello_welcome_and_people(hub_env):
             "bubble_lines": 2,
             "bubble_fade_s": 4,
             "name_labels": True,
+            "caption_style": "classic",
             "presets": ["Nice to meet you", "One moment"],
         }
         people = recv_type(ws, "people")
@@ -95,6 +96,23 @@ def test_name_label_setting_reaches_lens_and_new_clients(hub_env):
         assert recv_type(lens, "lens_settings")["name_labels"] is False
         with page(hub_env.client, "phone") as (_, welcome):
             assert welcome["config"]["name_labels"] is False
+
+
+def test_caption_style_setting_reaches_lens_and_new_clients(hub_env):
+    with page(hub_env.client, "lens") as (lens, welcome):
+        assert welcome["config"]["caption_style"] == "classic"
+        hub_env.bus.publish(
+            C.COMMAND,
+            {"name": "switch.set", "args": {"key": "caption_style", "value": "centered"}},
+        )
+        assert recv_type(lens, "lens_settings")["caption_style"] == "centered"
+        with page(hub_env.client, "phone") as (_, updated):
+            assert updated["config"]["caption_style"] == "centered"
+        hub_env.bus.publish(
+            C.COMMAND,
+            {"name": "switch.set", "args": {"key": "caption_style", "value": "invalid"}},
+        )
+        assert hub_env.hub.welcome_config["caption_style"] == "centered"
 
 
 def test_seq_increases_per_page(hub_env):

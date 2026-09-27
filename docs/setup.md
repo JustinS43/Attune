@@ -127,9 +127,10 @@ uv run --project engine python -m attune --source data/reels/film/cafe_friends.m
    evidence across two days. Test an identified speaker from behind only after
    their voice print has been captured; the lens caption includes their name and
    an arrow for direction.
-5. In **Glasses settings**, turn **Name labels** off and on. Face labels above
-   heads should follow this setting. Speech stays in the bottom center, with
-   secondary conversations in smaller left and right slots.
+5. In **Glasses settings**, try both **Colour caption layout** choices. **Classic
+   bubbles** follows faces and docks offscreen speakers at the edge; **Centered
+   captions** keeps the focused speaker at the bottom center and smaller secondary
+   captions to either side. Turn **Name labels** off and on to check quiet face tags.
 
 Photos remain in that browser's local storage. Face and voice prints are stored
 under the engine's ignored `data/people/` directory. Real camera, microphone,

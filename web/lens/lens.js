@@ -32,6 +32,11 @@ const ASSETS = params.get('assets') || '/data/reels/film/';
 
 // ---------------------------------------------------------------- model
 const store = createStore();
+window.addEventListener('storage', (event) => {
+  if (event.key === 'attune.caption_style' && ['classic', 'centered'].includes(event.newValue)) {
+    store.state.config.caption_style = event.newValue;
+  }
+});
 let build = createViewBuilder(store);
 const listeners = new Set();
 const srCaptions = document.getElementById('captions-live');
@@ -575,5 +580,4 @@ for (const [key, view, label] of [['C', 'console', 'Console panel'], ['S', 'spea
 syncChrome();
 setSource(sourceKind);
 requestAnimationFrame(frame);
-
 

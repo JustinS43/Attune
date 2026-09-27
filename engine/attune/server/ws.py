@@ -246,9 +246,11 @@ class Hub:
             "bubble_lines": pages.get("bubble_lines", 2),
             "bubble_fade_s": pages.get("bubble_fade_s", 4),
             "name_labels": True,
+            "caption_style": "classic",
             "presets": list((config.get("speech_out") or {}).get("presets", [])),
         }
         self.name_labels = True
+        self.caption_style = "classic"
         enroll = config.get("enroll")
         if isinstance(enroll, dict):
             # V-23: where people are saved; the phone picks its screens from this
@@ -652,6 +654,15 @@ class Hub:
             self.name_labels = args["value"]
             self.welcome_config["name_labels"] = self.name_labels
             self.broadcast("lens_settings", {"name_labels": self.name_labels})
+        if (
+            get(ev, "name") == "switch.set"
+            and isinstance(args, dict)
+            and args.get("key") == "caption_style"
+            and args.get("value") in ("classic", "centered")
+        ):
+            self.caption_style = args["value"]
+            self.welcome_config["caption_style"] = self.caption_style
+            self.broadcast("lens_settings", {"caption_style": self.caption_style})
         pending = self.save_pending
         if (
             get(ev, "name") in ("enroll.start", "enroll.station")
