@@ -604,8 +604,8 @@ export function createViewBuilder(store) {
         } else if (!face && th.face) {
           if (clock - (th.faceSeen ?? clock) <= TRACK_HOLD_S) face = { ...th.face, ghost: true, isSpeaker: false, lip: 0, proposal: null }; // hold its place
           else {
-            // their face has left the view: the bubble docks to the edge they left by, instead of
-            // hanging where they were (over whoever is there now)
+            // Their face has left the view: keep its identity and exit direction for the
+            // bottom caption, instead of leaving text over another person.
             const lk = `o~${key}`;
             const side = th.face.cx < 960 ? 'left' : 'right';
             offMap.set(lk, { key: lk, name: th.face.label, side, color: th.face.color, person_id: th.face.person_id, bubble: b });
@@ -648,11 +648,10 @@ export function createViewBuilder(store) {
       }
       feed.push(b);
     }
-    // an off-screen voice with no known side has no edge to dock to: it is the lower caption
+    // Off-screen speech shares one stable bottom caption. Its arrow carries the direction;
+    // a visible speaker still uses the bubble attached to their face above.
     for (const o of offMap.values()) {
-      if (!o.bubble || o.side === 'left' || o.side === 'right' || o.side === 'behind') continue;
-      if (!lower || o.bubble.tUpdate > lower.tUpdate) lower = o.bubble;
-      o.bubble = null;
+      if (o.bubble && (!lower || o.bubble.tUpdate > lower.tUpdate)) lower = o.bubble;
     }
     feed.sort((a, b) => b.tUpdate - a.tUpdate || a.final - b.final || b.tFirst - a.tFirst);
 

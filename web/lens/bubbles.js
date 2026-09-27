@@ -25,20 +25,18 @@
  *   a third line rolls the text up by one line. Drafts are dimmer and firm up in place.
  * - The current speaker is fully opaque, earlier speakers dim, and each bubble stays at least
  *   long enough to be read (store.js); at most three at a time.
- * - Off-screen speakers dock to their side's edge in the order they arrived, at a height chosen
- *   with the bubbles' rules (never over a face, a card, the pill or an alert; a place that stops
- *   fitting is held for SLOT_HOLD_S before the dock glides to the nearest free one); the
- *   wearer's own words sit in the "You" bar; translations show the original line plus a
+ * - Off-screen speech stays in one bottom caption with a direction arrow. Visible speakers keep
+ *   their face-anchored cards. The wearer's own words sit in the "You" bar; translations show the original line plus a
  *   language tag, and a line still waiting for its translation shows only there, small and
  *   dimmed with "translating…", never mixed into the main text.
  * - Calm when many people talk: nothing blinks, pulses or loops. The speaking meter is a still
  *   glyph that only rises or settles (about 0.2 s) when a speaker starts or stops, held through
- *   short pauses; docked speakers get one static chevron toward their side and a steady edge light.
+ *   short pauses; the bottom caption's direction arrow stays still.
  */
 
 import {
   FD, FT, font, clamp, lerp, easeOut, hexA, rrect, textW, glass, icon,
-  eqBars, dot, keycap, chevrons, arrow, focusMarks, edgeGlow, REGION,
+  eqBars, dot, keycap, arrow, focusMarks, REGION,
   springStep, createLineWrap, scrollTo, REDUCED_MOTION,
   INK, INK_2, INK_3, PAPER, MIST, MIST_INK, TEAL, LEAF, deepen, mixRgba,
 } from './hud.js';
@@ -94,8 +92,6 @@ const dead = (d, dz) => (d > dz ? d - dz : d < -dz ? d + dz : 0);
 export function createBubbleLayer() {
   const cards = new Map(); // face key -> card (tag or bubble)
   let ghosts = []; // what a card showed before it re-formed elsewhere, fading out in place
-  const docks = new Map(); // off-screen key -> docked card
-  const dockSlots = { left: [], right: [] }; // slot index -> key, in arrival order
   let lowerCard = null;
   const youCard = { a: 0, wrap: createLineWrap(), scroll: {}, b: null };
   let avgChar = 0;
@@ -787,225 +783,8 @@ export function createBubbleLayer() {
     return placed;
   }
 
-  // ------------------------------------------------------------ off-screen docking
-  /**
-   * How well a dock at rect r fits (the same rules as a bubble's slot, fit()): inside the
-   * display, off every face, the status pill and alerts, clear of on-screen cards and the
-   * other docks. Returns { cost, hard }; cost < 1 fits.
-   */
-  function dockFit(r, faces, cardsRects, obstacles, docked) {
-    const over = (a, b) => {
-      const v = overlap(a, b);
-      return v > TOLERANCE ? v : 0;
-    };
-    let cost = (Math.max(0, minY() - r.y) + Math.max(0, r.y + r.h - bottomY())) * 400;
-    let hard = false;
-    for (const f of faces) if (!f.tiny) cost += over(r, keepOut(f)) * 2;
-    for (const c of cardsRects) cost += over(r, c) * 0.5;
-    for (const o of docked) cost += over(r, o) * 3;
-    cost += over(r, pillRect()) * 3;
-    for (const o of obstacles) {
-      const v = over(r, o);
-      if (v > 0) {
-        cost += v * 3;
-        hard = true;
-      }
-    }
-    return { cost, hard };
-  }
-
-  /** The best free height along the dock's edge: fits first, then nearest to `pref`. */
-  function dockSpot(x, w, h, pref, faces, cardsRects, obstacles, docked) {
-    let best = null;
-    const lo = minY();
-    const hi = Math.max(lo, bottomY() - h);
-    const ys = [pref];
-    for (let y = lo; y <= hi + 0.5; y += 8) ys.push(y);
-    ys.push(hi);
-    for (const y0 of ys) {
-      const y = clamp(y0, lo, hi);
-      const q = dockFit({ x, y, w, h }, faces, cardsRects, obstacles, docked);
-      const ok = q.cost < 1;
-      const score = (ok ? 0 : 1e9 + q.cost) + Math.abs(y - pref);
-      if (!best || score < best.score) best = { y, score, ok };
-    }
-    return best;
-  }
-
-  function drawOffscreen(ctx, blur, view, env, dim, placed = []) {
-    const { anim, dt } = env;
-    const cfg = view.config;
-    const rows = rowsOf(cfg);
-    const DW = Math.round(reserveW(ctx, cfg) * 0.8) + PADX * 2;
-    const DH = bubbleH(rows, false);
-    // what a dock must not cover: faces, on-screen bubbles and tags, the pill, alerts
-    const obstacles = env.obstacles || [];
-    const cardsRects = [...placed];
-    for (const c of cards.values()) if (c.kind === 'tag' && c.target && c.a > 0.05) cardsRects.push(c.target);
-    const docked = [];
-    const present = new Set();
-    for (const o of view.offscreen) {
-      if (o.side !== 'left' && o.side !== 'right') continue;
-      present.add(o.key);
-      let d = docks.get(o.key);
-      if (!d) {
-        const slots = dockSlots[o.side];
-        let idx = slots.indexOf(undefined);
-        if (idx < 0) idx = slots.length;
-        slots[idx] = o.key;
-        d = { key: o.key, side: o.side, idx, a: 0, h: TAG_H, vh: 0, y: null, ty: 0, vy: 0, badSince: null, wrap: createLineWrap(), scroll: {}, threadId: null, cand: null, candSince: 0 };
-        docks.set(o.key, d);
-      }
-      // a reported side must hold for a moment before the dock changes edge
-      if (o.side !== d.side) {
-        if (d.cand !== o.side) {
-          d.cand = o.side;
-          d.candSince = anim;
-        } else if (anim - d.candSince > SLOT_HOLD_S) {
-          dockSlots[d.side][d.idx] = undefined;
-          const slots = dockSlots[o.side];
-          let idx = slots.indexOf(undefined);
-          if (idx < 0) idx = slots.length;
-          slots[idx] = o.key;
-          d.side = o.side;
-          d.idx = idx;
-          d.a = 0;
-          d.cand = null;
-          d.y = null; // a new edge: choose a new place along it
-        }
-      } else d.cand = null;
-      d.o = o;
-      d.seen = anim;
-    }
-    // docks in slot order along each edge, so the earlier arrival keeps its place
-    const order = [...docks.values()].sort((p, q) => (p.side === q.side ? p.idx - q.idx : p.side < q.side ? -1 : 1));
-    for (const d of order) {
-      const key = d.key;
-      const on = present.has(key);
-      const b = on ? d.o.bubble : null;
-      const aT = on ? (b ? b.alpha * (b.current ? 1 : 0.7) : 0.85) : 0;
-      d.a = REDUCED_MOTION ? aT : ease(d.a, aT, dt, 9);
-      if (!on && d.a < 0.01) {
-        dockSlots[d.side][d.idx] = undefined;
-        docks.delete(key);
-        continue;
-      }
-      if (b && d.threadId !== b.id) {
-        d.threadId = b.id;
-        d.wrap.reset();
-        d.scroll = {};
-      }
-      if (on) d.b = b;
-      const th = d.b && on ? DH : TAG_H;
-      if (REDUCED_MOTION) d.h = th;
-      else [d.h, d.vh] = springStep(d.h, d.vh, th, dt, MOVE_W);
-      const o = d.o;
-      const bb = d.b;
-      const side = d.side;
-      // its place along the edge: chosen like a bubble's slot (never over a face, the pill, an
-      // alert or a card), with room for the full bubble so a tag never has to move to grow. A
-      // place that stops fitting is kept for SLOT_HOLD_S (an alert moves it at once); then the
-      // dock glides to the nearest free height.
-      const home = R().y + 190 + d.idx * (DH + 16);
-      const bx = side === 'left' ? R().x + 64 : R().x + R().w - 64 - DW;
-      if (d.y == null) {
-        d.ty = dockSpot(bx, DW, DH, home, view.faces, cardsRects, obstacles, docked).y;
-        d.y = d.ty;
-        d.vy = 0;
-        d.badSince = null;
-      } else {
-        const q = dockFit({ x: bx, y: d.ty, w: DW, h: DH }, view.faces, cardsRects, obstacles, docked);
-        if (q.cost < 1) d.badSince = null;
-        else {
-          d.badSince ??= anim;
-          if (q.hard || anim - d.badSince > SLOT_HOLD_S) {
-            const spot = dockSpot(bx, DW, DH, d.ty, view.faces, cardsRects, obstacles, docked);
-            if (spot.ok) {
-              d.ty = spot.y;
-              d.badSince = null;
-            }
-          }
-        }
-        if (REDUCED_MOTION) d.y = d.ty;
-        else [d.y, d.vy] = springStep(d.y, d.vy, d.ty, dt, MOVE_W);
-      }
-      docked.push({ x: bx, y: d.ty, w: DW, h: DH });
-      d.rect = { x: bx, y: d.y, w: DW, h: d.h };
-      const a = d.a * dim;
-      if (a < 0.01) continue;
-      const y = d.y;
-      const slide = REDUCED_MOTION ? 0 : (1 - easeOut(clamp(d.a / Math.max(0.01, aT || 1)))) * 40;
-      const x = side === 'left' ? R().x + 64 - slide : R().x + R().w - 64 - DW + slide;
-      // a steady, faint edge light in the speaker's colour
-      ctx.save();
-      const ex = side === 'left' ? R().x : R().x + R().w;
-      const g = ctx.createRadialGradient(ex, y + d.h / 2, 0, ex, y + d.h / 2, 420);
-      g.addColorStop(0, hexA(o.color, (bb ? 0.26 : 0.14) * a));
-      g.addColorStop(1, hexA(o.color, 0));
-      ctx.fillStyle = g;
-      ctx.fillRect(side === 'left' ? ex : ex - 420, y + d.h / 2 - 420, 420, 840);
-      ctx.restore();
-      glass(ctx, blur, x, y, DW, d.h, Math.min(RAD, d.h / 2), { alpha: a, glow: o.color });
-      ctx.save();
-      ctx.globalAlpha *= a;
-      const dir = side === 'left' ? -1 : 1;
-      // one static chevron toward the speaker; its side only changes after the SLOT_HOLD_S hold above
-      chevrons(ctx, (side === 'left' ? x - 24 : x + DW + 24), y + Math.min(d.h, TAG_H) / 2, dir, deepen(o.color, 0.25), 15, 4, 1, a);
-      const hy = y + (d.h > TAG_H + 4 ? PADT + HEADH / 2 : d.h / 2);
-      ctx.save();
-      rrect(ctx, x, y, DW, d.h, RAD);
-      ctx.clip();
-      dot(ctx, x + PADX + 7, hy, 7, o.color);
-      ctx.font = F.name;
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = INK;
-      ctx.fillText(o.name, x + PADX + 26, hy);
-      const nameW = textW(ctx, o.name, F.name);
-      ctx.font = F.sub;
-      ctx.fillStyle = INK_2;
-      ctx.fillText(`·  ${side === 'left' ? 'on your left' : 'on your right'}`, x + PADX + 26 + nameW + 12, hy + 1);
-      if (bb) {
-        eqBars(ctx, x + DW - PADX - 26, hy, deepen(o.color, 0.3), STILL, speakLevel(d, bb.speaking && on, anim), 18);
-        d.wrap.update(ctx, bb.tokens, DW - PADX * 2, F.body, anim);
-        scrollTo(d.scroll, d.wrap.lines.length, rows, dt);
-        drawText(ctx, d.wrap, d.scroll.top ?? 0, x + PADX, y + PADT + HEADH + BODY_GAP, rows, anim, { w: DW - PADX * 2 });
-        pendingBelow(ctx, bb, d.wrap, rows, x + PADX, y + PADT + HEADH + BODY_GAP, DW - PADX * 2);
-      }
-      ctx.restore();
-      ctx.restore();
-    }
-    // someone behind you: glow along the bottom edge, one line docked above the You bar
-    let by = bottomY() + 10;
-    for (const o of view.offscreen) {
-      if (o.side !== 'behind') continue;
-      const b = o.bubble;
-      const a = (b ? b.alpha : 1) * dim;
-      edgeGlow(ctx, 'behind', o.color, a * 0.5, 480);
-      const w = Math.min(R().w - 200, 900);
-      const head = `${o.name}  ·  behind you`;
-      const headW = textW(ctx, head, F.sub);
-      const text = b ? fitTail(ctx, b.text, w - headW - 136, F.sub) : '';
-      glass(ctx, blur, midX() - w / 2, by - 50, w, 44, 22, { alpha: a, glow: o.color });
-      ctx.save();
-      ctx.globalAlpha *= a;
-      // a static arrow pointing down: behind you
-      arrow(ctx, midX() - w / 2 + 28, by - 28, 20, Math.PI / 2, deepen(o.color, 0.25), 3);
-      dot(ctx, midX() - w / 2 + 52, by - 28, 6, o.color);
-      ctx.font = F.sub;
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = INK;
-      ctx.fillText(head, midX() - w / 2 + 70, by - 27);
-      if (text) {
-        ctx.fillStyle = INK_2;
-        ctx.fillText(`—  ${text}`, midX() - w / 2 + 82 + headW, by - 27);
-      }
-      ctx.restore();
-      by -= 54;
-    }
-  }
-
   // ------------------------------------------------------------ lower caption + You bar
-  /** A voice the engine could not place: a fixed-size caption at the bottom centre. */
+  /** Speech without a visible speaker: one fixed caption and a direction arrow. */
   function drawLower(ctx, blur, view, env, dim) {
     const { anim, dt } = env;
     const b = view.lower;
@@ -1035,11 +814,21 @@ export function createBubbleLayer() {
     ctx.save();
     ctx.globalAlpha *= a;
     const hy = y + PADT + HEADH / 2;
-    dot(ctx, x + PADX + 7, hy, 7, unknown ? '#B9C3CF' : bb.color);
+    const side = bb.side;
+    const direction = { left: ['from left', Math.PI], right: ['from right', 0], behind: ['behind', Math.PI / 2] }[side];
+    const marker = unknown ? MIST_INK : deepen(bb.color, 0.3);
+    if (direction) arrow(ctx, x + PADX + 8, hy, 17, direction[1], marker, 3);
+    else dot(ctx, x + PADX + 7, hy, 7, unknown ? '#B9C3CF' : bb.color);
     ctx.font = F.name;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = unknown ? MIST_INK : INK;
-    ctx.fillText(bb.name, x + PADX + 26, hy);
+    const name = fitTail(ctx, bb.name, w - 220, F.name);
+    ctx.fillText(name, x + PADX + 26, hy);
+    if (direction) {
+      ctx.font = F.sub;
+      ctx.fillStyle = INK_2;
+      ctx.fillText(`· ${direction[0]}`, x + PADX + 38 + textW(ctx, name, F.name), hy + 1);
+    }
     eqBars(ctx, x + w - PADX - 26, hy, unknown ? MIST_INK : deepen(bb.color, 0.3), STILL, speakLevel(c, !!b && bb.speaking, anim), 18);
     c.wrap.update(ctx, bb.tokens, w - PADX * 2, F.body, anim);
     scrollTo(c.scroll, c.wrap.lines.length, rows, dt);
@@ -1104,7 +893,12 @@ export function createBubbleLayer() {
       }
     }
 
-    const lowerRect = lowerCard ? lastLower : null;
+    const lowerW = Math.round(reserveW(ctx, view.config)) + PADX * 2;
+    const lowerH = bubbleH(rowsOf(view.config), false);
+    const lowerRect = view.lower || lowerCard ? {
+      x: midX() - lowerW / 2 - 10, y: bottomY() - lowerH - 16,
+      w: lowerW + 20, h: lowerH + 20,
+    } : null;
     const placed = layoutFaces(ctx, view, { ...env, obstacles: [...(env.obstacles || []), ...(lowerRect ? [lowerRect] : [])] });
 
     ghosts = ghosts.filter((g) => anim - g.born < 0.25);
@@ -1127,12 +921,10 @@ export function createBubbleLayer() {
       ctx.restore();
     }
 
-    drawOffscreen(ctx, blur, view, { ...env, obstacles: [...(env.obstacles || []), ...(lowerRect ? [lowerRect] : [])] }, dim, placed);
-    lastLower = drawLower(ctx, blur, view, env, dim);
+    drawLower(ctx, blur, view, env, dim);
     drawYou(ctx, blur, view, env, dim);
     return placed;
   }
-  let lastLower = null;
 
   /** Draw order: tags, then bubbles from the least to the most recently updated. */
   function rank(c) {
@@ -1155,10 +947,5 @@ export function createBubbleLayer() {
     return out;
   }
 
-  /** Docked off-screen speakers for tests and measurements: side, place and size. */
-  function debugDocks() {
-    return [...docks.values()].map((d) => ({ key: d.key, side: d.side, idx: d.idx, ty: d.ty, a: d.a, ...d.rect }));
-  }
-
-  return { render, debug, debugDocks, cards };
+  return { render, debug, cards };
 }

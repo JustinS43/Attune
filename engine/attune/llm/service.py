@@ -162,13 +162,31 @@ class LLMService:
                 self._queue("translation", translate.messages(e), translate.SCHEMA, e, generation)
             if self.names.eligible(e):
                 track = e["speaker"]["track_id"]
-                self._queue(
-                    "names",
-                    [{"role": "system", "content": PROMPT}, {"role": "user", "content": e["text"]}],
-                    NAME_SCHEMA,
-                    e | {"track_generation": self.track_generations.get(track, 0)},
-                    generation,
-                )
+                direct = self.names.direct(e, self.clock())
+                if direct:
+                    self.worker.publish(
+                        "name.evidence",
+                        {
+                            "track_id": track,
+                            "person_id": e["speaker"].get("person_id"),
+                            "name": direct["name"],
+                            "utt_id": e["utt_id"],
+                        },
+                        generation,
+                    )
+                    self.worker.publish("name.proposal", direct, generation)
+                    self.worker.publish("hw.pattern", {"name": "NAME", "side": "R"}, generation)
+                else:
+                    self._queue(
+                        "names",
+                        [
+                            {"role": "system", "content": PROMPT},
+                            {"role": "user", "content": e["text"]},
+                        ],
+                        NAME_SCHEMA,
+                        e | {"track_generation": self.track_generations.get(track, 0)},
+                        generation,
+                    )
             if self.reply_delay_s > 0:
                 self._reply_due = (self.clock() + self.reply_delay_s, generation)
             else:
