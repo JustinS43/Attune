@@ -1,6 +1,6 @@
 # Cloud captions: Google speaker diarization (optional)
 
-TODO: A-32 (audio client), V-32 (fusion), P-47 (Settings, badges, console). Contracts:
+TODO: A-32 (audio client), V-32 (fusion), P-48 (Settings, badges, console). Contracts:
 "Cloud captions" in [contracts.md](contracts.md). Setup steps: [setup.md](setup.md#cloud-captions-optional).
 
 Attune decides who is talking on the laptop: Light-ASD hears which mouth moves with the sound,

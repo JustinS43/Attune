@@ -343,7 +343,7 @@ consent_t, source` (`station` or `glasses`; missing = `glasses`), `embedding`, `
 **Privacy.** Frames, face crops and audio exist only in memory during the save; the preview
 goes only to the page that started it and is never stored. Only prints are saved.
 
-## Cloud captions (A-32, V-32, P-47)
+## Cloud captions (A-32, V-32, P-48)
 
 Optional and **off by default**. When the wearer turns them on in the phone's Settings, the
 16 kHz mic audio (the same stream the local captions hear) is also streamed to Google

@@ -111,7 +111,7 @@ Each feature lists its TODO IDs, the gate it's needed by, and what it depends on
 | Panels: console, speak, history + keys | P-09 – P-12 | M1 – M2 | history API (3), `reply.suggestions` (2) | commands |
 | Session log + replay | P-13 | M1 | frames, audio, serial | test reels for everyone |
 | Setup, scripts, OBS, demo, write-up | P-14, P-15 | M3 – M4 | — | submission |
-| Cloud captions: Settings toggle and Google key, badge on the lens and phone, console status | P-47 | after M3 | `cloud.state` (2) | `cloud.set`, `/api/settings/google` |
+| Cloud captions: Settings toggle and Google key, badge on the lens and phone, console status | P-48 | after M3 | `cloud.state` (2) | `cloud.set`, `/api/settings/google` |
 
 ## File map
 
@@ -228,8 +228,8 @@ Every file below already exists with a header that says what goes in it. Build i
 | `web/shared/ws.js` | WebSocket client with auto-reconnect | P-03 |
 | `web/shared/keys.js` | Keyboard shortcuts | P-12 |
 | `web/shared/theme.css` | Colours and type shared by every page | P-06 |
-| `engine/attune/server/cloud_settings.py` | Google key for cloud captions in Settings (laptop-only, kept in `.env`) | P-47 |
-| `web/phone/cloud-settings.js` | Settings card: cloud captions toggle, Google key, language, status | P-47 |
+| `engine/attune/server/cloud_settings.py` | Google key for cloud captions in Settings (laptop-only, kept in `.env`) | P-48 |
+| `web/phone/cloud-settings.js` | Settings card: cloud captions toggle, Google key, language, status | P-48 |
 | `scripts/check_setup.py` | Checks GPU, CUDA libraries, models, Ollama and devices | P-14 |
 | `scripts/download_models.py` | Fetches the model list in docs/setup.md into models/ | P-14 |
 | `scripts/start_attune.ps1` | Starts the engine and restarts it if it dies | P-14 |
