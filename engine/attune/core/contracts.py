@@ -63,7 +63,7 @@ SESSION_FORGET = "session.forget"
 PAUSED = "paused"
 # The camera switched on or off from a page (`camera.set`): {on}
 CAMERA_STATE = "camera.state"
-# Cloud captions (A-32 / V-32 / P-47): optional and off by default. Only while the wearer has
+# Cloud captions (A-32 / V-32 / P-48): optional and off by default. Only while the wearer has
 # turned them on does the 16 kHz mic audio go to Google Speech-to-Text (docs/cloud-diarization.md).
 SPEAKER_CLOUD = "speaker.cloud"  # per-word speaker tags: {stream_id, words, final, t_end, ...}
 CLOUD_STATE = "cloud.state"  # the cloud client's state: {enabled, state, reason, latency_ms, ...}
