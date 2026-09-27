@@ -249,6 +249,12 @@ sent (for example two segments merged), the engine sends `caption.retract` /
 `caption_retract` with that id once; pages remove its text. The utterance's own
 `utt_id` is never retracted, so translations (keyed by it) always have a caption to join.
 
+**Lens placement.** In the full-colour lens, a caption follows its speaker's visible face.
+Speech with no visible face uses one fixed bottom caption; its arrow points left, right or
+behind when `speaker.side` is known. Unknown direction has no arrow. If a tracked face
+leaves the frame, its continuing caption moves to the bottom after the short face hold.
+The compact lens modes already keep captions in fixed areas with direction indicators.
+
 ## Save a person (P-29)
 
 A double tap on the side of the glasses saves the person in front of the wearer, with that
