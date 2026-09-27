@@ -5,7 +5,8 @@
  * Measures, reports and plays patterns; makes no decisions about people or sounds.
  *  - READY <version> <driver>: the I2C motor driver found (0x14 TB6612, 0x0F L298), or NONE
  *    when the servo taps (UNO R3 default, or the R4's backup when no driver answers)
- *  - LV <ms> <left> <right> <motor> every CFG rate ms: peak-to-peak of each sound sensor
+ *  - LV <ms> <left> <right> <motor> every CFG rate ms: peak-to-peak of each sound sensor,
+ *    rejecting one isolated ADC spike at either end of each window
  *  - TOUCH TAP / HOLD / DOUBLE / TRIPLE from the touch sensor (CFG tap_ms, hold_ms)
  *  - HB <ms> every second; the laptop's HB every 0.5 s keeps the link alive
  *  - PAT / STOP -> ACK n; bad commands -> ERR
@@ -106,8 +107,11 @@ TapPhase tapPhase = TAP_IDLE;
 unsigned long tapPhaseStart = 0;    // start of TAP_OUT / TAP_BACK, or of idling at rest
 bool tapAttached = false;
 
-// sound levels
-int minL = 1023, maxL = 0, minR = 1023, maxR = 0;
+// sound levels: keep the two smallest/largest readings per channel so one bad ADC
+// conversion cannot swing a 50 ms direction reading. The values sent remain 0..1023.
+uint16_t minL = 1023, min2L = 1023, maxL = 0, max2L = 0;
+uint16_t minR = 1023, min2R = 1023, maxR = 0, max2R = 0;
+uint16_t soundSamples = 0;
 bool motorInWindow = false;
 unsigned long nextReport = 0;
 
@@ -669,20 +673,43 @@ void updateTouch(unsigned long now) {
 }
 
 // ------------------------------------------------------------------------ sound levels
+void trackSoundSample(uint16_t value, uint16_t &low, uint16_t &nextLow,
+                      uint16_t &high, uint16_t &nextHigh) {
+  if (value <= low) {
+    nextLow = low;
+    low = value;
+  } else if (value < nextLow) {
+    nextLow = value;
+  }
+  if (value >= high) {
+    nextHigh = high;
+    high = value;
+  } else if (value > nextHigh) {
+    nextHigh = value;
+  }
+}
+
 void sampleSound() {
-  int l = analogRead(PIN_SOUND_L);
-  int r = analogRead(PIN_SOUND_R);
-  if (l < minL) minL = l;
-  if (l > maxL) maxL = l;
-  if (r < minR) minR = r;
-  if (r > maxR) maxR = r;
+  // The ADC multiplexer switches between A2 and A0. Discard the first conversion
+  // on each channel so the previous channel cannot contaminate the reading.
+  analogRead(PIN_SOUND_L);
+  uint16_t left = analogRead(PIN_SOUND_L);
+  analogRead(PIN_SOUND_R);
+  uint16_t right = analogRead(PIN_SOUND_R);
+  trackSoundSample(left, minL, min2L, maxL, max2L);
+  trackSoundSample(right, minR, min2R, maxR, max2R);
+  if (soundSamples < 65535) soundSamples++;
 }
 
 void reportLevels(unsigned long now) {
   if ((long)(now - nextReport) < 0) return;
   nextReport = now + cfgRate;
-  int left = maxL >= minL ? maxL - minL : 0;
-  int right = maxR >= minR ? maxR - minR : 0;
+  uint16_t lowL = soundSamples >= 4 ? min2L : minL;
+  uint16_t highL = soundSamples >= 4 ? max2L : maxL;
+  uint16_t lowR = soundSamples >= 4 ? min2R : minR;
+  uint16_t highR = soundSamples >= 4 ? max2R : maxR;
+  uint16_t left = highL >= lowL ? highL - lowL : 0;
+  uint16_t right = highR >= lowR ? highR - lowR : 0;
   Serial.print(F(MSG_LV " "));
   Serial.print(now);
   Serial.print(' ');
@@ -692,8 +719,9 @@ void reportLevels(unsigned long now) {
   Serial.print(' ');
   Serial.print(motorInWindow ? '1' : '0');
   endLine();
-  minL = minR = 1023;
-  maxL = maxR = 0;
+  minL = min2L = minR = min2R = 1023;
+  maxL = max2L = maxR = max2R = 0;
+  soundSamples = 0;
   motorInWindow = buzzerNoisy();
 }
 

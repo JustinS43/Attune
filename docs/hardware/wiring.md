@@ -28,8 +28,8 @@ still works with the same sketch (rows marked "R4 build").
 
 | Part | Wire | Arduino pin | Base Shield port | Without a shield |
 |---|---|---|---|---|
-| Sound Sensor, left | Yellow (SIG) | **A0** | A0 | Yellow to A0 |
-| Sound Sensor, right | Yellow (SIG) | **A1** | A1 | Yellow to A1 |
+| Sound Sensor, left | Yellow (SIG) | **A2** | A2 | Yellow to A2 |
+| Sound Sensor, right | Yellow (SIG) | **A0** | A0 | Yellow to A0 |
 | Touch Sensor | Yellow (SIG) | **D2** | D2 | Yellow to D2 |
 | LED Socket, left | Yellow (SIG) | **D5** (PWM) | D5 | Yellow to D5 |
 | LED Socket, right | Yellow (SIG) | **D6** (PWM) | D6 | Yellow to D6 |
@@ -64,7 +64,7 @@ a buzz: lower `MOTOR_SPEED_*` in `rig_config.h`, lengthen `SOFT_START_MS`, check
 ## How to test tomorrow (plug in → link → patterns)
 
 1. **Flash** the firmware (see `firmware/README.md`, "UNO R3 + servo"). Serial Monitor at
-   115200 should show `READY 1.1.1 NONE` on the R3 (`TB6612` / `L298` / `NONE` on the R4) and
+   115200 should show `READY 1.1.2 NONE` on the R3 (`TB6612` / `L298` / `NONE` on the R4) and
    `LV …` lines; LED 13 blips every 2 s (the R4's matrix shows `?`); the servo twitches to rest once.
    **Close the Serial Monitor** before starting the engine (only one program can hold the port).
 2. **Engine**, from the repo root, with `hardware.simulate = false` (default) and no
@@ -72,7 +72,7 @@ a buzz: lower `MOTOR_SPEED_*` in `rig_config.h`, lengthen `SOFT_START_MS`, check
    `2341:0043` or `2341:0001`, UNO R4 WiFi `2341:1002`; or CH340/FTDI/CP210x clones); set
    `hardware.port = "COM5"` only if auto-find picks the wrong one. The R3 may reset when the
    port opens; that only adds about a second. Within ~3 s: `hw.link` →
-   `{connected: true, firmware: "1.1.1", driver: "NONE"}` (R3 + servo), the console's Arduino
+   `{connected: true, firmware: "1.1.2", driver: "NONE"}` (R3 + servo), the console's Arduino
    chip goes green, LED 13 blinks slowly (the R4's matrix shows a pulsing heart).
 3. **Levels:** clap near each side; the console/`status.part` hardware metrics `left`/`right` jump.
 4. **Patterns from the console** ("test pattern" buttons send command `pattern.test`):
@@ -102,7 +102,7 @@ PYTHONPATH=engine python -c "from attune.hardware.serial_link import find_port; 
 |---|---|---|---|---|
 | T-H1 | Board up: `READY` at power-up (R4 build: the I²C driver check) | R3 + servo: `READY 1.1.1 NONE` and the servo parks at rest. R4: TB6612 (0x14), or L298 (0x0F → V1.3 column: try 5 V, else servo on D9) | [x] `READY 1.1.1 NONE` 0.5 s after the port opens (no reset on open); `LV` at 20.0 Hz (board steps of 50 ms), board `HB` every 1000 ms; bad commands answered with the right `ERR`. Servo park at boot not watched. | 2026-09-26, serial bench script |
 | T-H2 | Connections: multimeter continuity on every pins-in-plug joint, then wiggle each cable while watching the readings | No dropouts or jumps while wiggling | [ ] | |
-| T-H3 | Sound sensors: quiet room, speech at 1 m, a clap, then the JBL at 90° left and right, 20 plays | Louder side correct in ≥ 18/20 plays by ≥ 3 dB; left sensor really on A0 | [ ] partly: both sensors respond. Floor in the lab: median ~220 of 1023 peak-to-peak on both sides (p95 ~280). Brief normal-volume sounds from the laptop speaker (claps, pink noise at −42 to −18 dBFS, one spoken sentence) lifted the peaks only 2–4.5 dB, too little for a side test: needs a clap/snap at each hinge or the JBL at 90°. | 2026-09-26 |
+| T-H3 | Sound sensors: quiet room, speech at 1 m, a clap, then the JBL at 90° left and right, 20 plays | Louder side correct in ≥ 18/20 plays by ≥ 3 dB; left sensor really on A2, right on A0 | [ ] partly: both sensors respond. Floor in the lab: median ~220 of 1023 peak-to-peak on both sides (p95 ~280). Brief normal-volume sounds from the laptop speaker (claps, pink noise at −42 to −18 dBFS, one spoken sentence) lifted the peaks only 2–4.5 dB, too little for a side test: needs a clap/snap at each hinge or the JBL at 90°. | 2026-09-26 |
 | T-H4 | Touch: 20 taps, 10 holds, 10 double taps, 10 triple taps through the tape; then 10 min untouched with the motor buzzing | ≥ 95 % classified right; no phantom touches | [ ] partly: no phantom `TOUCH` in ~6 min of logs that include ~3 min of servo tapping. Gestures not yet tried. | 2026-09-26 |
 | T-H5 | LEDs: every pattern, worn, in a bright room | Noticeable at the edge of vision without dazzling; `led` brightness set (CFG / `hardware.led_brightness`) | [ ] partly: every pattern on L, R and B acknowledged in 3–6 ms, `CFG led 180` accepted. Not yet watched on the glasses. | 2026-09-26 |
 | T-H6 | Buzzer and power: 50 T3 cycles; current with the multimeter in series if possible | Taps clearly felt, arm never presses in or buzzes against a stop; no Arduino resets (else add the 100–470 µF cap); current within budget; stops within 2 s when the laptop link is cut | [ ] partly: 1.1.0 dropped the link by itself on ~1 % of heartbeats (16 of 60 T3 bursts in 80 s), a firmware bug, not power (its clock never restarted). 1.1.1 (H-18): 0 drops in 792 heartbeats, 20 T3 cycles = 60/60 bursts, no resets; stops 1.7 s after the laptop's last `HB` and stays stopped until relinked. Not measured: current, how the taps feel. | 2026-09-26 |
