@@ -131,7 +131,7 @@ class AudioService:
                 # Only return to the preferred mic between utterances.
                 busy=lambda: self.segmenter.start is not None,
             )
-            self.worker.health = self.mic.health
+            self.worker.health = self._health
             try:
                 self.mic.start()
             except Exception:
@@ -147,6 +147,22 @@ class AudioService:
         self._rescues.shutdown(wait=False, cancel_futures=True)
         if not self.worker.thread:
             self._cleanup()
+
+    def _health(self) -> dict:
+        """Expose capture and recognition backlog separately in the status strip."""
+        health = self.mic.health() if self.mic else {"metrics": {}}
+        with self.worker.inbox.mutex:
+            queued = list(self.worker.inbox.queue)
+        oldest = next(
+            (event.get("t") for topic, event, _ in queued if topic == "audio.block"),
+            None,
+        )
+        metrics = dict(health.get("metrics", {}))
+        metrics["queued_blocks"] = len(queued)
+        metrics["queue_lag_s"] = (
+            round(max(0.0, self.clock() - float(oldest)), 2) if oldest is not None else 0.0
+        )
+        return {**health, "metrics": metrics}
 
     def _cleanup(self) -> None:
         self._reset()
@@ -508,7 +524,18 @@ class AudioService:
             if isinstance(self.asr, WhisperASR)
             else cfg["asr_chunk_ms"]
         )
-        if self.segmenter.confirmed and (final or count - self.sent >= draft_ms * 16):
+        # Whisper re-decodes the entire growing utterance. When the worker is already
+        # behind the microphone, another draft makes the final caption later. Keep
+        # buffering the audio and always decode the final at the next pause.
+        draft_backlog_ms = self.worker.inbox.qsize() * cfg.get("block_ms", 10)
+        skip_draft = (
+            isinstance(self.asr, WhisperASR)
+            and not final
+            and draft_backlog_ms >= self.config["whisper"].get("max_draft_backlog_ms", 250)
+        )
+        if self.segmenter.confirmed and not skip_draft and (
+            final or count - self.sent >= draft_ms * 16
+        ):
             fresh = self.utterance[self.sent // 512 :]
             audio = np.concatenate(fresh) if fresh else np.empty(0, np.float32)
             result = self._recognize(audio, final and not cut)

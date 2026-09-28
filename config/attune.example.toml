@@ -202,6 +202,7 @@ model_path = "models/faster-whisper-large-v3-turbo"
 device = "cpu"
 compute_type = "int8"
 draft_interval_ms = 560       # Whisper re-decodes the growing utterance; 32 ms would fall behind live audio
+max_draft_backlog_ms = 250     # skip a draft if this much captured audio awaits the worker; finals still run
 
 [voice]
 model_path = "models/cam++.onnx"
