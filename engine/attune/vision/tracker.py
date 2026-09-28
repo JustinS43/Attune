@@ -160,7 +160,9 @@ class FaceTrack:
 
     @property
     def box(self) -> np.ndarray:
-        return self.det.box if self.seen else self.kf.box
+        # Publish the filtered box too: matching already uses it, but raw detector
+        # boxes made a visible caption jump on every frame.
+        return self.kf.box
 
 
 @dataclass
